@@ -412,11 +412,55 @@ function setAuthorizedMove() {
 }
 
 /**
- * Checks if a member has the MANAGERS role or Administrator permission (Voice Immunity).
+const ADMIN_TIER_ROLE_NAMES = [
+  'owner',
+  'ceo',
+  'coo',
+  'super admin',
+  'middle admin',
+  'lower admin'
+];
+
+const ADMIN_TIER_ROLE_IDS = [
+  '1538485406922838066', // OWNER
+  '1538485672795570196', // CEO
+  '1538544110913454160', // COO
+  '1538545256239210546', // SUPER ADMIN
+  '1538486022902386738', // MIDDLE ADMIN
+  '1538486371805700156'  // LOWER ADMIN
+];
+
+/**
+ * 👑 Checks if a member has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, or LOWER ADMIN roles.
+ */
+function hasAdminTierRole(member) {
+  if (!member) return false;
+  return member.roles.cache.some((r) => {
+    if (ADMIN_TIER_ROLE_IDS.includes(r.id)) return true;
+    const name = r.name.toLowerCase().trim();
+    return ADMIN_TIER_ROLE_NAMES.some((tier) => name === tier || name.includes(tier));
+  });
+}
+
+/**
+ * 🛡️ Finds the MANAGERS role in the guild.
+ */
+function findManagersRole(guild) {
+  if (!guild) return null;
+  return (
+    guild.roles.cache.get('1538569735057178745') ||
+    guild.roles.cache.find((r) => r.name.toLowerCase() === 'managers' || r.name.toLowerCase() === 'manager') ||
+    null
+  );
+}
+
+/**
+ * Checks if a member has the MANAGERS role, Admin Tier role, or Administrator permission (Voice Immunity).
  */
 function isManagerMember(member) {
   if (!member) return false;
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (hasAdminTierRole(member)) return true;
   return member.roles.cache.some((r) =>
     r.name.toLowerCase() === 'managers' ||
     r.name.toLowerCase() === 'manager' ||
@@ -1432,24 +1476,25 @@ async function fetchAuditExecutor(guild, auditType, targetId = null) {
 }
 
 /**
- * Syncs the MEMBER role to regular server members, and removes MEMBER from MANAGERS.
+ * Syncs the MEMBER role to regular server members, and assigns MANAGERS to admin tier roles (COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN).
  */
 async function syncAllMembersRole(guild, fetchRemote = false) {
-  if (!guild || isSyncingRoles) return { count: 0, total: 0, removedCount: 0 };
+  if (!guild || isSyncingRoles) return { count: 0, total: 0, removedCount: 0, managerGrantedCount: 0 };
 
   isSyncingRoles = true;
 
   try {
     const role = findAutoRole(guild);
+    const managersRole = findManagersRole(guild);
     if (!role) {
       isSyncingRoles = false;
-      return { count: 0, total: 0, removedCount: 0, error: `الرتبة "${AUTO_ROLE_NAME}" غير موجودة بالسيرفر` };
+      return { count: 0, total: 0, removedCount: 0, managerGrantedCount: 0, error: `الرتبة "${AUTO_ROLE_NAME}" غير موجودة بالسيرفر` };
     }
 
     const botMember = guild.members.me;
-    if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles) || botMember.roles.highest.comparePositionTo(role) <= 0) {
+    if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
       isSyncingRoles = false;
-      return { count: 0, total: 0, removedCount: 0, error: 'صلاحيات إدارة الرتب غير مكتملة أو رتبة البوت أدنى من رتبة MEMBER' };
+      return { count: 0, total: 0, removedCount: 0, managerGrantedCount: 0, error: 'صلاحيات إدارة الرتب غير مكتملة' };
     }
 
     const members = fetchRemote ? await guild.members.fetch().catch(() => guild.members.cache) : guild.members.cache;
@@ -1457,48 +1502,74 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
 
     let givenCount = 0;
     let removedCount = 0;
+    let managerGrantedCount = 0;
 
     for (const [, member] of humanMembers) {
+      const hasAdminRole = hasAdminTierRole(member);
       const isManager = isManagerMember(member);
       const hasMemberRole = member.roles.cache.has(role.id);
 
-      // 1. If Manager has MEMBER role -> REMOVE IT!
-      if (isManager && hasMemberRole) {
+      // 1. If user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN -> Ensure they have MANAGERS role
+      if (hasAdminRole && managersRole && !member.roles.cache.has(managersRole.id)) {
         try {
-          await member.roles.remove(role);
-          removedCount++;
-          console.log(`🗑️ [إزالة رتبة] تم بنجاح سحب رتبة "${role.name}" من العضو الإداري (${member.user.tag}) لحمله رتبة MANAGERS.`);
+          if (botMember.roles.highest.comparePositionTo(managersRole) > 0) {
+            await member.roles.add(managersRole);
+            managerGrantedCount++;
+            console.log(`🛡️ [ترقية إدارية تلقائية] تم منح رتبة "${managersRole.name}" للعضو: ${member.user.tag}`);
 
-          const logEmbed = new EmbedBuilder()
-            .setColor(0xED4245)
-            .setAuthor({ name: '👑 إزالة رتبة الأعضاء من الإدارة', iconURL: member.user.displayAvatarURL() })
-            .setDescription(`تم سحب رتبة <@&${role.id}> من الإداري <@${member.id}> (\`${member.user.tag}\`) لحمله رتبة **MANAGERS** 🛡️.`)
-            .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
-            .setTimestamp();
-          await sendToLogChannel(guild, logEmbed);
+            const logEmbed = new EmbedBuilder()
+              .setColor(0x57F287)
+              .setAuthor({ name: '🛡️ ترقية إدارية تلقائية (MANAGERS)', iconURL: member.user.displayAvatarURL() })
+              .setDescription(`تم منح رتبة <@&${managersRole.id}> تلقائياً للعضو <@${member.id}> (\`${member.user.tag}\`) لحمله إحدى الرتب الإدارية العليا (COO / CEO / OWNER / SUPER ADMIN / MIDDLE ADMIN / LOWER ADMIN).`)
+              .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+              .setTimestamp();
+            await sendToLogChannel(guild, logEmbed);
+            await new Promise((res) => setTimeout(res, 400));
+          }
+        } catch (err) {
+          console.error(`❌ تعذر منح رتبة MANAGERS للعضو ${member.user.tag}:`, err.message);
+        }
+      }
 
-          await new Promise((res) => setTimeout(res, 400));
+      // 2. If Manager has MEMBER role -> REMOVE IT!
+      if ((isManager || hasAdminRole) && hasMemberRole) {
+        try {
+          if (botMember.roles.highest.comparePositionTo(role) > 0) {
+            await member.roles.remove(role);
+            removedCount++;
+            console.log(`🗑️ [إزالة رتبة] تم بنجاح سحب رتبة "${role.name}" من العضو الإداري (${member.user.tag}) لحمله رتبة MANAGERS.`);
+
+            const logEmbed = new EmbedBuilder()
+              .setColor(0xED4245)
+              .setAuthor({ name: '👑 إزالة رتبة الأعضاء من الإدارة', iconURL: member.user.displayAvatarURL() })
+              .setDescription(`تم سحب رتبة <@&${role.id}> من الإداري <@${member.id}> (\`${member.user.tag}\`) لحمله رتبة **MANAGERS** 🛡️.`)
+              .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
+              .setTimestamp();
+            await sendToLogChannel(guild, logEmbed);
+            await new Promise((res) => setTimeout(res, 400));
+          }
         } catch (err) {
           console.error(`❌ تعذر إزالة الرتبة من الإداري ${member.user.tag}:`, err.message);
         }
       }
 
-      // 2. If Regular Member doesn't have MEMBER role -> ADD IT!
-      else if (!isManager && !hasMemberRole) {
+      // 3. If Regular Member doesn't have MEMBER role -> ADD IT!
+      else if (!isManager && !hasAdminRole && !hasMemberRole) {
         try {
-          await member.roles.add(role);
-          givenCount++;
-          console.log(`✅ [ترقية عضو] تم إعطاء رتبة "${role.name}" للعضو: ${member.user.tag}`);
+          if (botMember.roles.highest.comparePositionTo(role) > 0) {
+            await member.roles.add(role);
+            givenCount++;
+            console.log(`✅ [ترقية عضو] تم إعطاء رتبة "${role.name}" للعضو: ${member.user.tag}`);
 
-          const logEmbed = new EmbedBuilder()
-            .setColor(0x57F287)
-            .setAuthor({ name: '👑 ترقية عضو تلقائياً', iconURL: member.user.displayAvatarURL() })
-            .setDescription(`تم منح رتبة <@&${role.id}> للعضو <@${member.id}> (\`${member.user.tag}\`).`)
-            .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
-            .setTimestamp();
-          await sendToLogChannel(guild, logEmbed);
-
-          await new Promise((res) => setTimeout(res, 400));
+            const logEmbed = new EmbedBuilder()
+              .setColor(0x57F287)
+              .setAuthor({ name: '👑 ترقية عضو تلقائياً', iconURL: member.user.displayAvatarURL() })
+              .setDescription(`تم منح رتبة <@&${role.id}> للعضو <@${member.id}> (\`${member.user.tag}\`).`)
+              .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
+              .setTimestamp();
+            await sendToLogChannel(guild, logEmbed);
+            await new Promise((res) => setTimeout(res, 400));
+          }
         } catch (err) {
           console.error(`❌ تعذر إعطاء الرتبة للعضو ${member.user.tag}:`, err.message);
         }
@@ -1506,11 +1577,11 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
     }
 
     isSyncingRoles = false;
-    return { count: givenCount, removedCount, total: humanMembers.size };
+    return { count: givenCount, removedCount, managerGrantedCount, total: humanMembers.size };
   } catch (err) {
     console.error('خطأ أثناء مزامنة الرتب:', err.message);
     isSyncingRoles = false;
-    return { count: 0, removedCount: 0, total: 0, error: err.message };
+    return { count: 0, removedCount: 0, managerGrantedCount: 0, total: 0, error: err.message };
   }
 }
 
@@ -1609,16 +1680,16 @@ client.once(Events.ClientReady, async (c) => {
       await checkAndResetBiweeklyInfractions(guild);
       sendSecurityDMToExistingMembers(guild);
 
-      // Start 30s recurring role sync & security check
+      // Start 60s recurring role sync & manager auto-grant check (every minute)
       setInterval(async () => {
         try {
-          await syncAllMembersRole(guild, false);
+          await syncAllMembersRole(guild, true);
           await checkAndResetBiweeklyInfractions(guild);
         } catch (err) {
           console.error('خطأ في المزامنة الدورية:', err.message);
         }
-      }, 30 * 1000);
-      console.log(`⏱️ [المزامنة التلقائية] تم تفعيل فحص وترقية الأعضاء كل 30 ثانية في الخلفية.`);
+      }, 60 * 1000);
+      console.log(`⏱️ [المزامنة التلقائية] تم تفعيل فحص وترقية الإداريين ورتبة MANAGERS والأعضاء كل دقيقة (60 ثانية) في الخلفية.`);
 
       // Start 10-second live system status loop
       setInterval(async () => {
@@ -2242,8 +2313,28 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     logEmbed.setFooter({ text: `GX eSports Instant Logs • الإصدار ${BOT_VERSION}` }).setTimestamp();
     await sendToLogChannel(newMember.guild, logEmbed);
 
+    // Auto-grant MANAGERS role if user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN
+    if (hasAdminTierRole(newMember)) {
+      const managersRole = findManagersRole(newMember.guild);
+      if (managersRole && !newMember.roles.cache.has(managersRole.id)) {
+        try {
+          await newMember.roles.add(managersRole);
+          console.log(`🛡️ [ترقية إدارية فورية] تم منح رتبة MANAGERS للعضو ${newMember.user.tag} لحصوله على رتبة إدارية.`);
+          const mgmtEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setAuthor({ name: '🛡️ منح رتبة MANAGERS التلقائية', iconURL: newMember.user.displayAvatarURL() })
+            .setDescription(`تم منح رتبة <@&${managersRole.id}> تلقائياً للعضو <@${newMember.id}> (\`${newMember.user.tag}\`) لحمله إحدى الرتب الإدارية العليا.`)
+            .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+          await sendToLogChannel(newMember.guild, mgmtEmbed);
+        } catch (err) {
+          console.error(`خطأ في منح رتبة MANAGERS للإداري ${newMember.user.tag}:`, err.message);
+        }
+      }
+    }
+
     // Auto-strip MEMBER role if user is/became a MANAGER
-    if (isManagerMember(newMember)) {
+    if (isManagerMember(newMember) || hasAdminTierRole(newMember)) {
       const autoRole = findAutoRole(newMember.guild);
       if (autoRole && newMember.roles.cache.has(autoRole.id)) {
         try {
