@@ -1,0 +1,19 @@
+# Environment variables (Contains secret tokens - NEVER COMMIT)
+.env
+
+# Dependencies
+node_modules/
+
+# Runtime data & databases
+data/
+*.log
+
+# Binary and downloaded tools
+yt-dlp.exe
+yt-dlp
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
