@@ -514,6 +514,95 @@
     ]
   },
   {
+    "name": "فعالية_إنشاء",
+    "description": "إنشاء ونشر فعالية تفاعلية رسمية في روم 🎉・الـفـعـالـيـة",
+    "Public_Command": false,
+    "category": "moderation",
+    "permission": "ManageEvents",
+    "options": [
+      {
+        "name": "اسم_الفعالية",
+        "description": "عنوان واسم الفعالية أو البطولة",
+        "type": "STRING",
+        "required": true
+      },
+      {
+        "name": "التفاصيل",
+        "description": "شرح وتفاصيل الفعالية وقواعد المشاركة",
+        "type": "STRING",
+        "required": true
+      },
+      {
+        "name": "الجائزة",
+        "description": "جائزة الفعالية (اختياري)",
+        "type": "STRING",
+        "required": false
+      },
+      {
+        "name": "الحد_الأقصى",
+        "description": "أقصى عدد مسموح به من المشاركين (اختياري)",
+        "type": "INTEGER",
+        "required": false,
+        "minValue": 2,
+        "maxValue": 100
+      },
+      {
+        "name": "الروم_الصوتي",
+        "description": "الروم الصوتي المخصص لتجمع المشاركين (اختياري)",
+        "type": "CHANNEL",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "فعالية_بدء",
+    "description": "بدء الفعالية الحالية وإرسال إشعار للمشاركين برابط الروم الصوتي",
+    "Public_Command": false,
+    "category": "moderation",
+    "permission": "ManageEvents",
+    "options": []
+  },
+  {
+    "name": "فعالية_فائز",
+    "description": "اختيار الفائز بالفعالية الحالية (سحب عشوائي أو تحديد يدوي)",
+    "Public_Command": false,
+    "category": "moderation",
+    "permission": "ManageEvents",
+    "options": [
+      {
+        "name": "طريقة_السحب",
+        "description": "طريقة اختيار الفائز",
+        "type": "STRING",
+        "required": true,
+        "choices": [
+          { "name": "سحب عشوائي من المشاركين (Random Draw)", "value": "random" },
+          { "name": "تحديد يدوي من الإدارة (Manual Pick)", "value": "manual" }
+        ]
+      },
+      {
+        "name": "الفائز_اليدوي",
+        "description": "العضو الفائز (في حال اختيار التحديد اليدوي)",
+        "type": "USER",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "فعالية_إلغاء",
+    "description": "إلغاء الفعالية الحالية وإغلاق باب التسجيل",
+    "Public_Command": false,
+    "category": "moderation",
+    "permission": "ManageEvents",
+    "options": [
+      {
+        "name": "السبب",
+        "description": "سبب إلغاء الفعالية (اختياري)",
+        "type": "STRING",
+        "required": false
+      }
+    ]
+  },
+  {
     "name": "مساعدة",
     "description": "عرض دليل وقائمة جميع أوامر البوت العامة والإدارية",
     "Public_Command": true,
