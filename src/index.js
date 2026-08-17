@@ -438,6 +438,20 @@ function isOwnerOrCeo(member) {
   });
 }
 
+/**
+ * 👑 Checks if a user is authorized to grant, upgrade, or revoke roles (@itszoki or @ice0090).
+ */
+function isAuthorizedRoleManager(member, user) {
+  const u = user || member?.user;
+  if (!u) return false;
+  // Specific IDs for ice0090 (1152686277255237663) and itszoki (1484535997893967980)
+  if (u.id === '1152686277255237663' || u.id === '1484535997893967980') return true;
+  if (member?.guild?.ownerId === u.id) return true;
+  const username = u.username?.toLowerCase() || '';
+  if (username === 'itszoki' || username === 'ice0090') return true;
+  return false;
+}
+
 // ----------------------------------------------------
 // 📜 Slash Commands Generator from JSON
 // ----------------------------------------------------
@@ -3282,35 +3296,65 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // 16. أمر /اعطاء_رتبة
     else if (commandName === 'اعطاء_رتبة') {
+      if (!isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '⛔ **عذراً، صلاحية ترقية ومنح الرتب محصورة حصرياً بالقيادة العليا (<@1484535997893967980> و <@1152686277255237663>) فقط!**',
+          flags: [1 << 6]
+        });
+      }
+
       const targetUser = interaction.options.getUser('المستخدم');
       const targetRole = interaction.options.getRole('الرتبة');
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-      const botMember = interaction.guild.members.me;
+      if (!targetMember) {
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', flags: [1 << 6] });
+      }
 
+      const botMember = interaction.guild.members.me;
       if (botMember.roles.highest.comparePositionTo(targetRole) <= 0) {
-        return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه منحها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه منحها. يرجى سحب رتبة البوت لأعلى قائمة الرتب.', flags: [1 << 6] });
       }
 
       await targetMember.roles.add(targetRole);
 
       const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('👑 تم منح الرتبة بنجاح')
-        .setDescription(`تم منح رتبة <@&${targetRole.id}> للعضو <@${targetUser.id}> بنجاح.`)
-        .setFooter({ text: `GX eSports Moderation • الإصدار ${BOT_VERSION}` });
+        .setAuthor({ name: '👑 ترقية ومنح رتبة', iconURL: targetUser.displayAvatarURL() })
+        .setTitle('تم منح الرتبة بنجاح')
+        .setDescription(`تم منح وترقية رتبة <@&${targetRole.id}> للعضو <@${targetUser.id}> بنجاح بواسطة <@${interaction.user.id}>.`)
+        .setFooter({ text: `GX eSports Role Management • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '👑 ترقية رتبة رسمية', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام القائد <@${interaction.user.id}> بمنح وترقية رتبة <@&${targetRole.id}> للعضو <@${targetUser.id}> (\`${targetUser.tag}\`).`)
+        .setFooter({ text: `GX eSports Security Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(interaction.guild, logEmbed);
     }
 
     // 17. أمر /سحب_رتبة
     else if (commandName === 'سحب_رتبة') {
+      if (!isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '⛔ **عذراً، صلاحية سحب وإدارة الرتب محصورة حصرياً بالقيادة العليا (<@1484535997893967980> و <@1152686277255237663>) فقط!**',
+          flags: [1 << 6]
+        });
+      }
+
       const targetUser = interaction.options.getUser('المستخدم');
       const targetRole = interaction.options.getRole('الرتبة');
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-      const botMember = interaction.guild.members.me;
+      if (!targetMember) {
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', flags: [1 << 6] });
+      }
 
+      const botMember = interaction.guild.members.me;
       if (botMember.roles.highest.comparePositionTo(targetRole) <= 0) {
         return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه سحبها.', flags: [1 << 6] });
       }
@@ -3319,11 +3363,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const embed = new EmbedBuilder()
         .setColor(0xED4245)
-        .setTitle('🗑️ تم سحب الرتبة بنجاح')
-        .setDescription(`تم سحب رتبة <@&${targetRole.id}> من العضو <@${targetUser.id}> بنجاح.`)
-        .setFooter({ text: `GX eSports Moderation • الإصدار ${BOT_VERSION}` });
+        .setAuthor({ name: '🗑️ سحب وإزالة رتبة', iconURL: targetUser.displayAvatarURL() })
+        .setTitle('تم سحب الرتبة بنجاح')
+        .setDescription(`تم سحب رتبة <@&${targetRole.id}> من العضو <@${targetUser.id}> بنجاح بواسطة <@${interaction.user.id}>.`)
+        .setFooter({ text: `GX eSports Role Management • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🗑️ سحب رتبة رسمية', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام القائد <@${interaction.user.id}> بسحب رتبة <@&${targetRole.id}> من العضو <@${targetUser.id}> (\`${targetUser.tag}\`).`)
+        .setFooter({ text: `GX eSports Security Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(interaction.guild, logEmbed);
     }
 
 
