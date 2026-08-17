@@ -290,7 +290,7 @@
   },
   {
     "name": "اعطاء_رتبة",
-    "description": "منح رتبة محددة لعضو في السيرفر",
+    "description": "منح وترقية رتبة لعضو في السيرفر (حصري للقيادة العليا @itszoki و @ice0090)",
     "Public_Command": false,
     "category": "moderation",
     "permission": "ManageRoles",
@@ -311,7 +311,7 @@
   },
   {
     "name": "سحب_رتبة",
-    "description": "سحب وإزالة رتبة محددة من عضو في السيرفر",
+    "description": "سحب وإزالة رتبة من عضو في السيرفر (حصري للقيادة العليا @itszoki و @ice0090)",
     "Public_Command": false,
     "category": "moderation",
     "permission": "ManageRoles",
