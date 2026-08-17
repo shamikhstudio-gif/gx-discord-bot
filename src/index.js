@@ -957,7 +957,7 @@ async function welcomeExistingMembersSequentially(guild) {
 
 /**
  * 🛡️ Sends the official "تم تفعيل GX" security onboarding direct message to a member.
- * If sending fails due to blocked bot / closed DMs (code 50007), kicks the member immediately.
+ * Sends the "تم تفعيل GX" security onboarding message to members.
  */
 async function sendSecurityOnboardingDM(member) {
   if (!member || member.user.bot) return;
@@ -980,9 +980,6 @@ async function sendSecurityOnboardingDM(member) {
       `> ⚡ **مكافحة التكرار والسبام الذكية:** مراقبة وتحليل النصوص المتطابقة أو المشابهة بنسبة \`85%+\`.\n` +
       `> 🛡️ **نظام المخالفات التلقائي (Strikes Ladder):** إنذارات متدرجة وحظر فوري عند الإصرار على الإزعاج.\n` +
       `> 🎫 **نظام التذاكر المشفرة:** حماية كاملة وخصوصية لطلبات الدعم الفني.\n\n` +
-      `⚠️ **تحذير أمني هام وصارم:**\n` +
-      `> **يمنع منعاً باتاً حظر البوت (Block) أو إغلاق استقبال الرسائل من أعضاء السيرفر.**\n` +
-      `> حيث يقوم النظام بفحص جاهزية الاتصال الأمني دورياً، وفي حال تعذر إرسال الإشعارات الأمنية إليك بسبب الحظر، **سيتم طردك تلقائياً من السيرفر فوراً** لضمان سلامة المجتمع.\n\n` +
       `💡 *نتمنى لك قضاء وقت ممتع ومميز في GX eSports!*`
     )
     .setFooter({ text: `GX eSports Security System • الإصدار ${BOT_VERSION}` })
@@ -990,28 +987,13 @@ async function sendSecurityOnboardingDM(member) {
 
   try {
     await member.send({ embeds: [securityEmbed] });
-    sentList.push(member.id);
-    saveDMSecuritySent(sentList);
     console.log(`🛡️ [أمان GX] تم إرسال رسالة "تم تفعيل GX" بنجاح إلى ${member.user.tag} (${member.id})`);
   } catch (err) {
-    if (err.code === 50007 || err.status === 403 || err.message?.includes('Cannot send messages')) {
-      console.warn(`🚨 [أمان GX] تعذر إرسال رسالة الأمان إلى ${member.user.tag} (البوت محظور أو الخاص مغلق). جارٍ تنفيذ الطرد الفوري...`);
-
-      const kickReason = 'حظر البوت أو إغلاق الخاص مما يخالف سياسة الأمان للسيرفر (Anti-Bot-Block)';
-      await member.kick(kickReason).catch(() => {});
-
-      const logEmbed = new EmbedBuilder()
-        .setColor(0xED4245)
-        .setAuthor({ name: '🚨 طرد أمني تلقائي (حظر البوت / إغلاق الخاص)', iconURL: member.user.displayAvatarURL() })
-        .setDescription(
-          `تم طرد العضو <@${member.id}> (\`${member.user.tag}\`) تلقائياً من السيرفر.\n\n` +
-          `**السبب:** العضو قام بحظر البوت أو إغلاق استقبال الرسائل الأمنية بالخاص، وهو ما يخالف بروتوكول الأمان \`تم تفعيل GX\`.\n` +
-          `**معرف العضو:** \`${member.id}\``
-        )
-        .setFooter({ text: `GX eSports Security Guard • الإصدار ${BOT_VERSION}` })
-        .setTimestamp();
-
-      await sendToLogChannel(member.guild, logEmbed);
+    console.log(`ℹ️ [أمان GX] تعذر إرسال رسالة الأمان بالخاص إلى ${member.user.tag} (الخاص مغلق لدى العضو).`);
+  } finally {
+    if (!sentList.includes(member.id)) {
+      sentList.push(member.id);
+      saveDMSecuritySent(sentList);
     }
   }
 }
