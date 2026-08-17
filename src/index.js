@@ -2058,6 +2058,7 @@ client.once(Events.ClientReady, async (c) => {
       await getOrCreateLogChannel(guild);
       await getOrCreateSystemStatusChannel(guild);
       await ensurePermanentTicketPanel(guild);
+      await getOrCreateTournamentCategory(guild);
       await ensureEventPanel(guild);
       await syncActiveTicketsMembers(guild);
       await syncAllMembersRole(guild, true);
