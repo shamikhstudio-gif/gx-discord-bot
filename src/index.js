@@ -890,15 +890,32 @@ function isVerificationApprover(member, user) {
 }
 
 /**
- * 📩 Sends an interactive verification request to #log with approval buttons for OWNER, CEO, and COO.
+ * 👑 Retrieves all members holding COO, CEO, or OWNER roles to receive private DM verification requests.
  */
-async function sendVerificationRequestToLog(guild, member) {
+async function getExecutiveMembers(guild) {
+  if (!guild) return [];
+  const members = await guild.members.fetch().catch(() => guild.members.cache);
+  const approverRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+  const approverNames = ['owner', 'ceo', 'coo'];
+
+  return members.filter((m) => {
+    if (m.user.bot) return false;
+    if (m.id === guild.ownerId) return true;
+    if (m.id === '1152686277255237663' || m.id === '1484535997893967980') return true;
+    if (m.roles.cache.some((r) => approverRoleIds.includes(r.id))) return true;
+    if (m.roles.cache.some((r) => approverNames.some((n) => r.name.toLowerCase().trim().includes(n)))) return true;
+    return false;
+  });
+}
+
+/**
+ * 📩 Sends the interactive verification order directly to the Private DMs of COO, CEO, and OWNER.
+ */
+async function sendVerificationRequestToExecutives(guild, member) {
   if (!guild || !member) return;
 
-  const logChannel = await getOrCreateLogChannel(guild);
-  if (!logChannel) return;
-
-  const approverPings = '<@&1538485406922838066> <@&1538485672795570196> <@&1538544110913454160>';
+  const executives = await getExecutiveMembers(guild);
+  if (!executives || executives.size === 0) return;
 
   const embed = new EmbedBuilder()
     .setColor(0xFEE75C)
@@ -909,10 +926,10 @@ async function sendVerificationRequestToLog(guild, member) {
       `🆔 **المعرف (ID):** \`${member.id}\`\n` +
       `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
       `🔒 **الرتبة الحالية:** \`UNTRUSTED\` (مشاهدة وفويس فقط وممنوع من الكتابة)\n\n` +
-      `⚡ **صلاحية الموافقة:** مخصصة لـ **OWNER / CEO / COO**.\n` +
-      `👉 عند موافقة مسؤول واحد فقط، سيتم منح العضو رتبة **MEMBER** وسحب **UNTRUSTED** وتفعيل الكتابة فوراً.`
+      `⚡ **صلاحية الموافقة:** مخصصة لكم كرتبة **OWNER / CEO / COO**.\n` +
+      `👉 بمجرد ضغط أي مسؤول منكم على زر الموافقة هنا في الخاص، سيتم منح العضو رتبة **MEMBER** وسحب **UNTRUSTED** فوراً.`
     )
-    .setFooter({ text: `GX eSports Verification Engine • ${member.id}` })
+    .setFooter({ text: `GX eSports Security Engine • المعرف: ${member.id}` })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
@@ -926,11 +943,15 @@ async function sendVerificationRequestToLog(guild, member) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  await logChannel.send({
-    content: `📢 ${approverPings} **طلب توثيق عضوية جديد بحاجة لموافقة مسؤول واحد:**`,
-    embeds: [embed],
-    components: [row]
-  }).catch(() => {});
+  for (const [, execMember] of executives) {
+    try {
+      await execMember.send({
+        content: `🔔 **طلب توثيق عضو جديد في سيرفر \`${guild.name}\` بحاجة لموافقتك:**`,
+        embeds: [embed],
+        components: [row]
+      }).catch(() => {});
+    } catch {}
+  }
 }
 
 /**
@@ -2052,14 +2073,14 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
         }
       }
 
-      // 3. Regular member without MEMBER and without UNTRUSTED -> Give UNTRUSTED as default and send verification request
+      // 3. Regular member without MEMBER and without UNTRUSTED -> Give UNTRUSTED as default and send verification request to executives DM
       else if (!isManager && !hasAdminRole && !hasMemberRole && !hasUntrustedRole) {
         try {
           if (untrustedRole && botMember.roles.highest.comparePositionTo(untrustedRole) > 0) {
             await member.roles.add(untrustedRole);
             givenCount++;
             console.log(`🛡️ [رتبة افتراضية] تم تعيين رتبة UNTRUSTED للعضو الجديد: ${member.user.tag}`);
-            await sendVerificationRequestToLog(guild, member);
+            await sendVerificationRequestToExecutives(guild, member);
             await new Promise((res) => setTimeout(res, 400));
           }
         } catch (err) {
@@ -2546,7 +2567,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
         saveWelcomedMembers(welcomedList);
       }
       await sendSecurityOnboardingDM(member);
-      await sendVerificationRequestToLog(member.guild, member);
+      await sendVerificationRequestToExecutives(member.guild, member);
     }
 
     // 2. Audit Log
@@ -3746,24 +3767,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // 8. زر قبول توثيق العضوية (خاص برتب OWNER / CEO / COO بموافقة مسؤول واحد فقط)
+      // 8. زر قبول توثيق العضوية (خاص برتب OWNER / CEO / COO عبر الخاص DM)
       else if (interaction.customId.startsWith('verify_approve_')) {
         const targetId = interaction.customId.replace('verify_approve_', '');
+        const guild = interaction.guild || client.guilds.cache.get(ALLOWED_GUILD_ID);
 
-        if (!isVerificationApprover(interaction.member, interaction.user)) {
+        if (!guild) {
+          return interaction.reply({ content: '❌ تعذر الوصول إلى السيرفر.', ephemeral: true });
+        }
+
+        const approverMember = await guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!isVerificationApprover(approverMember, interaction.user)) {
           return interaction.reply({
             content: '❌ **عذراً، الموافقة على طلبات التوثيق مقتصرة فقط على رتب (OWNER / CEO / COO)!**',
             ephemeral: true
           });
         }
 
-        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+        const targetMember = await guild.members.fetch(targetId).catch(() => null);
         if (!targetMember) {
           return interaction.reply({ content: '❌ لم يتم العثور على العضو في السيرفر (ربما غادر السيرفر).', ephemeral: true });
         }
 
-        const memberRole = findAutoRole(interaction.guild);
-        const untrustedRole = await findOrCreateUntrustedRole(interaction.guild);
+        const memberRole = findAutoRole(guild);
+        const untrustedRole = await findOrCreateUntrustedRole(guild);
 
         if (untrustedRole && targetMember.roles.cache.has(untrustedRole.id)) {
           await targetMember.roles.remove(untrustedRole).catch(() => {});
@@ -3775,7 +3802,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const doneRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`approved_done_${targetId}`)
-            .setLabel(`✅ تم التوثيق بواسطة: ${interaction.user.displayName}`)
+            .setLabel(`✅ تم قبول التوثيق بنجاح بواسطتك (${interaction.user.displayName})`)
             .setStyle(ButtonStyle.Success)
             .setDisabled(true)
         );
@@ -3785,7 +3812,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         // Direct DM to the approved member
         const approvedDMEmbed = new EmbedBuilder()
           .setColor(0x57F287)
-          .setAuthor({ name: '🎉 تم قبول التوثيق بنجاح | GX eSports', iconURL: interaction.guild.iconURL() })
+          .setAuthor({ name: '🎉 تم قبول التوثيق بنجاح | GX eSports', iconURL: guild.iconURL() })
           .setTitle('👑 تهانينا! تمت ترقيتك وتفعيل حسابك بالكامل')
           .setDescription(
             `أهلاً بك <@${targetId}>! تمت مراجعة طلبك والموافقة على توثيق حسابك بواسطة الإدارة العليا (<@${interaction.user.id}>).\n\n` +
@@ -3801,11 +3828,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const logEmbed = new EmbedBuilder()
           .setColor(0x57F287)
-          .setAuthor({ name: '✅ قبول توثيق عضو', iconURL: interaction.user.displayAvatarURL() })
-          .setDescription(`قام المسؤول <@${interaction.user.id}> بالموافقة على توثيق <@${targetId}> (\`${targetMember.user.tag}\`) ومنحه رتبة **MEMBER** وسحب **UNTRUSTED** وتفعيل صلاحية الكتابة.`)
+          .setAuthor({ name: '✅ قبول توثيق عضو (عبر الخاص)', iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`قام المسؤول <@${interaction.user.id}> بالموافقة في الخاص على توثيق <@${targetId}> (\`${targetMember.user.tag}\`) ومنحه رتبة **MEMBER** وسحب **UNTRUSTED** وتفعيل صلاحية الكتابة.`)
           .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
           .setTimestamp();
-        await sendToLogChannel(interaction.guild, logEmbed);
+        await sendToLogChannel(guild, logEmbed);
 
         return interaction.followUp({
           content: `✅ **تم بنجاح توثيق العضو <@${targetId}> ومنحه رتبة MEMBER وإلغاء UNTRUSTED!**`,
@@ -3813,11 +3840,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // 9. زر رفض توثيق العضوية
+      // 9. زر رفض توثيق العضوية (عبر الخاص DM)
       else if (interaction.customId.startsWith('verify_reject_')) {
         const targetId = interaction.customId.replace('verify_reject_', '');
+        const guild = interaction.guild || client.guilds.cache.get(ALLOWED_GUILD_ID);
 
-        if (!isVerificationApprover(interaction.member, interaction.user)) {
+        if (!guild) {
+          return interaction.reply({ content: '❌ تعذر الوصول إلى السيرفر.', ephemeral: true });
+        }
+
+        const approverMember = await guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!isVerificationApprover(approverMember, interaction.user)) {
           return interaction.reply({
             content: '❌ **عذراً، رفض طلبات التوثيق مقتصر فقط على رتب (OWNER / CEO / COO)!**',
             ephemeral: true
@@ -3827,18 +3860,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const rejectRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`rejected_done_${targetId}`)
-            .setLabel(`❌ تم الرفض بواسطة: ${interaction.user.displayName}`)
+            .setLabel(`❌ تم رفض الطلب بواسطتك (${interaction.user.displayName})`)
             .setStyle(ButtonStyle.Danger)
             .setDisabled(true)
         );
 
         await interaction.update({ components: [rejectRow] }).catch(() => {});
 
-        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+        const targetMember = await guild.members.fetch(targetId).catch(() => null);
         if (targetMember) {
           const rejectDMEmbed = new EmbedBuilder()
             .setColor(0xED4245)
-            .setAuthor({ name: '❌ طلب التوثيق | GX eSports', iconURL: interaction.guild.iconURL() })
+            .setAuthor({ name: '❌ طلب التوثيق | GX eSports', iconURL: guild.iconURL() })
             .setTitle('تنبيه بخصوص طلب توثيق العضوية')
             .setDescription(
               `عزيزنا <@${targetId}>، تم رفض طلب التوثيق الخاص بك حالياً من قِبل الإدارة العليا.\n` +
@@ -3848,6 +3881,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
             .setTimestamp();
           await targetMember.send({ embeds: [rejectDMEmbed] }).catch(() => {});
         }
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({ name: '❌ رفض توثيق عضو (عبر الخاص)', iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`قام المسؤول <@${interaction.user.id}> برفض طلب توثيق <@${targetId}> عبر الخاص.`)
+          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+        await sendToLogChannel(guild, logEmbed);
 
         return interaction.followUp({
           content: `❌ **تم رفض طلب التوثيق للعضو <@${targetId}>.**`,
