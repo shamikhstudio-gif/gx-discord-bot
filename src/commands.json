@@ -567,6 +567,12 @@
         "required": false,
         "minValue": 1,
         "maxValue": 1440
+      },
+      {
+        "name": "الروم_الصوتي_العام",
+        "description": "تحديد روم صوتي عام للتجمع في الفعاليات العامة (اختياري - سينشئ البوت روماً إن لم تحدد)",
+        "type": "CHANNEL",
+        "required": false
       }
     ]
   },
