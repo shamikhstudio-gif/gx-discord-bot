@@ -527,7 +527,7 @@ function renderEventEmbed(eventData, clientUser) {
       `👑 **المنظم:** <@${eventData.hostId}>\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━` +
       matchesListText +
-      `\n\n🔹 *اضغط على **🎟️ انضمام للبطولة** ليقوم البوت فوراً بتسجيلك وحجز رومك/فريقك!*`
+      `\n\n🔹 *اضغط على **🎟️ انضمام للبطولة** ليتم تسجيلك وإرسال التذكيرات وتفاصيل مباراتك في الخاص تلقائياً!*`
     )
     .setFooter({ text: `GX eSports Tournament Engine • المعرف: ${eventData.id} • الإصدار ${BOT_VERSION}` })
     .setTimestamp(eventData.createdAt);
@@ -545,7 +545,7 @@ function renderEventButtons(eventData) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`event_join_${eventData.id}`)
-      .setLabel('🎟️ انضمام وحجز مواجهة')
+      .setLabel('🎟️ انضمام للبطولة')
       .setStyle(ButtonStyle.Success)
       .setDisabled(isStarted || isFull),
     new ButtonBuilder()
@@ -554,13 +554,9 @@ function renderEventButtons(eventData) {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(isStarted),
     new ButtonBuilder()
-      .setCustomId(`event_remind_${eventData.id}`)
-      .setLabel('🔔 تذكيرني بالخاص')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
       .setCustomId(`event_list_${eventData.id}`)
-      .setLabel(`👥 الفرق والمباريات (${eventData.participants ? eventData.participants.length : 0})`)
-      .setStyle(ButtonStyle.Secondary)
+      .setLabel(`👥 الفرق والمشاركون (${eventData.participants ? eventData.participants.length : 0})`)
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
@@ -3289,7 +3285,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         return interaction.editReply({
-          content: `🎉 **أهلاً بك <@${interaction.user.id}>!** تم تسجيلك بنجاح في بطولة **${eventData.title}**!\n🔒 تفقد رسائلك الخاصة (DM) إذا تم تشكيل مباراتك أو فريقك.`
+          content: `🎉 **أهلاً بك <@${interaction.user.id}>!** تم تسجيلك بنجاح في بطولة **${eventData.title}**!\n🔔 **تم تفعيل التنبيهات بالخاص تلقائياً.** ستصلك رسالة بالخاص عند تشكيل روم مواجهتك/فريقك وتذكير قبل انطلاق البطولة.`
         });
       }
 
