@@ -3508,11 +3508,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         collector.on('collect', async (btnInteraction) => {
           const isCurrentOwner = btnInteraction.user.id === currentVoiceOwner.userId;
-          const isLeader = isAuthorizedRoleManager(btnInteraction.member, btnInteraction.user);
 
-          if (!isCurrentOwner && !isLeader) {
+          if (!isCurrentOwner) {
             return btnInteraction.reply({
-              content: `❌ عذراً، هذا القرار مخصص فقط لمالك البوت الحالي (<@${currentVoiceOwner.userId}>) أو القيادة العليا!`,
+              content: `❌ **عذراً، قبول أو رفض نقل البوت محصور حصرياً بمالك البوت الحالي (<@${currentVoiceOwner.userId}>) فقط!**`,
               flags: [1 << 6]
             });
           }
