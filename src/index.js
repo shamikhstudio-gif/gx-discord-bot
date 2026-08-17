@@ -3457,12 +3457,146 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const currentBotChannel = interaction.guild.channels.cache.get(currentBotVoiceId);
       const isOwnerStillInChannel = currentVoiceOwner && currentBotChannel?.members.has(currentVoiceOwner.userId);
 
-      // إذا كان المستدعي الأصلي لا يزال في الروم، يُمنع منعاً باتاً سحب أو نقل البوت لأي عضو آخر
+      // إذا كان المستدعي الأصلي لا يزال في الروم، إرسال طلب استئذان تفاعلي لنقل الملكية
       if (isOwnerStillInChannel) {
-        return interaction.reply({
-          content: `🔒 **البوت مملوك ومستدعى حالياً بواسطة <@${currentVoiceOwner.userId}> في الروم <#${currentBotVoiceId}>!**\nلا يمكن سحب أو نقل البوت لأي روم آخر طالما المستدعي الأصلي متواجد معه في الفويس. يمكنك انتظار خروجه أو الانضمام إليهم.`,
-          flags: [1 << 6]
+        if (activeTransferCollector) {
+          return interaction.reply({
+            content: '⏳ **هناك طلب استئذان لنقل البوت قيد الانتظار حالياً، يرجى المحاولة بعد قليل.**',
+            flags: [1 << 6]
+          });
+        }
+
+        await interaction.deferReply();
+
+        const acceptBtnId = `accept_transfer_${Date.now()}`;
+        const rejectBtnId = `reject_transfer_${Date.now()}`;
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(acceptBtnId).setLabel('✅ موافقة على نقل الملكية').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(rejectBtnId).setLabel('❌ رفض الطلب').setStyle(ButtonStyle.Danger)
+        );
+
+        const requestEmbed = new EmbedBuilder()
+          .setColor(0xFEE75C)
+          .setAuthor({ name: '🛎️ طلب استئذان لنقل ملكية البوت', iconURL: member.user.displayAvatarURL() })
+          .setTitle('طلب نقل واستدعاء البوت إلى روم آخر')
+          .setDescription(
+            `عزيزي <@${currentVoiceOwner.userId}> (متحكم ومالك البوت الحالي):\n` +
+            `يطلب العضو <@${member.id}> استدعاء ونقل ملكية البوت إلى الروم الصوتي **#${targetVoiceChannel.name}**.\n\n` +
+            `🔹 **لديك 60 ثانية للموافقة أو الرفض عبر الأزرار أدناه:**`
+          )
+          .setFooter({ text: `GX eSports Voice System • مهلة الرد: 60 ثانية` })
+          .setTimestamp();
+
+        const transferMessage = await interaction.channel.send({
+          content: `🔔 تنبيه: <@${currentVoiceOwner.userId}> يرجى مراجعة طلب نقل ملكية البوت من <@${member.id}>.`,
+          embeds: [requestEmbed],
+          components: [row]
         });
+
+        await interaction.editReply({
+          content: `⏳ **تم إرسال طلب استئذان رسمي إلى مالك البوت الحالي (<@${currentVoiceOwner.userId}>).** يرجى الانتظار حتى يرد.`
+        });
+
+        const collector = transferMessage.createMessageComponentCollector({
+          componentType: ComponentType.Button,
+          time: 60 * 1000
+        });
+        activeTransferCollector = collector;
+
+        collector.on('collect', async (btnInteraction) => {
+          const isCurrentOwner = btnInteraction.user.id === currentVoiceOwner.userId;
+          const isLeader = isAuthorizedRoleManager(btnInteraction.member, btnInteraction.user);
+
+          if (!isCurrentOwner && !isLeader) {
+            return btnInteraction.reply({
+              content: `❌ عذراً، هذا القرار مخصص فقط لمالك البوت الحالي (<@${currentVoiceOwner.userId}>) أو القيادة العليا!`,
+              flags: [1 << 6]
+            });
+          }
+
+          if (btnInteraction.customId === acceptBtnId) {
+            collector.stop('accepted');
+
+            setAuthorizedMove();
+            connectToVoiceChannel(targetVoiceChannel);
+            const previousOwnerId = currentVoiceOwner.userId;
+            currentVoiceOwner = {
+              userId: member.id,
+              userTag: member.user.tag,
+              channelId: targetVoiceChannel.id,
+              channelName: targetVoiceChannel.name,
+              joinedAt: Date.now()
+            };
+
+            const acceptedEmbed = new EmbedBuilder()
+              .setColor(0x57F287)
+              .setTitle('✅ تمت الموافقة على نقل ملكية البوت!')
+              .setDescription(
+                `وافق <@${previousOwnerId}> على نقل البوت!\n` +
+                `🎙️ **انتقل البوت بنجاح إلى الروم الصوتي:** <#${targetVoiceChannel.id}>\n` +
+                `👑 **المالك والمتحكم الجديد:** <@${member.id}>`
+              )
+              .setFooter({ text: `GX eSports Voice • الإصدار ${BOT_VERSION}` })
+              .setTimestamp();
+
+            await btnInteraction.update({
+              content: `🎉 تمت الموافقة على نقل البوت بواسطة <@${previousOwnerId}>!`,
+              embeds: [acceptedEmbed],
+              components: []
+            }).catch(() => {});
+
+            await interaction.followUp({
+              content: `🎉 **وافق <@${previousOwnerId}> على طلبك!** انضم البوت إلى رومك <#${targetVoiceChannel.id}> وأصبحت أنت المالك والمتحكم الجديد.`
+            }).catch(() => {});
+
+            const logEmbed = new EmbedBuilder()
+              .setColor(0x57F287)
+              .setAuthor({ name: '🎙️ نقل ملكية البوت بموافقة', iconURL: member.user.displayAvatarURL() })
+              .setDescription(`وافق <@${previousOwnerId}> على نقل البوت إلى <#${targetVoiceChannel.id}> بدعوة من <@${member.id}>.`)
+              .setFooter({ text: `GX eSports Voice • الإصدار ${BOT_VERSION}` })
+              .setTimestamp();
+            await sendToLogChannel(interaction.guild, logEmbed);
+
+          } else if (btnInteraction.customId === rejectBtnId) {
+            collector.stop('rejected');
+
+            const rejectedEmbed = new EmbedBuilder()
+              .setColor(0xED4245)
+              .setTitle('❌ تم رفض طلب نقل البوت')
+              .setDescription(`رفض المالك الحالي <@${currentVoiceOwner.userId}> نقل البوت وسيبقى البوت في رومه الصوتي الحالي.`)
+              .setFooter({ text: `GX eSports Voice • الإصدار ${BOT_VERSION}` })
+              .setTimestamp();
+
+            await btnInteraction.update({
+              content: `❌ تم رفض طلب النقل بواسطة <@${currentVoiceOwner.userId}>.`,
+              embeds: [rejectedEmbed],
+              components: []
+            }).catch(() => {});
+
+            await interaction.followUp({
+              content: `❌ **عذراً، رفض <@${currentVoiceOwner.userId}> طلب سحب البوت.** سيبقى البوت في رومه الحالي.`
+            }).catch(() => {});
+          }
+        });
+
+        collector.on('end', async (_, reason) => {
+          activeTransferCollector = null;
+          if (reason === 'time') {
+            const timeoutEmbed = new EmbedBuilder()
+              .setColor(0xED4245)
+              .setTitle('⏰ انتهت مهلة الرد على طلب نقل البوت')
+              .setDescription(`لم يقم المالك الحالي <@${currentVoiceOwner?.userId}> بالرد خلال 60 ثانية، تم إلغاء الطلب تلقائياً.`)
+              .setFooter({ text: `GX eSports Voice • الإصدار ${BOT_VERSION}` });
+
+            await transferMessage.edit({
+              content: '⏰ تم إلغاء الطلب لعدم الرد في الوقت المحدد.',
+              embeds: [timeoutEmbed],
+              components: []
+            }).catch(() => {});
+          }
+        });
+        return;
       }
 
       // إذا غادر المستدعي الأصلي الروم، يحق للعضو الحالي سحب البوت وامتلاكه
