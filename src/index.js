@@ -54,6 +54,22 @@ const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
 const COMMANDS_CONFIG_FILE = path.resolve('src', 'commands.json');
 
+function safeWriteJson(filePath, data) {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    try {
+      setTimeout(() => {
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+        } catch {}
+      }, 50);
+    } catch {}
+  }
+}
+
 function loadWelcomedMembers() {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -67,12 +83,7 @@ function loadWelcomedMembers() {
 }
 
 function saveWelcomedMembers(list) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(WELCOMED_FILE, JSON.stringify(list, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('خطأ في حفظ ملف الأعضاء المرحب بهم:', err.message);
-  }
+  safeWriteJson(WELCOMED_FILE, list);
 }
 
 function loadWelcomeTracker() {
@@ -86,10 +97,7 @@ function loadWelcomeTracker() {
 }
 
 function saveWelcomeTracker(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(WELCOME_TRACKER_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(WELCOME_TRACKER_FILE, data);
 }
 
 function loadStatusMessageId() {
@@ -103,10 +111,7 @@ function loadStatusMessageId() {
 }
 
 function saveStatusMessageId(messageId) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATUS_MSG_FILE, JSON.stringify({ messageId }), 'utf-8');
-  } catch {}
+  safeWriteJson(STATUS_MSG_FILE, { messageId });
 }
 
 function loadWarnings() {
@@ -120,10 +125,7 @@ function loadWarnings() {
 }
 
 function saveWarnings(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(WARNINGS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(WARNINGS_FILE, data);
 }
 
 function loadTickets() {
@@ -137,10 +139,7 @@ function loadTickets() {
 }
 
 function saveTickets(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(TICKETS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(TICKETS_FILE, data);
 }
 
 function loadTicketPanelData() {
@@ -153,10 +152,7 @@ function loadTicketPanelData() {
 }
 
 function saveTicketPanelData(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(TICKET_PANEL_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(TICKET_PANEL_FILE, data);
 }
 
 function loadDMSecuritySent() {
@@ -170,10 +166,7 @@ function loadDMSecuritySent() {
 }
 
 function saveDMSecuritySent(list) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DM_SECURITY_SENT_FILE, JSON.stringify(list, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(DM_SECURITY_SENT_FILE, list);
 }
 
 const INFRACTIONS_META_FILE = path.join(DATA_DIR, 'infractions_meta.json');
@@ -190,10 +183,7 @@ function loadUserInfractions() {
 }
 
 function saveUserInfractions(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(USER_INFRACTIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(USER_INFRACTIONS_FILE, data);
 }
 
 function loadInfractionsMeta() {
@@ -207,10 +197,7 @@ function loadInfractionsMeta() {
 }
 
 function saveInfractionsMeta(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(INFRACTIONS_META_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {}
+  safeWriteJson(INFRACTIONS_META_FILE, data);
 }
 
 /**
