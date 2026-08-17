@@ -53,6 +53,7 @@ const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
 const VERIFICATION_REQUESTS_FILE = path.join(DATA_DIR, 'verification_requests.json');
+const EMERGENCY_STATE_FILE = path.join(DATA_DIR, 'emergency_state.json');
 const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
@@ -190,6 +191,221 @@ function loadVerificationRequests() {
 
 function saveVerificationRequests(data) {
   safeWriteJson(VERIFICATION_REQUESTS_FILE, data);
+}
+
+// ----------------------------------------------------
+// 🚨 Military Emergency State Storage & Helpers
+// ----------------------------------------------------
+function loadEmergencyState() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(EMERGENCY_STATE_FILE)) {
+      return JSON.parse(fs.readFileSync(EMERGENCY_STATE_FILE, 'utf-8'));
+    }
+  } catch {}
+  return { isActive: false };
+}
+
+function saveEmergencyState(data) {
+  safeWriteJson(EMERGENCY_STATE_FILE, data);
+}
+
+function isEmergencyActive() {
+  const state = loadEmergencyState();
+  return Boolean(state && state.isActive);
+}
+
+// ----------------------------------------------------
+// 🧠 Levenshtein Distance & Smart Arabic Normalization
+// ----------------------------------------------------
+/**
+ * 🧮 Fast Levenshtein Distance algorithm for smart fuzzy text similarity calculation.
+ */
+function levenshteinDistance(s1, s2) {
+  if (s1 === s2) return 0;
+  if (!s1.length) return s2.length;
+  if (!s2.length) return s1.length;
+
+  let v0 = new Array(s2.length + 1);
+  let v1 = new Array(s2.length + 1);
+
+  for (let i = 0; i <= s2.length; i++) v0[i] = i;
+
+  for (let i = 0; i < s1.length; i++) {
+    v1[0] = i + 1;
+    for (let j = 0; j < s2.length; j++) {
+      const cost = s1[i] === s2[j] ? 0 : 1;
+      v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+    }
+    for (let j = 0; j <= s2.length; j++) v0[j] = v1[j];
+  }
+  return v1[s2.length];
+}
+
+/**
+ * 🎯 Calculates text similarity ratio between 0.0 and 1.0.
+ */
+function calculateTextSimilarity(str1, str2) {
+  if (!str1 || !str2) return 0;
+  const s1 = String(str1).trim();
+  const s2 = String(str2).trim();
+  if (s1 === s2) return 1.0;
+  const maxLen = Math.max(s1.length, s2.length);
+  if (maxLen === 0) return 1.0;
+  const dist = levenshteinDistance(s1, s2);
+  return Math.max(0, 1.0 - (dist / maxLen));
+}
+
+/**
+ * 🧹 Normalizes Arabic text, removing tatweel/kashida, diacritics, repeating letters, and zero-width chars.
+ */
+function normalizeArabicText(text) {
+  if (!text) return '';
+  let str = String(text).toLowerCase();
+
+  // Remove zero-width spaces and invisible characters
+  str = str.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
+
+  // Remove Arabic diacritics (Tashkeel)
+  str = str.replace(/[\u064B-\u065F\u0670]/g, '');
+
+  // Remove Tatweel (Kashida)
+  str = str.replace(/\u0640/g, '');
+
+  // Normalize Alif variations (أ, إ, آ, ٱ -> ا)
+  str = str.replace(/[أإآٱ]/g, 'ا');
+
+  // Normalize Yaa variations (ى, ئ -> ي)
+  str = str.replace(/[ى]/g, 'ي');
+
+  // Normalize Taa Marbuta (ة -> ه)
+  str = str.replace(/[ة]/g, 'ه');
+
+  // Collapse repetitive characters (e.g. "هههههههههه" -> "هه", "سلاااام" -> "سلام")
+  str = str.replace(/(.)\1{2,}/gu, '$1$1');
+
+  // Remove excessive whitespace & punctuation
+  str = str.replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
+
+  return str;
+}
+
+// User message history tracker for fuzzy spam & velocity burst
+// Map<userId, Array<{ raw: string, normalized: string, timestamp: number, channelId: string }>>
+const userMessageHistory = new Map();
+const SPAM_WINDOW_MS = 10000;
+const FUZZY_SIMILARITY_THRESHOLD = 0.75;
+const MAX_SIMILAR_MESSAGES = 3;
+const MAX_BURST_MESSAGES = 5;
+
+/**
+ * ⚡ Inspects and protects the server from fast burst message floods and smart fuzzy text repetitions.
+ */
+async function checkSmartSpamAndVelocity(message) {
+  if (!message || !message.guild || !message.member || message.author.bot) return false;
+
+  // Exempt Leadership & Managers
+  if (isManagerMember(message.member) || isVerificationApprover(message.member, message.author)) {
+    return false;
+  }
+
+  const userId = message.author.id;
+  const now = Date.now();
+  const rawText = message.content || '';
+  const normalizedText = normalizeArabicText(rawText);
+
+  let history = userMessageHistory.get(userId) || [];
+  history = history.filter((entry) => now - entry.timestamp <= SPAM_WINDOW_MS);
+
+  history.push({
+    raw: rawText,
+    normalized: normalizedText,
+    timestamp: now,
+    messageId: message.id,
+    channelId: message.channel.id
+  });
+  userMessageHistory.set(userId, history);
+
+  // 1. Fast Velocity Burst Check (> 5 messages in 4 seconds)
+  const recentBurstCount = history.filter((entry) => now - entry.timestamp <= 4000).length;
+  if (recentBurstCount >= MAX_BURST_MESSAGES) {
+    userMessageHistory.set(userId, []);
+    await applySmartSpamPunishment(message, 'إرسال رسائل متتالية بسرعة فائقة (Burst Flood Attack)', recentBurstCount);
+    return true;
+  }
+
+  // 2. Fuzzy Text Similarity Check (Levenshtein Distance across recent messages)
+  if (normalizedText.length >= 4) {
+    let similarCount = 1;
+    let maxSimilarity = 0;
+
+    for (let i = 0; i < history.length - 1; i++) {
+      const prev = history[i];
+      if (!prev.normalized || prev.normalized.length < 4) continue;
+      const sim = calculateTextSimilarity(normalizedText, prev.normalized);
+      if (sim > maxSimilarity) maxSimilarity = sim;
+      if (sim >= FUZZY_SIMILARITY_THRESHOLD) {
+        similarCount++;
+      }
+    }
+
+    if (similarCount >= MAX_SIMILAR_MESSAGES) {
+      userMessageHistory.set(userId, []);
+      await applySmartSpamPunishment(message, `تكرار نصوص متشابهة بذكاء (نسبة التشابه: ${Math.round(maxSimilarity * 100)}%)`, similarCount);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 🔨 Applies penalty (delete, timeout, DM warning, log) for detected spam violations.
+ */
+async function applySmartSpamPunishment(message, reason, metricValue) {
+  const member = message.member;
+  const guild = message.guild;
+
+  try {
+    await message.delete().catch(() => {});
+  } catch {}
+
+  try {
+    if (member && member.moderatable) {
+      await member.timeout(5 * 60 * 1000, `GX Anti-Spam: ${reason}`).catch(() => {});
+    }
+  } catch {}
+
+  try {
+    const dmEmbed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setAuthor({ name: '⚠️ تحذير أمني: مكافحة السبام الذكي | GX Security', iconURL: guild.iconURL() })
+      .setTitle('تم عزل حسابك مؤقتاً (Timeout 5 دقائق)')
+      .setDescription(
+        `مرحباً <@${message.author.id}>، رصد نظام الحماية الذكي نشاطاً مخالفاً من حسابك في سيرفر **${guild.name}**.\n\n` +
+        `🚫 **سبب العقوبة:** \`${reason}\`\n` +
+        `⏱️ **مدة العزل:** 5 دقائق\n\n` +
+        `يرجى الالتزام بقوانين السيرفر وعدم تكرار النصوص أو إرسال الرسائل بسرعة مفرطة لتجنب الحظر الدائم.`
+      )
+      .setFooter({ text: `GX eSports Defense System • الإصدار ${BOT_VERSION}` })
+      .setTimestamp();
+    await message.author.send({ embeds: [dmEmbed] }).catch(() => {});
+  } catch {}
+
+  try {
+    const logEmbed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setAuthor({ name: '🛡️ رصد وإحباط هجوم سبام ذكي (Anti-Spam Shield)', iconURL: message.author.displayAvatarURL() })
+      .setDescription(
+        `قام النظام باعتراض وعزل العضو <@${message.author.id}> (\`${message.author.tag}\`) في القناة <#${message.channel.id}>.\n\n` +
+        `📝 **نوع المخالفة:** ${reason}\n` +
+        `⚡ **الإجراء المتخذ:** تم حذف الرسائل وتطبيق تايم آوت لمدة 5 دقائق.\n` +
+        `💬 **نص الرسالة المعترضة:**\n\`\`\`\n${message.content.slice(0, 500) || '[بدون نص]'}\n\`\`\``
+      )
+      .setFooter({ text: `GX eSports Security Engine • الإصدار ${BOT_VERSION}` })
+      .setTimestamp();
+    await sendToLogChannel(guild, logEmbed);
+  } catch {}
 }
 
 const INFRACTIONS_META_FILE = path.join(DATA_DIR, 'infractions_meta.json');
@@ -2818,12 +3034,29 @@ client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
 });
 
 // ====================================================
-// 🚫 STRICT MESSAGE CHAT INTERCEPTOR (UNTRUSTED SHIELD)
+// 🚫 STRICT MESSAGE CHAT INTERCEPTOR & SMART ANTI-SPAM
 // ====================================================
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID || message.author.bot) return;
 
-  // Intercept any message sent by untrusted members
+  // 1. Military Emergency Lockdown Enforcement:
+  if (isEmergencyActive()) {
+    const isImmune = isManagerMember(message.member) || isVerificationApprover(message.member, message.author);
+    if (!isImmune) {
+      try {
+        await message.delete().catch(() => {});
+        const alertMsg = await message.channel.send({
+          content: `🚨 <@${message.author.id}> **السيرفر خاضع لحالة الطوارئ العسكرية والدفاع الشامل حالياً. تم قفل المحادثات لحماية الخادم.**`
+        }).catch(() => null);
+        if (alertMsg) {
+          setTimeout(() => alertMsg.delete().catch(() => {}), 4000);
+        }
+      } catch {}
+      return;
+    }
+  }
+
+  // 2. Intercept any message sent by untrusted members
   const isUntrusted = isUntrustedMember(message.member) || message.member?.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
   if (isUntrusted) {
     try {
@@ -2850,7 +3083,11 @@ client.on(Events.MessageCreate, async (message) => {
     } catch (err) {
       console.error('خطأ في اعتراض رسالة العضو غير الموثوق:', err.message);
     }
+    return;
   }
+
+  // 3. Fuzzy Levenshtein Smart Anti-Spam & Burst Shield
+  await checkSmartSpamAndVelocity(message);
 });
 
 client.on(Events.GuildRoleCreate, async (role) => {
@@ -5762,6 +5999,238 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
         .setTimestamp();
       await sendToLogChannel(interaction.guild, logEmbed);
+    }
+
+    // 42. أمر /طوارئ_تفعيل (بروتوكول الدفاع العسكري - حصري لـ OWNER / CEO / COO)
+    else if (commandName === 'طوارئ_تفعيل') {
+      if (!isVerificationApprover(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، تفعيل بروتوكول الطوارئ العسكري مقتصر حصرياً على القيادة العليا (OWNER / CEO / COO)!**',
+          ephemeral: true
+        });
+      }
+
+      const state = loadEmergencyState();
+      if (state && state.isActive) {
+        return interaction.reply({
+          content: `⚠️ **بروتوكول الطوارئ العسكري مفعل بالفعل منذ:** <t:${Math.floor(state.activatedAt / 1000)}:R> بواسطة <@${state.activatedBy}>.`,
+          ephemeral: true
+        });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const reason = interaction.options.getString('السبب') || 'إجراءات أمنية واحترازية مشددة لحماية السيرفر.';
+      const durationMinutes = interaction.options.getInteger('المدة_بالدقائق') || 0;
+      const executor = interaction.user;
+
+      const lockedChannels = [];
+      const guild = interaction.guild;
+      const memberRole = findAutoRole(guild);
+      const everyoneRole = guild.roles.everyone;
+
+      const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+      for (const [, ch] of channels) {
+        if (!ch || ch.isThread()) continue;
+        if (ch.id === EVENT_CHANNEL_ID || ch.name.includes('log') || ch.name.includes('system-status')) continue;
+
+        try {
+          if (ch.isTextBased()) {
+            await ch.permissionOverwrites.edit(everyoneRole, {
+              SendMessages: false,
+              SendMessagesInThreads: false,
+              CreatePublicThreads: false,
+              CreatePrivateThreads: false,
+              AddReactions: false
+            }).catch(() => {});
+
+            if (memberRole) {
+              await ch.permissionOverwrites.edit(memberRole, {
+                SendMessages: false,
+                SendMessagesInThreads: false,
+                CreatePublicThreads: false,
+                CreatePrivateThreads: false,
+                AddReactions: false
+              }).catch(() => {});
+            }
+            lockedChannels.push(ch.id);
+          } else if (ch.isVoiceBased()) {
+            await ch.permissionOverwrites.edit(everyoneRole, {
+              Speak: false,
+              UseVAD: false
+            }).catch(() => {});
+
+            if (memberRole) {
+              await ch.permissionOverwrites.edit(memberRole, {
+                Speak: false,
+                UseVAD: false
+              }).catch(() => {});
+            }
+            lockedChannels.push(ch.id);
+          }
+        } catch {}
+      }
+
+      const emergencyData = {
+        isActive: true,
+        activatedBy: executor.id,
+        activatedByName: executor.displayName || executor.username,
+        activatedAt: Date.now(),
+        durationMinutes,
+        expiresAt: durationMinutes > 0 ? Date.now() + (durationMinutes * 60 * 1000) : null,
+        reason,
+        lockedChannels
+      };
+      saveEmergencyState(emergencyData);
+
+      const alertEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🚨 بروتوكول الدفاع العسكري والطوارئ القصوى | GX Security', iconURL: guild.iconURL() })
+        .setTitle('⚠️ إغلاق شامل وحظر العمليات في السيرفر (EMERGENCY LOCKDOWN)')
+        .setDescription(
+          `تم تفعيل **بروتوكول الطوارئ العسكري والدفاع الشامل** لحماية السيرفر فوراً بأمر من القيادة العليا.\n\n` +
+          `🔒 **القنوات المغلقة:** تم تعطيل الكتابة في جميع الشاتات وتجميد المايكات في الرومات الصوتية.\n` +
+          `👮‍♂️ **المسؤول المفعّل:** <@${executor.id}> (\`${executor.tag}\`)\n` +
+          `📝 **سبب الطوارئ:** ${reason}\n` +
+          `⏱️ **المدة:** ${durationMinutes > 0 ? `\`${durationMinutes}\` دقيقة (رفع تلقائي)` : 'غير محددة (رفع يدوي)'}\n\n` +
+          `⚡ **ملاحظة:** رتب الإدارة العليا (OWNER / CEO / COO / MANAGERS) تملك حصانة وتستطيع التنسيق بحرية.`
+        )
+        .setFooter({ text: `GX eSports Cyber Defense Protocol • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      await sendToLogChannel(guild, alertEmbed);
+
+      const generalChannel = guild.channels.cache.find((c) => c.name.includes('عام') || c.name.includes('general') || c.name.includes('chat'));
+      if (generalChannel && generalChannel.isTextBased()) {
+        await generalChannel.send({ embeds: [alertEmbed] }).catch(() => {});
+      }
+
+      return interaction.editReply({
+        content: `🚨 **تم بنجاح تفعيل بروتوكول الطوارئ العسكري والدفاع الشامل!**\nتم قفل وتأمين \`${lockedChannels.length}\` قناة وروم صوتي بالكامل.`
+      });
+    }
+
+    // 43. أمر /طوارئ_إلغاء (رفع بروتوكول الطوارئ واستعادة العمليات)
+    else if (commandName === 'طوارئ_إلغاء') {
+      if (!isVerificationApprover(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، رفع بروتوكول الطوارئ مقتصر حصرياً على القيادة العليا (OWNER / CEO / COO)!**',
+          ephemeral: true
+        });
+      }
+
+      const state = loadEmergencyState();
+      if (!state || !state.isActive) {
+        return interaction.reply({
+          content: 'ℹ️ **السيرفر ليس في حالة طوارئ حالياً، العمليات تسير بشكل طبيعي.**',
+          ephemeral: true
+        });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const reason = interaction.options.getString('السبب') || 'انتهاء الإجراءات الأمنية واستقرار السيرفر بالكامل.';
+      const guild = interaction.guild;
+      const memberRole = findAutoRole(guild);
+      const everyoneRole = guild.roles.everyone;
+      const executor = interaction.user;
+
+      const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+      let unlockedCount = 0;
+
+      for (const [, ch] of channels) {
+        if (!ch || ch.isThread()) continue;
+        if (ch.id === EVENT_CHANNEL_ID || ch.name.includes('log') || ch.name.includes('system-status')) continue;
+
+        try {
+          if (ch.isTextBased()) {
+            await ch.permissionOverwrites.edit(everyoneRole, {
+              SendMessages: null,
+              SendMessagesInThreads: null,
+              CreatePublicThreads: null,
+              CreatePrivateThreads: null,
+              AddReactions: null
+            }).catch(() => {});
+
+            if (memberRole) {
+              await ch.permissionOverwrites.edit(memberRole, {
+                SendMessages: null,
+                SendMessagesInThreads: null,
+                CreatePublicThreads: null,
+                CreatePrivateThreads: null,
+                AddReactions: null
+              }).catch(() => {});
+            }
+            unlockedCount++;
+          } else if (ch.isVoiceBased()) {
+            await ch.permissionOverwrites.edit(everyoneRole, {
+              Speak: null,
+              UseVAD: null
+            }).catch(() => {});
+
+            if (memberRole) {
+              await ch.permissionOverwrites.edit(memberRole, {
+                Speak: null,
+                UseVAD: null
+              }).catch(() => {});
+            }
+            unlockedCount++;
+          }
+        } catch {}
+      }
+
+      saveEmergencyState({ isActive: false, endedBy: executor.id, endedAt: Date.now() });
+
+      const recoveryEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🛡️ رفع حالة الطوارئ واستعادة العمليات | GX Security', iconURL: guild.iconURL() })
+        .setTitle('✅ تم تأمين السيرفر وإنهاء حالة الطوارئ بنجاح')
+        .setDescription(
+          `تم رسمياً **رفع بروتوكول الدفاع العسكري** واستعادة فتح جميع القنوات والرومات الصوتية للأعضاء.\n\n` +
+          `🔓 **القنوات المستعادة:** \`${unlockedCount}\` قناة وروم صوتي.\n` +
+          `👮‍♂️ **تم الرفع بواسطة:** <@${executor.id}> (\`${executor.tag}\`)\n` +
+          `📝 **سبب الرفع:** ${reason}\n\n` +
+          `شكراً لتعاونكم وصبركم أثناء الفترة الأمنية! 🎮🔥`
+        )
+        .setFooter({ text: `GX eSports Defense System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      await sendToLogChannel(guild, recoveryEmbed);
+
+      const generalChannel = guild.channels.cache.find((c) => c.name.includes('عام') || c.name.includes('general') || c.name.includes('chat'));
+      if (generalChannel && generalChannel.isTextBased()) {
+        await generalChannel.send({ embeds: [recoveryEmbed] }).catch(() => {});
+      }
+
+      return interaction.editReply({
+        content: `🛡️ **تم بنجاح رفع حالة الطوارئ واستعادة فتح \`${unlockedCount}\` قناة وروم صوتي!**`
+      });
+    }
+
+    // 44. أمر /طوارئ_حالة (عرض تقرير الدفاع العسكري)
+    else if (commandName === 'طوارئ_حالة') {
+      const state = loadEmergencyState();
+      const isActive = state && state.isActive;
+
+      const embed = new EmbedBuilder()
+        .setColor(isActive ? 0xED4245 : 0x57F287)
+        .setAuthor({ name: '📊 تقرير بروتوكول الدفاع العسكري | GX Security', iconURL: interaction.guild.iconURL() })
+        .setTitle(isActive ? '🚨 حالة الطوارئ القصوى: مُفعّلة حالياً' : '🟢 حالة السيرفر: مستقرة وطبيعية')
+        .addFields(
+          { name: '🛡️ الحالة الحالية', value: isActive ? '`مغلق وتحت الدفاع العسكري` 🚨' : '`مفتوح ويعمل طبيعياً` 🟢', inline: true },
+          { name: '🔒 القنوات الخاضعة للحظر', value: isActive ? `\`${state.lockedChannels?.length || 0}\` قناة` : '`0` قناة', inline: true }
+        );
+
+      if (isActive) {
+        embed.addFields(
+          { name: '👮‍♂️ المفعّل', value: `<@${state.activatedBy}> (\`${state.activatedByName}\`)`, inline: true },
+          { name: '⏱️ وقت التفعيل', value: `<t:${Math.floor(state.activatedAt / 1000)}:R>`, inline: true },
+          { name: '📝 سبب الطوارئ', value: state.reason || 'غير محدد', inline: false }
+        );
+      }
+
+      embed.setFooter({ text: `GX eSports Security Protocol • الإصدار ${BOT_VERSION}` }).setTimestamp();
+      return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
 
