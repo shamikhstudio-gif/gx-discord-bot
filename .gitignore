@@ -1,6 +1,3 @@
-# Environment variables (Contains secret tokens - NEVER COMMIT)
-.env
-
 # Dependencies
 node_modules/
 
