@@ -52,7 +52,6 @@ const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
 const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
-const UNTRUSTED_FILE = path.join(DATA_DIR, 'untrusted_members.json');
 const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
@@ -173,29 +172,9 @@ function saveDMSecuritySent(list) {
   safeWriteJson(DM_SECURITY_SENT_FILE, list);
 }
 
-function loadUntrustedMembers() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(UNTRUSTED_FILE)) {
-      const data = JSON.parse(fs.readFileSync(UNTRUSTED_FILE, 'utf-8'));
-      if (Array.isArray(data)) return data;
-    }
-  } catch {}
-  return ['hghdf0096'];
-}
-
-function saveUntrustedMembers(list) {
-  safeWriteJson(UNTRUSTED_FILE, list);
-}
-
-function isUntrustedUser(userOrMember) {
-  if (!userOrMember) return false;
-  const user = userOrMember.user || userOrMember;
-  const list = loadUntrustedMembers().map((s) => String(s).trim().toLowerCase().replace(/^@/, ''));
-  const userId = String(user.id || '').trim().toLowerCase();
-  const username = String(user.username || '').trim().toLowerCase();
-  const tag = String(user.tag || '').trim().toLowerCase();
-  return list.some((entry) => entry === userId || entry === username || entry === tag);
+function isUntrustedMember(member) {
+  if (!member || !member.roles) return false;
+  return member.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
 }
 
 const INFRACTIONS_META_FILE = path.join(DATA_DIR, 'infractions_meta.json');
@@ -2019,20 +1998,13 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
     let managerGrantedCount = 0;
 
     for (const [, member] of humanMembers) {
-      const isUntrusted = isUntrustedUser(member);
       const hasAdminRole = hasAdminTierRole(member);
       const isManager = isManagerMember(member);
       const hasMemberRole = member.roles.cache.has(role.id);
       const hasUntrustedRole = untrustedRole ? member.roles.cache.has(untrustedRole.id) : false;
 
-      // 0. Untrusted Member Isolation (specifically listed in untrusted_members.json):
-      if (isUntrusted) {
-        if (untrustedRole && !hasUntrustedRole) {
-          try {
-            await member.roles.add(untrustedRole);
-            console.log(`🛡️ [تقييد أمني] تم منح رتبة UNTRUSTED للعضو: ${member.user.tag}`);
-          } catch {}
-        }
+      // 0. Untrusted Member Isolation: strictly enforce UNTRUSTED, strip MEMBER
+      if (hasUntrustedRole) {
         if (hasMemberRole) {
           try {
             await member.roles.remove(role);
@@ -2791,7 +2763,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID || message.author.bot) return;
 
   // Intercept any message sent by untrusted members
-  const isUntrusted = isUntrustedUser(message.author) || message.member?.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
+  const isUntrusted = isUntrustedMember(message.member) || message.member?.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
   if (isUntrusted) {
     try {
       await message.delete();
@@ -3799,17 +3771,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (memberRole && !targetMember.roles.cache.has(memberRole.id)) {
           await targetMember.roles.add(memberRole).catch(() => {});
         }
-
-        // Remove from untrusted_members.json if present
-        try {
-          let untrustedList = loadUntrustedMembers();
-          const username = targetMember.user.username.toLowerCase();
-          untrustedList = untrustedList.filter((entry) => {
-            const e = String(entry).toLowerCase().replace(/^@/, '');
-            return e !== targetId && e !== username;
-          });
-          saveUntrustedMembers(untrustedList);
-        } catch {}
 
         const doneRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
