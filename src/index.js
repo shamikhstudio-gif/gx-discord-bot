@@ -30,6 +30,7 @@ import {
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import http from 'http';
 
 // Load environment variables
 dotenv.config();
@@ -6287,6 +6288,25 @@ if (!TOKEN) {
   console.error(`\n❌ خطأ: DISCORD_TOKEN غير موجود في ملف .env!`);
   process.exit(1);
 }
+
+// ----------------------------------------------------
+// 🌐 24/7 Cloud Hosting Keep-Alive Health Server
+// ----------------------------------------------------
+const PORT = process.env.PORT || 3000;
+const healthServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    status: 'online',
+    bot: client.user ? client.user.tag : 'connecting',
+    guildId: ALLOWED_GUILD_ID,
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  }));
+});
+
+healthServer.listen(PORT, () => {
+  console.log(`🌐 [خادم الاستضافة السحابية] خادم الفحص الحي السحابي يعمل على المنفذ: ${PORT}`);
+});
 
 client.login(TOKEN).catch((err) => {
   console.error(`\n❌ فشل تسجيل الدخول إلى الديسكورد: ${err.message}`);
