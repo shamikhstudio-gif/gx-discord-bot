@@ -515,7 +515,7 @@ function renderEventEmbed(eventData, clientUser) {
       `📊 **حالة التسجيل:** ${statusText}\n` +
       `👥 **اللاعبون المسجلون:** \`${count}${maxStr}\` لاعب ${progressBar}${countdownText}\n` +
       (eventData.prize ? `🎁 **الجائزة:** **${eventData.prize}** 🏆\n` : '') +
-      (eventData.voiceChannelId ? `🎙️ **الروم الصوتي العام:** <#${eventData.voiceChannelId}>\n` : '') +
+      `🎙️ **الرومات الصوتية:** توليد تلقائي لرومات خاصة لكل مواجهة وفريق 🔒\n` +
       `👑 **المنظم:** <@${eventData.hostId}>\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━` +
       matchesListText +
@@ -2100,7 +2100,6 @@ client.once(Events.ClientReady, async (c) => {
                 .setDescription(
                   `📢 **بقي أقل من 10 دقائق على انطلاق البطولة!**\n\n` +
                   `🎮 **نظام البطولة:** ${activeEv.mode || '1v1'}\n` +
-                  (activeEv.voiceChannelId ? `🎙️ **الروم الصوتي العام:** <#${activeEv.voiceChannelId}>\n` : '') +
                   `🔒 يرجى التواجد فوراً في رومك الصوتي المخصص مع خصمك أو فريقك والاستعداد للمباراة!`
                 )
                 .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
@@ -4960,7 +4959,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const prize = interaction.options.getString('الجائزة'); // optional
       const maxParticipants = interaction.options.getInteger('الحد_الأقصى'); // optional
       const startMinutes = interaction.options.getInteger('وقت_البدء_بالدقائق'); // optional
-      const voiceChannel = interaction.options.getChannel('الروم_الصوتي'); // optional
 
       const eventId = `ev_${Date.now()}`;
       const startTime = startMinutes ? Date.now() + startMinutes * 60 * 1000 : null;
@@ -4973,7 +4971,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         prize: prize || null,
         maxParticipants: maxParticipants || null,
         startTime,
-        voiceChannelId: voiceChannel ? voiceChannel.id : null,
         hostId: interaction.user.id,
         hostTag: interaction.user.tag,
         status: 'active',
@@ -5042,7 +5039,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (eventChannel) {
         await eventChannel.send({
           content: `🚀 @everyone **انطلقت البطولة رسمياً الآن: ${eventData.title}!**\n👥 **المشاركون المسجلون:** ${participantsPings}\n` +
-            (eventData.voiceChannelId ? `🎙️ **الروم الصوتي العام للتجمع:** <#${eventData.voiceChannelId}>\n` : '') +
             `🔒 يرجى من جميع المتنافسين التواجد في روماتهم الصوتية المخصصة فوراً!`
         });
       }
@@ -5111,7 +5107,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           (customNote ? `💬 **ملاحظة المنظم:** ${customNote}\n\n` : '') +
           `🎮 **نظام البطولة:** ${eventData.mode || '1v1'}\n` +
           `👥 **عدد المسجلين:** \`${eventData.participants.length}\` لاعب\n` +
-          (eventData.voiceChannelId ? `🎙️ **الروم الصوتي:** <#${eventData.voiceChannelId}>\n` : '') +
           `\n🔒 يرجى التواجد في السيرفر والاستعداد لبدء المباريات!`
         )
         .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
