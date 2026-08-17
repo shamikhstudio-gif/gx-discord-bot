@@ -1398,20 +1398,32 @@ async function sendToLogChannel(guild, embed) {
 }
 
 /**
- * Fetches recent audit log executor for an action immediately.
+ * Fetches recent audit log executor for an action (skipping bot self-actions).
  */
-async function fetchAuditExecutor(guild, auditType) {
+async function fetchAuditExecutor(guild, auditType, targetId = null) {
   try {
     const botMember = guild.members.me;
     if (!botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog)) return null;
 
+    // Small delay to let Discord REST audit log propagate
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
     const fetchedLogs = await guild.fetchAuditLogs({
-      limit: 1,
+      limit: 6,
       type: auditType
     });
-    const entry = fetchedLogs.entries.first();
-    if (entry && (Date.now() - entry.createdTimestamp) < 8000) {
-      return entry.executor;
+
+    const matchingEntry = fetchedLogs.entries.find((entry) => {
+      // Skip the bot itself so we don't attribute undo actions to the bot
+      if (entry.executor?.id === client.user.id) return false;
+      // If targetId specified, entry target must match
+      if (targetId && entry.target?.id !== targetId) return false;
+      // Must be recent (last 15 seconds)
+      return (Date.now() - entry.createdTimestamp) < 15000;
+    });
+
+    if (matchingEntry) {
+      return matchingEntry.executor;
     }
   } catch {
     return null;
@@ -1690,7 +1702,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
 
           connectToVoiceChannel(previousChannel);
 
-          const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberMove);
+          const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberMove, client.user.id);
 
           const returnEmbed = new EmbedBuilder()
             .setColor(0xED4245)
@@ -1725,7 +1737,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
             connectToVoiceChannel(previousChannel);
           }, 150);
 
-          const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberDisconnect);
+          const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberDisconnect, client.user.id);
 
           const reconEmbed = new EmbedBuilder()
             .setColor(0xED4245)
@@ -1750,7 +1762,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         await newState.setMute(false, 'حصانة أمنية: البوت محصن ضد الكتم');
         console.warn('🛡️ [حماية الفويس] تم إلغاء كتم البوت الإجباري فوراً.');
 
-        const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate);
+        const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate, client.user.id);
 
         const muteEmbed = new EmbedBuilder()
           .setColor(0xED4245)
@@ -1775,7 +1787,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         await newState.setDeaf(false, 'حصانة أمنية: البوت محصن ضد التصميت');
         console.warn('🛡️ [حماية الفويس] تم إلغاء تصميت البوت الإجباري فوراً.');
 
-        const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate);
+        const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate, client.user.id);
 
         const deafEmbed = new EmbedBuilder()
           .setColor(0xED4245)
@@ -3441,6 +3453,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           flags: [1 << 6]
         });
       }
+
+      const currentBotChannel = interaction.guild.channels.cache.get(currentBotVoiceId);
+      const isOwnerStillInChannel = currentVoiceOwner && currentBotChannel?.members.has(currentVoiceOwner.userId);
 
       // إذا كان المستدعي الأصلي لا يزال في الروم، يُمنع منعاً باتاً سحب أو نقل البوت لأي عضو آخر
       if (isOwnerStillInChannel) {
