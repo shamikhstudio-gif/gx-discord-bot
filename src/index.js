@@ -24,7 +24,8 @@ import {
   VoiceConnectionStatus,
   createAudioPlayer,
   createAudioResource,
-  AudioPlayerStatus
+  AudioPlayerStatus,
+  entersState
 } from '@discordjs/voice';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -586,29 +587,46 @@ function playLoopAudio(connection) {
 
 function connectToVoiceChannel(channel) {
   try {
-    const connection = joinVoiceChannel({
-      channelId: channel.id,
-      guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: false
-    });
+    let connection = getVoiceConnection(channel.guild.id);
+    if (!connection || connection.state.status === VoiceConnectionStatus.Destroyed) {
+      connection = joinVoiceChannel({
+        channelId: channel.id,
+        guildId: channel.guild.id,
+        adapterCreator: channel.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false
+      });
+
+      connection.on(VoiceConnectionStatus.Ready, () => {
+        console.log(`🔊 [الفويس] البوت متصل وجاهز في #${channel.name}. جارٍ تشغيل الصوت...`);
+        playLoopAudio(connection);
+      });
+
+      connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        try {
+          await Promise.race([
+            entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+            entersState(connection, VoiceConnectionStatus.Connecting, 5000)
+          ]);
+        } catch {
+          if (!isAuthorizedBotMove && !currentVoiceOwner) {
+            console.log('🔌 تم فصل اتصال البوت الصوتي.');
+            disconnectVoice();
+          }
+        }
+      });
+    } else {
+      connection = joinVoiceChannel({
+        channelId: channel.id,
+        guildId: channel.guild.id,
+        adapterCreator: channel.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false
+      });
+    }
 
     currentVoiceConnection = connection;
-
-    connection.on(VoiceConnectionStatus.Ready, () => {
-      console.log(`🔊 [الفويس] البوت متصل وجاهز في #${channel.name}. جارٍ بدء تشغيل الصوت في حلقة لا نهائية...`);
-      playLoopAudio(connection);
-    });
-
-    connection.on(VoiceConnectionStatus.Disconnected, () => {
-      console.log('🔌 تم فصل اتصال البوت الصوتي.');
-      disconnectVoice();
-    });
-
-    // Start playing immediately
     playLoopAudio(connection);
-
     return connection;
   } catch (err) {
     console.error('❌ خطأ في الاتصال بالروم الصوتي:', err.message);
@@ -1608,9 +1626,16 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
       if (!isAuthorizedBotMove) {
         console.warn(`🛡️ [حماية الفويس] تم رصد محاولة سحب يدوي للبوت من #${oldState.channel?.name} إلى #${newState.channel?.name}. جارٍ العودة فوراً...`);
 
-        const previousChannel = oldState.channel;
+        const previousChannel = oldState.channel || newState.guild.channels.cache.get(currentVoiceOwner?.channelId);
         if (previousChannel) {
           setAuthorizedMove();
+          try {
+            // Force move the bot back immediately via Discord API
+            await newState.setChannel(previousChannel);
+          } catch (err) {
+            console.error('خطأ في إرجاع البوت عبر setChannel:', err.message);
+          }
+
           connectToVoiceChannel(previousChannel);
 
           const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberMove);
@@ -1621,7 +1646,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
             .setTitle('⛔ منع السحب اليدوي للبوت (Anti-Drag Protection)')
             .setDescription(
               `تم رصد محاولة سحب يدوي للبوت من قِبل ${executor ? `<@${executor.id}> (\`${executor.tag}\`)` : 'أحد الأعضاء'} إلى الروم **#${newState.channel?.name}**.\n\n` +
-              `🔒 **البوت مملوك حصرياً للمستدعي الأول (<@${currentVoiceOwner?.userId || 'المستدعي'}>) وقام بالعودة فوراً إلى رومه:** <#${previousChannel.id}> (\`#${previousChannel.name}\`).`
+              `🔒 **قام البوت بالعودة فوراً وبشكل تلقائي إلى رومه الأصلي:** <#${previousChannel.id}> (\`#${previousChannel.name}\`).`
             )
             .setFooter({ text: `GX eSports Voice Security • الإصدار ${BOT_VERSION}` })
             .setTimestamp();
