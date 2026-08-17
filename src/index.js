@@ -479,6 +479,10 @@ async function cleanupTournamentResources(guild, eventData) {
       }
     }
   }
+  if (eventData.createdGeneralVoice && eventData.generalVoiceId) {
+    const genCh = guild.channels.cache.get(eventData.generalVoiceId);
+    if (genCh) await genCh.delete('Cleaning up temporary general event voice room').catch(() => {});
+  }
 }
 
 /**
@@ -504,22 +508,26 @@ function renderEventEmbed(eventData, clientUser) {
   const progressBar = eventData.maxParticipants ? `\n📊 **مؤشر الامتلاء:** ${buildProgressBar(count, eventData.maxParticipants)}` : '';
   const countdownText = eventData.startTime ? `\n⏳ **موعد انطلاق البطولة:** <t:${Math.floor(eventData.startTime / 1000)}:R> (<t:${Math.floor(eventData.startTime / 1000)}:t>)` : '';
 
+  const voiceLine = eventData.mode === 'ffa'
+    ? (eventData.generalVoiceId ? `🎙️ **الروم الصوتي للفعالية:** <#${eventData.generalVoiceId}> (قاعة عامة مفتوحة للجميع) 🔊\n` : `🎙️ **الروم الصوتي:** قاعة الفعاليات العامة 🔊\n`)
+    : `🎙️ **الرومات الصوتية:** توليد تلقائي لرومات خاصة لكل مواجهة وفريق 🔒\n`;
+
   const embed = new EmbedBuilder()
     .setColor(statusColor)
-    .setAuthor({ name: '🏆 بطولة رسمية | GX eSports', iconURL: clientUser?.displayAvatarURL() })
+    .setAuthor({ name: '🏆 بطولة وفعالية رسمية | GX eSports', iconURL: clientUser?.displayAvatarURL() })
     .setTitle(`🔥 ${eventData.title}`)
     .setDescription(
       `${eventData.description}\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎮 **نظام البطولة:** \`${modeLabel}\`\n` +
+      `🎮 **نظام الفعالية:** \`${modeLabel}\`\n` +
       `📊 **حالة التسجيل:** ${statusText}\n` +
       `👥 **اللاعبون المسجلون:** \`${count}${maxStr}\` لاعب ${progressBar}${countdownText}\n` +
       (eventData.prize ? `🎁 **الجائزة:** **${eventData.prize}** 🏆\n` : '') +
-      `🎙️ **الرومات الصوتية:** توليد تلقائي لرومات خاصة لكل مواجهة وفريق 🔒\n` +
+      voiceLine +
       `👑 **المنظم:** <@${eventData.hostId}>\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━` +
       matchesListText +
-      `\n\n🔹 *اضغط على **🎟️ انضمام للبطولة** ليقوم البوت فوراً بإنشاء رتبتك ورومك الصوتي المخصص مع خصمك/فريقك!*`
+      `\n\n🔹 *اضغط على **🎟️ انضمام للبطولة** ليقوم البوت فوراً بتسجيلك وحجز رومك/فريقك!*`
     )
     .setFooter({ text: `GX eSports Tournament Engine • المعرف: ${eventData.id} • الإصدار ${BOT_VERSION}` })
     .setTimestamp(eventData.createdAt);
@@ -4959,9 +4967,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const prize = interaction.options.getString('الجائزة'); // optional
       const maxParticipants = interaction.options.getInteger('الحد_الأقصى'); // optional
       const startMinutes = interaction.options.getInteger('وقت_البدء_بالدقائق'); // optional
+      const publicVoice = interaction.options.getChannel('الروم_الصوتي_العام'); // optional
 
       const eventId = `ev_${Date.now()}`;
       const startTime = startMinutes ? Date.now() + startMinutes * 60 * 1000 : null;
+
+      let generalVoiceId = publicVoice ? publicVoice.id : null;
+      let createdGeneralVoice = false;
+
+      // In case of general public event (FFA) without specifying voice, create dedicated general event room
+      if (mode === 'ffa' && !generalVoiceId) {
+        const cat = await getOrCreateTournamentCategory(interaction.guild);
+        const genVoiceChan = await interaction.guild.channels.create({
+          name: `🎉┃『 قاعة الفعاليات العامة 』`,
+          type: ChannelType.GuildVoice,
+          parent: cat ? cat.id : null,
+          reason: 'GX Public Event General Voice Room'
+        }).catch(() => null);
+
+        if (genVoiceChan) {
+          generalVoiceId = genVoiceChan.id;
+          createdGeneralVoice = true;
+        }
+      }
 
       const eventData = {
         id: eventId,
@@ -4971,6 +4999,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         prize: prize || null,
         maxParticipants: maxParticipants || null,
         startTime,
+        generalVoiceId,
+        createdGeneralVoice,
         hostId: interaction.user.id,
         hostTag: interaction.user.tag,
         status: 'active',
@@ -5176,9 +5206,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (eventChannel) {
         await eventChannel.send({
-          content: `🏆 🎉 **ألف مبروك <@${winnerId}> فوزك بالبطولة!** @everyone`,
+          content: `🏆 🎉 **ألف مبروك <@${winnerId}> فوزك بالبطولة/الفعالية!** @everyone`,
           embeds: [winnerEmbed]
         });
+      }
+
+      // Send Direct DM congratulations to the Winner
+      try {
+        const winnerMember = await interaction.guild.members.fetch(winnerId).catch(() => null);
+        if (winnerMember) {
+          const winnerDMEmbed = new EmbedBuilder()
+            .setColor(0xFEE75C)
+            .setAuthor({ name: '🏆 تهنئة فوز رسمية | GX eSports', iconURL: interaction.guild.iconURL() })
+            .setTitle(`👑 ألف مبروك فوزك بالمركز الأول في ${eventData.title}! 🎉`)
+            .setDescription(
+              `✨ **عزيزنا البطل <@${winnerId}>،**\n\n` +
+              `يسر إدارة وسيرفر **GX eSports** تهنئتك بتحقيق **المركز الأول والانتصار** في فعالية/بطولة:\n` +
+              `🔥 **${eventData.title}**\n\n` +
+              (eventData.prize ? `🎁 **الجائزة المستحقة:** **${eventData.prize}** 🏆\n> ℹ️ *يرجى فتح تذكرة دعم فني أو التواصل مع المنظم لاستلام جائزتك.*\n\n` : '') +
+              `🎖️ **المنظم:** <@${interaction.user.id}>\n` +
+              `👥 **إجمالي المتنافسين:** \`${eventData.participants ? eventData.participants.length : 0}\` لاعب\n\n` +
+              `🌟 *فخورون بأدائك الاستثنائي ونتمنى لك دوام التألق والانتصارات في بطولاتنا وفعالياتنا القادمة!*`
+            )
+            .setFooter({ text: `GX eSports Tournament & Event Engine • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+
+          await winnerMember.send({
+            content: `🎉 🏆 **ألف مبروك <@${winnerId}>! لقد فزت بالمركز الأول في ${eventData.title}!**`,
+            embeds: [winnerDMEmbed]
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.error('خطأ في إرسال تهنئة الخاص للفائز:', err.message);
       }
 
       // Cleanup temporary tournament match rooms and roles
