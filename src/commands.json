@@ -515,7 +515,7 @@
   },
   {
     "name": "فعالية_إنشاء",
-    "description": "إنشاء ونشر فعالية تفاعلية رسمية في روم 🎉・الـفـعـالـيـة",
+    "description": "إنشاء ونشر فعالية أو بطولة تفاعلية مع رومات وتقسيم تلقائي في 🎉・الـفـعـالـيـة",
     "Public_Command": false,
     "category": "moderation",
     "permission": "ManageEvents",
@@ -533,6 +533,20 @@
         "required": true
       },
       {
+        "name": "نوع_البطولة",
+        "description": "نظام البطولة والتقسيم الصوتي التلقائي للمتنافسين",
+        "type": "STRING",
+        "required": false,
+        "choices": [
+          { "name": "⚔️ بطولة فردية (1 ضد 1) - روم صوتي خاص لكل مواجهة", "value": "1v1" },
+          { "name": "👥 بطولة ثنائية (2 ضد 2) - تشكيل فرق ورومات ثنائية", "value": "2v2" },
+          { "name": "🔥 بطولة ثلاثية (3 ضد 3) - تشكيل فرق ورومات ثلاثية", "value": "3v3" },
+          { "name": "🛡️ بطولة رباعية (4 ضد 4 - Squads)", "value": "4v4" },
+          { "name": "👑 بطولة خماسية (5 ضد 5 - Competitive)", "value": "5v5" },
+          { "name": "🌐 فعالية عامة للجميع (Free For All)", "value": "ffa" }
+        ]
+      },
+      {
         "name": "الجائزة",
         "description": "جائزة الفعالية (اختياري)",
         "type": "STRING",
@@ -547,8 +561,16 @@
         "maxValue": 100
       },
       {
+        "name": "وقت_البدء_بالدقائق",
+        "description": "موعد انطلاق البطولة بعد كم دقيقة من الآن (للعداد الحي والتذكير التلقائي)",
+        "type": "INTEGER",
+        "required": false,
+        "minValue": 1,
+        "maxValue": 1440
+      },
+      {
         "name": "الروم_الصوتي",
-        "description": "الروم الصوتي المخصص لتجمع المشاركين (اختياري)",
+        "description": "الروم الصوتي العام المخصص للفعالية (اختياري)",
         "type": "CHANNEL",
         "required": false
       }
@@ -561,6 +583,21 @@
     "category": "moderation",
     "permission": "ManageEvents",
     "options": []
+  },
+  {
+    "name": "فعالية_تذكير",
+    "description": "إرسال إشعار تذكيري مباشر بالخاص لجميع اللاعبين المسجلين في البطولة",
+    "Public_Command": false,
+    "category": "moderation",
+    "permission": "ManageEvents",
+    "options": [
+      {
+        "name": "ملاحظة_إضافية",
+        "description": "نص أو تعليمات إضافية في رسالة التذكير بالخاص",
+        "type": "STRING",
+        "required": false
+      }
+    ]
   },
   {
     "name": "فعالية_فائز",
@@ -589,7 +626,7 @@
   },
   {
     "name": "فعالية_إلغاء",
-    "description": "إلغاء الفعالية الحالية وإغلاق باب التسجيل",
+    "description": "إلغاء الفعالية الحالية وحذف الرومات والرتب المؤقتة",
     "Public_Command": false,
     "category": "moderation",
     "permission": "ManageEvents",
