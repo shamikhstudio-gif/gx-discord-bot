@@ -567,12 +567,6 @@
         "required": false,
         "minValue": 1,
         "maxValue": 1440
-      },
-      {
-        "name": "الروم_الصوتي",
-        "description": "الروم الصوتي العام المخصص للفعالية (اختياري)",
-        "type": "CHANNEL",
-        "required": false
       }
     ]
   },
