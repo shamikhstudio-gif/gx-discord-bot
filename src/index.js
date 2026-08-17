@@ -222,31 +222,306 @@ function saveActiveEvent(eventData) {
   }
 }
 
+const TOURNAMENT_MODES = {
+  '1v1': { label: '⚔️ بطولة فردية (1v1)', teamSize: 1, matchSize: 2 },
+  '2v2': { label: '👥 بطولة ثنائية (2v2)', teamSize: 2, matchSize: 4 },
+  '3v3': { label: '🔥 بطولة ثلاثية (3v3)', teamSize: 3, matchSize: 6 },
+  '4v4': { label: '🛡️ بطولة رباعية (4v4)', teamSize: 4, matchSize: 8 },
+  '5v5': { label: '👑 بطولة خماسية (5v5)', teamSize: 5, matchSize: 10 },
+  'ffa': { label: '🌐 فعالية عامة (Free For All)', teamSize: 1, matchSize: 0 }
+};
+
+function buildProgressBar(current, max, size = 10) {
+  if (!max || max <= 0) return '';
+  const ratio = Math.min(Math.max(current / max, 0), 1);
+  const filled = Math.round(ratio * size);
+  const empty = size - filled;
+  const percentage = Math.round(ratio * 100);
+  return `${'🟩'.repeat(filled)}${'⬜'.repeat(empty)} \`(${percentage}%)\``;
+}
+
+async function getOrCreateTournamentCategory(guild) {
+  if (!guild) return null;
+  let cat = guild.channels.cache.find((c) => c.type === ChannelType.GuildCategory && c.name.includes('TOURNAMENTS'));
+  if (!cat) {
+    cat = await guild.channels.create({
+      name: '🏆┃TOURNAMENTS & MATCHES',
+      type: ChannelType.GuildCategory,
+      reason: 'GX Tournament System match rooms'
+    }).catch(() => null);
+  }
+  return cat;
+}
+
 /**
- * 🎨 Renders the rich interactive event embed for #🎉・الـفـعـالـيـة
+ * ⚔️ Automatic Tournament Matching Engine
+ * Divides registered players into matches/teams, creates private voice channels & temporary roles, and DMs them.
+ */
+async function processTournamentMatching(guild, eventData) {
+  if (!guild || !eventData || eventData.status === 'ended') return false;
+  const modeKey = eventData.mode || '1v1';
+  const modeConfig = TOURNAMENT_MODES[modeKey] || TOURNAMENT_MODES['1v1'];
+
+  if (modeKey === 'ffa') return false;
+
+  if (!eventData.matches) eventData.matches = [];
+  if (!eventData.teams) eventData.teams = [];
+
+  const matchedPlayerIds = new Set();
+  eventData.matches.forEach((m) => m.playerIds && m.playerIds.forEach((id) => matchedPlayerIds.add(id)));
+  eventData.teams.forEach((t) => t.playerIds && t.playerIds.forEach((id) => matchedPlayerIds.add(id)));
+
+  const unmatchedPlayers = (eventData.participants || []).filter((id) => !matchedPlayerIds.has(id));
+
+  let changed = false;
+
+  // 1v1 Mode: Every 2 unmatched players form a match and get a private 1v1 room
+  if (modeKey === '1v1') {
+    while (unmatchedPlayers.length >= 2) {
+      const p1Id = unmatchedPlayers.shift();
+      const p2Id = unmatchedPlayers.shift();
+      const matchNum = eventData.matches.length + 1;
+
+      const member1 = await guild.members.fetch(p1Id).catch(() => null);
+      const member2 = await guild.members.fetch(p2Id).catch(() => null);
+
+      const u1Name = member1 ? (member1.nickname || member1.user.username) : p1Id.slice(0, 5);
+      const u2Name = member2 ? (member2.nickname || member2.user.username) : p2Id.slice(0, 5);
+
+      // Create Temporary Match Role
+      const tempRole = await guild.roles.create({
+        name: `⚔️ Match ${matchNum}: [1v1]`,
+        color: 0x5865F2,
+        reason: `GX Tournament temporary match role for match #${matchNum}`
+      }).catch(() => null);
+
+      if (tempRole) {
+        if (member1) await member1.roles.add(tempRole).catch(() => {});
+        if (member2) await member2.roles.add(tempRole).catch(() => {});
+      }
+
+      // Get/Create Tournament Category
+      const cat = await getOrCreateTournamentCategory(guild);
+
+      // Create Private Voice Channel
+      const voiceChan = await guild.channels.create({
+        name: `⚔️・${u1Name}-vs-${u2Name}`,
+        type: ChannelType.GuildVoice,
+        parent: cat ? cat.id : null,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+          },
+          ...(tempRole ? [{
+            id: tempRole.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
+          }] : [
+            { id: p1Id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] },
+            { id: p2Id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] }
+          ])
+        ],
+        reason: `GX Tournament 1v1 Room: ${u1Name} vs ${u2Name}`
+      }).catch(() => null);
+
+      eventData.matches.push({
+        matchNumber: matchNum,
+        playerIds: [p1Id, p2Id],
+        playerNames: [u1Name, u2Name],
+        roleId: tempRole ? tempRole.id : null,
+        voiceChannelId: voiceChan ? voiceChan.id : null,
+        createdAt: Date.now()
+      });
+
+      changed = true;
+
+      // Send Direct DM Notifications with match details
+      const matchDMEmbed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setAuthor({ name: '🏆 تجهيز المواجهة | GX eSports Tournament', iconURL: guild.iconURL() })
+        .setTitle(`⚔️ مواجهة 1 ضد 1: ${u1Name} 🆚 ${u2Name}`)
+        .setDescription(
+          `🎉 **تم اكتمال حجز مباراتك في بطولة: ${eventData.title}!**\n\n` +
+          `👥 **المتنافسان:** <@${p1Id}> 🆚 <@${p2Id}>\n` +
+          (voiceChan ? `🎙️ **الروم الصوتي الخاص بمباراتكما:** <#${voiceChan.id}>\n` : '') +
+          (tempRole ? `🎖️ **الرتبة المؤقتة:** <@&${tempRole.id}>\n` : '') +
+          `\n🔒 **الروم الصوتي مغلق وخاص بكما فقط.** يرجى التواجد والاستعداد لمباراتك!`
+        )
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      if (member1) member1.send({ embeds: [matchDMEmbed] }).catch(() => {});
+      if (member2) member2.send({ embeds: [matchDMEmbed] }).catch(() => {});
+    }
+  }
+
+  // 2v2 (or 3v3 / 4v4 / 5v5) Mode: Every teamSize unmatched players form a Team room
+  else if (['2v2', '3v3', '4v4', '5v5'].includes(modeKey)) {
+    const requiredSize = modeConfig.teamSize;
+    while (unmatchedPlayers.length >= requiredSize) {
+      const teamPlayerIds = [];
+      for (let i = 0; i < requiredSize; i++) {
+        teamPlayerIds.push(unmatchedPlayers.shift());
+      }
+      const teamNum = eventData.teams.length + 1;
+
+      const teamMembers = [];
+      const teamNames = [];
+      for (const pid of teamPlayerIds) {
+        const mem = await guild.members.fetch(pid).catch(() => null);
+        if (mem) {
+          teamMembers.push(mem);
+          teamNames.push(mem.nickname || mem.user.username);
+        } else {
+          teamNames.push(pid.slice(0, 5));
+        }
+      }
+
+      // Create Temporary Team Role
+      const tempRole = await guild.roles.create({
+        name: `🎮 Team ${teamNum}: [${modeKey}]`,
+        color: 0x57F287,
+        reason: `GX Tournament temporary team role for Team #${teamNum}`
+      }).catch(() => null);
+
+      if (tempRole) {
+        for (const mem of teamMembers) {
+          await mem.roles.add(tempRole).catch(() => {});
+        }
+      }
+
+      const cat = await getOrCreateTournamentCategory(guild);
+
+      const voiceChan = await guild.channels.create({
+        name: `👥・Team-${teamNum}-[${teamNames.slice(0, 2).join('&')}]`,
+        type: ChannelType.GuildVoice,
+        parent: cat ? cat.id : null,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+          },
+          ...(tempRole ? [{
+            id: tempRole.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
+          }] : teamPlayerIds.map((pid) => ({
+            id: pid,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
+          })))
+        ],
+        reason: `GX Tournament Team Room: Team ${teamNum}`
+      }).catch(() => null);
+
+      eventData.teams.push({
+        teamNumber: teamNum,
+        playerIds: teamPlayerIds,
+        playerNames: teamNames,
+        roleId: tempRole ? tempRole.id : null,
+        voiceChannelId: voiceChan ? voiceChan.id : null,
+        createdAt: Date.now()
+      });
+
+      changed = true;
+
+      // Send Direct DM Notifications to all team members
+      const teamDMEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🏆 تشكيل الفريق | GX eSports Tournament', iconURL: guild.iconURL() })
+        .setTitle(`👥 تم تشكيل فريقك: Team ${teamNum} (${modeKey})`)
+        .setDescription(
+          `🎉 **تم اكتمال تشكيل فريقك في بطولة: ${eventData.title}!**\n\n` +
+          `👥 **أعضاء الفريق:** ${teamPlayerIds.map((id) => `<@${id}>`).join(' ، ')}\n` +
+          (voiceChan ? `🎙️ **الروم الصوتي الخاص بفريقكم:** <#${voiceChan.id}>\n` : '') +
+          (tempRole ? `🎖️ **رتبة الفريق المؤقتة:** <@&${tempRole.id}>\n` : '') +
+          `\n🔒 **الروم متاح فقط لأعضاء فريقكم.** يرجى التجمع والتنسيق والاستعداد!`
+        )
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      for (const mem of teamMembers) {
+        mem.send({ embeds: [teamDMEmbed] }).catch(() => {});
+      }
+    }
+  }
+
+  if (changed) {
+    saveActiveEvent(eventData);
+  }
+  return changed;
+}
+
+/**
+ * 🧹 Cleans up temporary tournament voice channels and match roles upon event completion or cancellation.
+ */
+async function cleanupTournamentResources(guild, eventData) {
+  if (!guild || !eventData) return;
+  if (eventData.matches && Array.isArray(eventData.matches)) {
+    for (const m of eventData.matches) {
+      if (m.voiceChannelId) {
+        const ch = guild.channels.cache.get(m.voiceChannelId);
+        if (ch) await ch.delete('Cleaning up tournament match room').catch(() => {});
+      }
+      if (m.roleId) {
+        const r = guild.roles.cache.get(m.roleId);
+        if (r) await r.delete('Cleaning up tournament temporary role').catch(() => {});
+      }
+    }
+  }
+  if (eventData.teams && Array.isArray(eventData.teams)) {
+    for (const t of eventData.teams) {
+      if (t.voiceChannelId) {
+        const ch = guild.channels.cache.get(t.voiceChannelId);
+        if (ch) await ch.delete('Cleaning up tournament team room').catch(() => {});
+      }
+      if (t.roleId) {
+        const r = guild.roles.cache.get(t.roleId);
+        if (r) await r.delete('Cleaning up tournament temporary role').catch(() => {});
+      }
+    }
+  }
+}
+
+/**
+ * 🎨 Renders the rich interactive tournament & event embed for #🎉・الـفـعـالـيـة
  */
 function renderEventEmbed(eventData, clientUser) {
   const count = eventData.participants ? eventData.participants.length : 0;
   const maxStr = eventData.maxParticipants ? ` / ${eventData.maxParticipants}` : '';
   const statusColor = eventData.status === 'started' ? 0x57F287 : 0xFEE75C;
-  const statusText = eventData.status === 'started' ? '🟢 الفعالية بدأت الآن!' : '🟡 باب التسجيل مفتوح';
+  const statusText = eventData.status === 'started' ? '🟢 البطولة جارية الآن!' : '🟡 باب التسجيل وحجز المباريات مفتوح';
+  const modeKey = eventData.mode || '1v1';
+  const modeLabel = (TOURNAMENT_MODES[modeKey] && TOURNAMENT_MODES[modeKey].label) || '⚔️ بطولة 1v1';
+
+  let matchesListText = '';
+  if (eventData.matches && eventData.matches.length > 0) {
+    matchesListText = '\n\n⚔️ **المواجهات والمباريات الجاهزة:**\n' +
+      eventData.matches.map((m) => `• **مواجهة #${m.matchNumber}:** <@${m.playerIds[0]}> 🆚 <@${m.playerIds[1]}> ──> <#${m.voiceChannelId}>`).join('\n');
+  } else if (eventData.teams && eventData.teams.length > 0) {
+    matchesListText = '\n\n👥 **الفرق المكتملة:**\n' +
+      eventData.teams.map((t) => `• **فريق #${t.teamNumber}:** ${t.playerIds.map((id) => `<@${id}>`).join(' ، ')} ──> <#${t.voiceChannelId}>`).join('\n');
+  }
+
+  const progressBar = eventData.maxParticipants ? `\n📊 **مؤشر الامتلاء:** ${buildProgressBar(count, eventData.maxParticipants)}` : '';
+  const countdownText = eventData.startTime ? `\n⏳ **موعد انطلاق البطولة:** <t:${Math.floor(eventData.startTime / 1000)}:R> (<t:${Math.floor(eventData.startTime / 1000)}:t>)` : '';
 
   const embed = new EmbedBuilder()
     .setColor(statusColor)
-    .setAuthor({ name: '🎉 فعالية جديدة | GX eSports', iconURL: clientUser?.displayAvatarURL() })
+    .setAuthor({ name: '🏆 بطولة رسمية | GX eSports', iconURL: clientUser?.displayAvatarURL() })
     .setTitle(`🔥 ${eventData.title}`)
     .setDescription(
       `${eventData.description}\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `📊 **حالة الفعالية:** ${statusText}\n` +
-      `👥 **المشاركون المسجلون:** \`${count}${maxStr}\` لاعب\n` +
+      `🎮 **نظام البطولة:** \`${modeLabel}\`\n` +
+      `📊 **حالة التسجيل:** ${statusText}\n` +
+      `👥 **اللاعبون المسجلون:** \`${count}${maxStr}\` لاعب ${progressBar}${countdownText}\n` +
       (eventData.prize ? `🎁 **الجائزة:** **${eventData.prize}** 🏆\n` : '') +
-      (eventData.voiceChannelId ? `🎙️ **الروم الصوتي:** <#${eventData.voiceChannelId}>\n` : '') +
+      (eventData.voiceChannelId ? `🎙️ **الروم الصوتي العام:** <#${eventData.voiceChannelId}>\n` : '') +
       `👑 **المنظم:** <@${eventData.hostId}>\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🔹 *اضغط على زر **🎟️ انضمام للفعالية** بالأسفل لتسجيل اسمك والمشاركة!*`
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━` +
+      matchesListText +
+      `\n\n🔹 *اضغط على **🎟️ انضمام للبطولة** ليقوم البوت فوراً بإنشاء رتبتك ورومك الصوتي المخصص مع خصمك/فريقك!*`
     )
-    .setFooter({ text: `GX eSports Event System • المعرف: ${eventData.id} • الإصدار ${BOT_VERSION}` })
+    .setFooter({ text: `GX eSports Tournament Engine • المعرف: ${eventData.id} • الإصدار ${BOT_VERSION}` })
     .setTimestamp(eventData.createdAt);
 
   return embed;
@@ -257,12 +532,12 @@ function renderEventEmbed(eventData, clientUser) {
  */
 function renderEventButtons(eventData) {
   const isStarted = eventData.status === 'started';
-  const isFull = eventData.maxParticipants && eventData.participants.length >= eventData.maxParticipants;
+  const isFull = eventData.maxParticipants && eventData.participants && eventData.participants.length >= eventData.maxParticipants;
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`event_join_${eventData.id}`)
-      .setLabel('🎟️ انضمام للفعالية')
+      .setLabel('🎟️ انضمام وحجز مواجهة')
       .setStyle(ButtonStyle.Success)
       .setDisabled(isStarted || isFull),
     new ButtonBuilder()
@@ -271,9 +546,13 @@ function renderEventButtons(eventData) {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(isStarted),
     new ButtonBuilder()
+      .setCustomId(`event_remind_${eventData.id}`)
+      .setLabel('🔔 تذكيرني بالخاص')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
       .setCustomId(`event_list_${eventData.id}`)
-      .setLabel(`👥 المشاركون (${eventData.participants ? eventData.participants.length : 0})`)
-      .setStyle(ButtonStyle.Primary)
+      .setLabel(`👥 الفرق والمباريات (${eventData.participants ? eventData.participants.length : 0})`)
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -300,7 +579,7 @@ async function ensureEventPanel(guild) {
   }
 
   const newMsg = await eventChannel.send({
-    content: `🎉 @everyone **فعالية رسمية جديدة في سيرفر GX eSports!**`,
+    content: `🎉 @everyone **بطولة رسمية جديدة في سيرفر GX eSports!**`,
     embeds: [embed],
     components: [row]
   }).catch(() => null);
@@ -1801,6 +2080,66 @@ client.once(Events.ClientReady, async (c) => {
           // ignore
         }
       }, 10 * 1000);
+
+      // Start 30-second automated tournament reminder watchdog
+      setInterval(async () => {
+        try {
+          const activeEv = loadActiveEvent();
+          if (activeEv && activeEv.startTime && activeEv.status === 'active') {
+            const timeRemaining = activeEv.startTime - Date.now();
+
+            // 10-Minute Automated Reminder
+            if (timeRemaining <= 10 * 60 * 1000 && timeRemaining > 2 * 60 * 1000 && !activeEv.reminded10m) {
+              activeEv.reminded10m = true;
+              saveActiveEvent(activeEv);
+
+              const reminderEmbed = new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setAuthor({ name: '⏰ تذكير بموعد البطولة | GX eSports', iconURL: guild.iconURL() })
+                .setTitle(`⚔️ اقترب موعد انطلاق: ${activeEv.title}`)
+                .setDescription(
+                  `📢 **بقي أقل من 10 دقائق على انطلاق البطولة!**\n\n` +
+                  `🎮 **نظام البطولة:** ${activeEv.mode || '1v1'}\n` +
+                  (activeEv.voiceChannelId ? `🎙️ **الروم الصوتي العام:** <#${activeEv.voiceChannelId}>\n` : '') +
+                  `🔒 يرجى التواجد فوراً في رومك الصوتي المخصص مع خصمك أو فريقك والاستعداد للمباراة!`
+                )
+                .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
+                .setTimestamp();
+
+              const recipients = new Set([...(activeEv.participants || []), ...(activeEv.remindUsers || [])]);
+              for (const uid of recipients) {
+                const mem = await guild.members.fetch(uid).catch(() => null);
+                if (mem) mem.send({ embeds: [reminderEmbed] }).catch(() => {});
+              }
+            }
+
+            // 2-Minute Final Countdown Reminder
+            else if (timeRemaining <= 2 * 60 * 1000 && timeRemaining > 0 && !activeEv.reminded2m) {
+              activeEv.reminded2m = true;
+              saveActiveEvent(activeEv);
+
+              const finalEmbed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setAuthor({ name: '🚨 نداء أخير للمباراة | GX eSports', iconURL: guild.iconURL() })
+                .setTitle(`🔥 انطلاق البطولة خلال دقيقتين: ${activeEv.title}`)
+                .setDescription(
+                  `⚠️ **الرجاء التوجه فوراً إلى الرومات الصوتية!** البطولة على وشك البدء الآن.\n\n` +
+                  `🏆 نتمنى التوفيق لجميع المتنافسين!`
+                )
+                .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
+                .setTimestamp();
+
+              const recipients = new Set([...(activeEv.participants || []), ...(activeEv.remindUsers || [])]);
+              for (const uid of recipients) {
+                const mem = await guild.members.fetch(uid).catch(() => null);
+                if (mem) mem.send({ embeds: [finalEmbed] }).catch(() => {});
+              }
+            }
+          }
+        } catch (err) {
+          // ignore
+        }
+      }, 30 * 1000);
       console.log(`📊 [لوحة النظام الحية] تم تفعيل التحديث التلقائي كل 10 ثوان في #system-status.`);
 
       // Voice Reconnection Watchdog (Maintains relentless persistence)
@@ -2905,49 +3244,59 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // ----------------------------------------------------
     if (interaction.isButton()) {
       // ====================================================
-      // 🎉 EVENT BUTTON INTERACTIONS (انضمام / انسحاب / مشاركون)
+      // 🎉 EVENT BUTTON INTERACTIONS (انضمام / انسحاب / تذكير / مشاركون)
       // ====================================================
       if (interaction.customId.startsWith('event_join_')) {
         const eventId = interaction.customId.replace('event_join_', '');
         const eventData = loadActiveEvent();
         if (!eventData || eventData.id !== eventId || eventData.status === 'ended') {
-          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً للتسجيل فيها.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا توجد فعالية أو بطولة نشطة حالياً للتسجيل فيها.', flags: [1 << 6] });
         }
         if (eventData.status === 'started') {
-          return interaction.reply({ content: '⛔ تم إغلاق باب التسجيل لأن الفعالية قد بدأت بالفعل!', flags: [1 << 6] });
+          return interaction.reply({ content: '⛔ تم إغلاق باب التسجيل لأن البطولة قد بدأت بالفعل!', flags: [1 << 6] });
         }
         if (eventData.participants && eventData.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: 'ℹ️ أنت مسجل بالفعل في هذه الفعالية! 🎉', flags: [1 << 6] });
+          return interaction.reply({ content: 'ℹ️ أنت مسجل بالفعل في هذه البطولة! 🎉', flags: [1 << 6] });
         }
         if (eventData.maxParticipants && eventData.participants && eventData.participants.length >= eventData.maxParticipants) {
-          return interaction.reply({ content: `⛔ اكتمل العدد الأقصى للمشاركين في هذه الفعالية (${eventData.maxParticipants} مشارك)!`, flags: [1 << 6] });
+          return interaction.reply({ content: `⛔ اكتمل العدد الأقصى للمشاركين في هذه البطولة (${eventData.maxParticipants} مشارك)!`, flags: [1 << 6] });
         }
 
         if (!eventData.participants) eventData.participants = [];
         eventData.participants.push(interaction.user.id);
         saveActiveEvent(eventData);
 
+        await interaction.deferReply({ flags: [1 << 6] });
+
+        // Process Tournament Matching & Room Generation automatically
+        await processTournamentMatching(interaction.guild, eventData);
+
         const eventEmbed = renderEventEmbed(eventData, client.user);
         const eventRow = renderEventButtons(eventData);
-        await interaction.update({ embeds: [eventEmbed], components: [eventRow] }).catch(() => {});
+        if (eventData.messageId) {
+          const ch = interaction.guild.channels.cache.get(EVENT_CHANNEL_ID);
+          if (ch) {
+            const msg = await ch.messages.fetch(eventData.messageId).catch(() => null);
+            if (msg) await msg.edit({ embeds: [eventEmbed], components: [eventRow] }).catch(() => {});
+          }
+        }
 
-        return interaction.followUp({
-          content: `🎉 **أهلاً بك <@${interaction.user.id}>!** تم تسجيلك بنجاح في فعالية **${eventData.title}**! ترقب موعد البدء.`,
-          flags: [1 << 6]
-        }).catch(() => {});
+        return interaction.editReply({
+          content: `🎉 **أهلاً بك <@${interaction.user.id}>!** تم تسجيلك بنجاح في بطولة **${eventData.title}**!\n🔒 تفقد رسائلك الخاصة (DM) إذا تم تشكيل مباراتك أو فريقك.`
+        });
       }
 
       else if (interaction.customId.startsWith('event_leave_')) {
         const eventId = interaction.customId.replace('event_leave_', '');
         const eventData = loadActiveEvent();
         if (!eventData || eventData.id !== eventId || eventData.status === 'ended') {
-          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا توجد فعالية أو بطولة نشطة حالياً.', flags: [1 << 6] });
         }
         if (eventData.status === 'started') {
-          return interaction.reply({ content: '⛔ لا يمكن الانسحاب بعد بدء الفعالية!', flags: [1 << 6] });
+          return interaction.reply({ content: '⛔ لا يمكن الانسحاب بعد انطلاق البطولة!', flags: [1 << 6] });
         }
         if (!eventData.participants || !eventData.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: 'ℹ️ أنت لست مسجلاً في هذه الفعالية بالأصل.', flags: [1 << 6] });
+          return interaction.reply({ content: 'ℹ️ أنت لست مسجلاً في هذه البطولة بالأصل.', flags: [1 << 6] });
         }
 
         eventData.participants = eventData.participants.filter((id) => id !== interaction.user.id);
@@ -2958,9 +3307,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.update({ embeds: [eventEmbed], components: [eventRow] }).catch(() => {});
 
         return interaction.followUp({
-          content: `🚪 تم إلغاء تسجيلك وانسحابك من الفعالية بنجاح.`,
+          content: `🚪 تم إلغاء تسجيلك وانسحابك من البطولة بنجاح.`,
           flags: [1 << 6]
         }).catch(() => {});
+      }
+
+      else if (interaction.customId.startsWith('event_remind_')) {
+        const eventData = loadActiveEvent();
+        if (!eventData || eventData.status === 'ended') {
+          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', flags: [1 << 6] });
+        }
+
+        if (!eventData.remindUsers) eventData.remindUsers = [];
+        if (!eventData.remindUsers.includes(interaction.user.id)) {
+          eventData.remindUsers.push(interaction.user.id);
+          saveActiveEvent(eventData);
+        }
+
+        // Send instant DM confirmation
+        const remindConfirmEmbed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setAuthor({ name: '🔔 تأكيد تفعيل التذكير | GX eSports', iconURL: interaction.guild.iconURL() })
+          .setTitle(`تم تفعيل التذكير لبطولة: ${eventData.title}`)
+          .setDescription(
+            `✅ سيقوم البوت بإرسال إشعار خاص لك قبل انطلاق البطولة بـ 10 دقائق مع رابط الروم الصوتي وتفاصيل مباراتك.\n\n` +
+            `🏆 **نتمنى لك التوفيق والانتصار!**`
+          )
+          .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+
+        await interaction.user.send({ embeds: [remindConfirmEmbed] }).catch(() => {});
+
+        return interaction.reply({
+          content: `🔔 **تم تفعيل التذكير بنجاح!** ستصلك رسالة في الخاص قبل بدء البطولة لتنبيهك.`,
+          flags: [1 << 6]
+        });
       }
 
       else if (interaction.customId.startsWith('event_list_')) {
@@ -2971,16 +3352,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const count = eventData.participants ? eventData.participants.length : 0;
         if (count === 0) {
-          return interaction.reply({ content: '📋 لم يسجل أي مشارك حتى الآن في الفعالية!', flags: [1 << 6] });
+          return interaction.reply({ content: '📋 لم يسجل أي مشارك حتى الآن في البطولة!', flags: [1 << 6] });
+        }
+
+        let matchesText = 'لا توجد مواجهات مكتملة بعد.';
+        if (eventData.matches && eventData.matches.length > 0) {
+          matchesText = eventData.matches.map((m) => `⚔️ **مواجهة #${m.matchNumber}:** <@${m.playerIds[0]}> 🆚 <@${m.playerIds[1]}> ──> <#${m.voiceChannelId}>`).join('\n');
+        } else if (eventData.teams && eventData.teams.length > 0) {
+          matchesText = eventData.teams.map((t) => `👥 **فريق #${t.teamNumber}:** ${t.playerIds.map((id) => `<@${id}>`).join(' ، ')} ──> <#${t.voiceChannelId}>`).join('\n');
         }
 
         const participantsList = eventData.participants.map((id, index) => `${index + 1}. <@${id}> (\`${id}\`)`).join('\n');
 
         const listEmbed = new EmbedBuilder()
           .setColor(0x5865F2)
-          .setTitle(`👥 قائمة المشاركين في فعالية: ${eventData.title}`)
-          .setDescription(`إجمالي المشاركين المسجلين: **${count}**\n\n${participantsList.length > 3900 ? participantsList.slice(0, 3900) + '...' : participantsList}`)
-          .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` });
+          .setTitle(`👥 تفاصيل بطولة: ${eventData.title}`)
+          .addFields(
+            { name: `🎮 اللاعبون المسجلون (${count})`, value: participantsList.length > 1024 ? participantsList.slice(0, 1000) + '...' : participantsList, inline: false },
+            { name: `⚔️ الرومات والمواجهات المجهزة`, value: matchesText.length > 1024 ? matchesText.slice(0, 1000) + '...' : matchesText, inline: false }
+          )
+          .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` });
 
         return interaction.reply({ embeds: [listEmbed], flags: [1 << 6] });
       }
@@ -4565,22 +4956,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const title = interaction.options.getString('اسم_الفعالية');
       const details = interaction.options.getString('التفاصيل');
+      const mode = interaction.options.getString('نوع_البطولة') || '1v1';
       const prize = interaction.options.getString('الجائزة'); // optional
       const maxParticipants = interaction.options.getInteger('الحد_الأقصى'); // optional
+      const startMinutes = interaction.options.getInteger('وقت_البدء_بالدقائق'); // optional
       const voiceChannel = interaction.options.getChannel('الروم_الصوتي'); // optional
 
       const eventId = `ev_${Date.now()}`;
+      const startTime = startMinutes ? Date.now() + startMinutes * 60 * 1000 : null;
+
       const eventData = {
         id: eventId,
         title,
         description: details,
+        mode,
         prize: prize || null,
         maxParticipants: maxParticipants || null,
+        startTime,
         voiceChannelId: voiceChannel ? voiceChannel.id : null,
         hostId: interaction.user.id,
         hostTag: interaction.user.tag,
         status: 'active',
         participants: [],
+        matches: [],
+        teams: [],
+        remindUsers: [],
+        reminded10m: false,
+        reminded2m: false,
         createdAt: Date.now(),
         messageId: null
       };
@@ -4592,14 +4994,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (eventMsg) {
         await interaction.editReply({
-          content: `✅ **تم إنشاء ونشر الفعالية بنجاح في القناة <#${EVENT_CHANNEL_ID}>!**\n📌 رابط الرسالة: ${eventMsg.url}`
+          content: `✅ **تم إنشاء ونشر البطولة بنجاح بنظام \`${mode}\` في القناة <#${EVENT_CHANNEL_ID}>!**\n📌 رابط الرسالة: ${eventMsg.url}`
         });
 
         const logEmbed = new EmbedBuilder()
           .setColor(0x57F287)
-          .setAuthor({ name: '🎉 إنشاء فعالية جديدة', iconURL: interaction.user.displayAvatarURL() })
-          .setDescription(`قام المنظم <@${interaction.user.id}> بإنشاء فعالية جديدة بعنوان: **${title}** في <#${EVENT_CHANNEL_ID}>.`)
-          .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+          .setAuthor({ name: '🏆 إنشاء بطولة جديدة', iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`قام المنظم <@${interaction.user.id}> بإنشاء بطولة جديدة بعنوان: **${title}** بنظام \`${mode}\` في <#${EVENT_CHANNEL_ID}>.`)
+          .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
           .setTimestamp();
         await sendToLogChannel(interaction.guild, logEmbed);
       } else {
@@ -4620,11 +5022,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const eventData = loadActiveEvent();
       if (!eventData || eventData.status === 'ended') {
-        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لبدئها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لبدئها.', flags: [1 << 6] });
       }
 
       if (eventData.status === 'started') {
-        return interaction.reply({ content: 'ℹ️ الفعالية بدأت بالفعل مسبقاً!', flags: [1 << 6] });
+        return interaction.reply({ content: 'ℹ️ البطولة بدأت بالفعل مسبقاً!', flags: [1 << 6] });
       }
 
       eventData.status = 'started';
@@ -4639,26 +5041,97 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (eventChannel) {
         await eventChannel.send({
-          content: `🚀 @everyone **بدأت الفعالية رسمياً الآن: ${eventData.title}!**\n👥 **المشاركون المسجلون:** ${participantsPings}\n` +
-            (eventData.voiceChannelId ? `🎙️ **يرجى من جميع المشاركين الانضمام للروم الصوتي:** <#${eventData.voiceChannelId}>` : '')
+          content: `🚀 @everyone **انطلقت البطولة رسمياً الآن: ${eventData.title}!**\n👥 **المشاركون المسجلون:** ${participantsPings}\n` +
+            (eventData.voiceChannelId ? `🎙️ **الروم الصوتي العام للتجمع:** <#${eventData.voiceChannelId}>\n` : '') +
+            `🔒 يرجى من جميع المتنافسين التواجد في روماتهم الصوتية المخصصة فوراً!`
         });
       }
 
+      // Send DMs to all participants
+      const startDMEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🚀 انطلاق البطولة | GX eSports', iconURL: interaction.guild.iconURL() })
+        .setTitle(`🔥 انطلقت البطولة الآن: ${eventData.title}`)
+        .setDescription(
+          `⚔️ **بدأت المواجهات رسمياً!**\n\n` +
+          `🎙️ يرجى التوجه فوراً إلى روم مباراتك الصوتي والتنسيق مع خصمك/فريقك.\n\n` +
+          `🏆 **نتمنى لكم جولة مليئة بالحماس والانتصارات!**`
+        )
+        .setFooter({ text: `GX eSports Tournament Engine • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      for (const uid of (eventData.participants || [])) {
+        const mem = await interaction.guild.members.fetch(uid).catch(() => null);
+        if (mem) mem.send({ embeds: [startDMEmbed] }).catch(() => {});
+      }
+
       await interaction.reply({
-        content: `🚀 **تم إعلان بدء الفعالية وإشعار جميع المشاركين في <#${EVENT_CHANNEL_ID}>!**`,
+        content: `🚀 **تم إعلان انطلاق البطولة وإشعار جميع المشاركين في <#${EVENT_CHANNEL_ID}> والخاص!**`,
         flags: [1 << 6]
       });
 
       const logEmbed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setAuthor({ name: '🚀 بدء الفعالية', iconURL: interaction.user.displayAvatarURL() })
-        .setDescription(`قام <@${interaction.user.id}> بإعلان بدء الفعالية: **${eventData.title}** بمشاركة **${eventData.participants ? eventData.participants.length : 0}** لاعب.`)
-        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setAuthor({ name: '🚀 بدء البطولة', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام <@${interaction.user.id}> بإعلان انطلاق بطولة: **${eventData.title}** بمشاركة **${eventData.participants ? eventData.participants.length : 0}** لاعب.`)
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
         .setTimestamp();
       await sendToLogChannel(interaction.guild, logEmbed);
     }
 
-    // 39. أمر /فعالية_فائز
+    // 39. أمر /فعالية_تذكير
+    else if (commandName === 'فعالية_تذكير') {
+      if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
+          flags: [1 << 6]
+        });
+      }
+
+      const eventData = loadActiveEvent();
+      if (!eventData || eventData.status === 'ended') {
+        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لإرسال تذكير لها.', flags: [1 << 6] });
+      }
+
+      const customNote = interaction.options.getString('ملاحظة_إضافية');
+      const recipients = new Set([...(eventData.participants || []), ...(eventData.remindUsers || [])]);
+
+      if (recipients.size === 0) {
+        return interaction.reply({ content: '📋 لا يوجد أي لاعبين مسجلين في البطولة حتى الآن لإرسال التذكير.', flags: [1 << 6] });
+      }
+
+      await interaction.deferReply({ flags: [1 << 6] });
+
+      const reminderEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setAuthor({ name: '📢 تذكير إداري بالبطولة | GX eSports', iconURL: interaction.guild.iconURL() })
+        .setTitle(`⚔️ تذكير بموعد بطولة: ${eventData.title}`)
+        .setDescription(
+          `📢 **تنبيه لجميع اللاعبين المشاركين:**\n` +
+          (customNote ? `💬 **ملاحظة المنظم:** ${customNote}\n\n` : '') +
+          `🎮 **نظام البطولة:** ${eventData.mode || '1v1'}\n` +
+          `👥 **عدد المسجلين:** \`${eventData.participants.length}\` لاعب\n` +
+          (eventData.voiceChannelId ? `🎙️ **الروم الصوتي:** <#${eventData.voiceChannelId}>\n` : '') +
+          `\n🔒 يرجى التواجد في السيرفر والاستعداد لبدء المباريات!`
+        )
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      let successCount = 0;
+      for (const uid of recipients) {
+        const mem = await interaction.guild.members.fetch(uid).catch(() => null);
+        if (mem) {
+          const sent = await mem.send({ embeds: [reminderEmbed] }).catch(() => null);
+          if (sent) successCount++;
+        }
+      }
+
+      await interaction.editReply({
+        content: `📢 **تم إرسال التذكير بنجاح بالخاص إلى \`${successCount}\` من اللاعبين المسجلين!**`
+      });
+    }
+
+    // 40. أمر /فعالية_فائز
     else if (commandName === 'فعالية_فائز') {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
@@ -4693,25 +5166,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const eventChannel = interaction.guild.channels.cache.get(EVENT_CHANNEL_ID);
       const winnerEmbed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setAuthor({ name: '🏆 إعلان الفائز بالفعالية | GX eSports', iconURL: interaction.guild.iconURL() })
-        .setTitle(`🎉 ألف مبروك للفائز بالفعالية!`)
+        .setAuthor({ name: '🏆 إعلان الفائز بالبطولة | GX eSports', iconURL: interaction.guild.iconURL() })
+        .setTitle(`🎉 ألف مبروك للفائز بالبطولة!`)
         .setDescription(
           `👑 **الفائز بالمركز الأول:** <@${winnerId}>\n` +
-          `🔥 **الفعالية:** **${eventData.title}**\n` +
+          `🔥 **البطولة:** **${eventData.title}**\n` +
           (eventData.prize ? `🎁 **الجائزة المستحقة:** **${eventData.prize}**\n` : '') +
           `👥 **إجمالي المتنافسين:** \`${eventData.participants ? eventData.participants.length : 0}\` مشارك\n` +
           `👮‍♂️ **المنظم:** <@${interaction.user.id}>\n\n` +
-          `✨ *نشكر جميع اللاعبين على المشاركة والحضور الحماسي، ترقبوا فعالياتنا القادمة!*`
+          `✨ *نشكر جميع اللاعبين على المشاركة والحضور الحماسي، ترقبوا بطولاتنا القادمة!*`
         )
-        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
         .setTimestamp();
 
       if (eventChannel) {
         await eventChannel.send({
-          content: `🏆 🎉 **ألف مبروك <@${winnerId}> فوزك بالفعالية!** @everyone`,
+          content: `🏆 🎉 **ألف مبروك <@${winnerId}> فوزك بالبطولة!** @everyone`,
           embeds: [winnerEmbed]
         });
       }
+
+      // Cleanup temporary tournament match rooms and roles
+      await cleanupTournamentResources(interaction.guild, eventData);
 
       // End event
       eventData.status = 'ended';
@@ -4719,20 +5195,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
       saveActiveEvent(eventData);
 
       await interaction.reply({
-        content: `🏆 **تم إعلان الفائز <@${winnerId}> بنجاح ونشر بطاقة التهنئة في <#${EVENT_CHANNEL_ID}>!**`,
+        content: `🏆 **تم إعلان الفائز <@${winnerId}> بنجاح وتنظيف الرومات والرتب المؤقتة!**`,
         flags: [1 << 6]
       });
 
       const logEmbed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setAuthor({ name: '🏆 فائز بالفعالية', iconURL: interaction.user.displayAvatarURL() })
-        .setDescription(`تم إعلان <@${winnerId}> كفائز بفعالية **${eventData.title}** بواسطة المنظم <@${interaction.user.id}>.`)
-        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setAuthor({ name: '🏆 فائز بالبطولة', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`تم إعلان <@${winnerId}> كفائز ببطولة **${eventData.title}** بواسطة المنظم <@${interaction.user.id}>.`)
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
         .setTimestamp();
       await sendToLogChannel(interaction.guild, logEmbed);
     }
 
-    // 40. أمر /فعالية_إلغاء
+    // 41. أمر /فعالية_إلغاء
     else if (commandName === 'فعالية_إلغاء') {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
@@ -4743,10 +5219,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const eventData = loadActiveEvent();
       if (!eventData || eventData.status === 'ended') {
-        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لإلغائها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لإلغائها.', flags: [1 << 6] });
       }
 
-      const reason = interaction.options.getString('السبب') || 'تم إلغاء الفعالية من قِبل الإدارة.';
+      const reason = interaction.options.getString('السبب') || 'تم إلغاء البطولة من قِبل الإدارة.';
+
+      // Cleanup temporary rooms and roles
+      await cleanupTournamentResources(interaction.guild, eventData);
 
       const eventChannel = interaction.guild.channels.cache.get(EVENT_CHANNEL_ID);
       if (eventChannel && eventData.messageId) {
@@ -4754,9 +5233,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (msg) {
           const cancelEmbed = new EmbedBuilder()
             .setColor(0xED4245)
-            .setTitle(`❌ تم إلغاء فعالية: ${eventData.title}`)
-            .setDescription(`**سبب الإلغاء:** ${reason}\n\nنعتذر لجميع المشاركين وسيتم الإعلان عن فعاليات جديدة قريباً.`)
-            .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+            .setTitle(`❌ تم إلغاء بطولة: ${eventData.title}`)
+            .setDescription(`**سبب الإلغاء:** ${reason}\n\nنعتذر لجميع المشاركين وتم حذف الرومات والرتب المؤقتة.`)
+            .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
             .setTimestamp();
           await msg.edit({ embeds: [cancelEmbed], components: [] }).catch(() => null);
         }
@@ -4765,15 +5244,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       saveActiveEvent(null);
 
       await interaction.reply({
-        content: `❌ **تم إلغاء الفعالية بنجاح وإغلاق باب التسجيل.**`,
+        content: `❌ **تم إلغاء البطولة بنجاح وحذف جميع الرومات والرتب المؤقتة.**`,
         flags: [1 << 6]
       });
 
       const logEmbed = new EmbedBuilder()
         .setColor(0xED4245)
-        .setAuthor({ name: '❌ إلغاء فعالية', iconURL: interaction.user.displayAvatarURL() })
-        .setDescription(`قام <@${interaction.user.id}> بإلغاء فعالية **${eventData.title}**.\n**السبب:** ${reason}`)
-        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setAuthor({ name: '❌ إلغاء بطولة', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام <@${interaction.user.id}> بإلغاء بطولة **${eventData.title}**.\n**السبب:** ${reason}`)
+        .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` })
         .setTimestamp();
       await sendToLogChannel(interaction.guild, logEmbed);
     }
