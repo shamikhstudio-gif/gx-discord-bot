@@ -52,6 +52,7 @@ const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
 const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
+const VERIFICATION_REQUESTS_FILE = path.join(DATA_DIR, 'verification_requests.json');
 const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
@@ -175,6 +176,20 @@ function saveDMSecuritySent(list) {
 function isUntrustedMember(member) {
   if (!member || !member.roles) return false;
   return member.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
+}
+
+function loadVerificationRequests() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(VERIFICATION_REQUESTS_FILE)) {
+      return JSON.parse(fs.readFileSync(VERIFICATION_REQUESTS_FILE, 'utf-8'));
+    }
+  } catch {}
+  return {};
+}
+
+function saveVerificationRequests(data) {
+  safeWriteJson(VERIFICATION_REQUESTS_FILE, data);
 }
 
 const INFRACTIONS_META_FILE = path.join(DATA_DIR, 'infractions_meta.json');
@@ -917,6 +932,21 @@ async function sendVerificationRequestToExecutives(guild, member) {
   const executives = await getExecutiveMembers(guild);
   if (!executives || executives.size === 0) return;
 
+  const requestsData = loadVerificationRequests();
+  const targetId = member.id;
+
+  if (!requestsData[targetId] || requestsData[targetId].status !== 'pending') {
+    requestsData[targetId] = {
+      targetId,
+      userTag: member.user.tag,
+      status: 'pending',
+      messages: [],
+      handledBy: null,
+      handledByName: null,
+      createdAt: Date.now()
+    };
+  }
+
   const embed = new EmbedBuilder()
     .setColor(0xFEE75C)
     .setAuthor({ name: '📩 طلب توثيق عضوية جديد | GX Security', iconURL: member.user.displayAvatarURL() })
@@ -927,7 +957,7 @@ async function sendVerificationRequestToExecutives(guild, member) {
       `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
       `🔒 **الرتبة الحالية:** \`UNTRUSTED\` (مشاهدة وفويس فقط وممنوع من الكتابة)\n\n` +
       `⚡ **صلاحية الموافقة:** مخصصة لكم كرتبة **OWNER / CEO / COO**.\n` +
-      `👉 بمجرد ضغط أي مسؤول منكم على زر الموافقة هنا في الخاص، سيتم منح العضو رتبة **MEMBER** وسحب **UNTRUSTED** فوراً.`
+      `👉 **أول مسؤول فقط يوافق على الطلب**، سيتم فوراً منح العضو رتبة **MEMBER** وتحديث الرسائل تلقائياً لدى باقي المسؤولين لتبين من قام بالقبول.`
     )
     .setFooter({ text: `GX eSports Security Engine • المعرف: ${member.id}` })
     .setTimestamp();
@@ -945,13 +975,23 @@ async function sendVerificationRequestToExecutives(guild, member) {
 
   for (const [, execMember] of executives) {
     try {
-      await execMember.send({
-        content: `🔔 **طلب توثيق عضو جديد في سيرفر \`${guild.name}\` بحاجة لموافقتك:**`,
+      const dmMsg = await execMember.send({
+        content: `🔔 **طلب توثيق عضو جديد في سيرفر \`${guild.name}\` بحاجة لموافقتك (أول موافق فقط):**`,
         embeds: [embed],
         components: [row]
-      }).catch(() => {});
+      }).catch(() => null);
+
+      if (dmMsg) {
+        requestsData[targetId].messages.push({
+          execUserId: execMember.id,
+          channelId: dmMsg.channelId,
+          messageId: dmMsg.id
+        });
+      }
     } catch {}
   }
+
+  saveVerificationRequests(requestsData);
 }
 
 /**
@@ -3767,7 +3807,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // 8. زر قبول توثيق العضوية (خاص برتب OWNER / CEO / COO عبر الخاص DM)
+      // 8. زر قبول توثيق العضوية (خاص برتب OWNER / CEO / COO عبر الخاص DM - أول موافق فقط)
       else if (interaction.customId.startsWith('verify_approve_')) {
         const targetId = interaction.customId.replace('verify_approve_', '');
         const guild = interaction.guild || client.guilds.cache.get(ALLOWED_GUILD_ID);
@@ -3780,6 +3820,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!isVerificationApprover(approverMember, interaction.user)) {
           return interaction.reply({
             content: '❌ **عذراً، الموافقة على طلبات التوثيق مقتصرة فقط على رتب (OWNER / CEO / COO)!**',
+            ephemeral: true
+          });
+        }
+
+        const requestsData = loadVerificationRequests();
+        const req = requestsData[targetId];
+
+        // First-Responder Guard: if already handled by someone else
+        if (req && req.status !== 'pending') {
+          const handledLabel = req.status === 'approved'
+            ? `✅ تم القبول مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`
+            : `❌ تم الرفض مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`;
+
+          const disabledRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`already_handled_${targetId}`)
+              .setLabel(handledLabel)
+              .setStyle(req.status === 'approved' ? ButtonStyle.Success : ButtonStyle.Danger)
+              .setDisabled(true)
+          );
+          await interaction.update({ components: [disabledRow] }).catch(() => {});
+          return interaction.followUp({
+            content: `⚠️ **عذراً يا عزيزنا <@${interaction.user.id}>**، تم التعامل مع هذا الطلب مسبقاً بواسطة **@${req.handledByName}**!`,
             ephemeral: true
           });
         }
@@ -3799,15 +3862,52 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await targetMember.roles.add(memberRole).catch(() => {});
         }
 
-        const doneRow = new ActionRowBuilder().addComponents(
+        const approverName = interaction.user.displayName || interaction.user.username;
+
+        if (!requestsData[targetId]) {
+          requestsData[targetId] = { targetId, messages: [] };
+        }
+        requestsData[targetId].status = 'approved';
+        requestsData[targetId].handledBy = interaction.user.id;
+        requestsData[targetId].handledByName = approverName;
+        requestsData[targetId].handledAt = Date.now();
+        saveVerificationRequests(requestsData);
+
+        // 1. Update clicking approver's message
+        const approverRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`approved_done_${targetId}`)
-            .setLabel(`✅ تم قبول التوثيق بنجاح بواسطتك (${interaction.user.displayName})`)
+            .setCustomId(`approved_by_me_${targetId}`)
+            .setLabel(`✅ تم القبول بواسطتك (@${approverName})`)
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(true)
+        );
+        await interaction.update({ components: [approverRow] }).catch(() => {});
+
+        // 2. Broadcast button update to all other executives' DMs ("تم القبول بواسطة: @{name}")
+        const otherExecRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`approved_by_other_${targetId}`)
+            .setLabel(`✅ تم القبول بواسطة: @${approverName}`)
             .setStyle(ButtonStyle.Success)
             .setDisabled(true)
         );
 
-        await interaction.update({ components: [doneRow] }).catch(() => {});
+        if (req && Array.isArray(req.messages)) {
+          for (const msgInfo of req.messages) {
+            if (msgInfo.execUserId !== interaction.user.id) {
+              try {
+                const execUser = await client.users.fetch(msgInfo.execUserId).catch(() => null);
+                if (execUser) {
+                  const dmChan = execUser.dmChannel || await execUser.createDM().catch(() => null);
+                  if (dmChan) {
+                    const msg = await dmChan.messages.fetch(msgInfo.messageId).catch(() => null);
+                    if (msg) await msg.edit({ components: [otherExecRow] }).catch(() => {});
+                  }
+                }
+              } catch {}
+            }
+          }
+        }
 
         // Direct DM to the approved member
         const approvedDMEmbed = new EmbedBuilder()
@@ -3840,7 +3940,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // 9. زر رفض توثيق العضوية (عبر الخاص DM)
+      // 9. زر رفض توثيق العضوية (عبر الخاص DM - أول مسؤول فقط)
       else if (interaction.customId.startsWith('verify_reject_')) {
         const targetId = interaction.customId.replace('verify_reject_', '');
         const guild = interaction.guild || client.guilds.cache.get(ALLOWED_GUILD_ID);
@@ -3857,15 +3957,75 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-        const rejectRow = new ActionRowBuilder().addComponents(
+        const requestsData = loadVerificationRequests();
+        const req = requestsData[targetId];
+
+        // First-Responder Guard: if already handled by someone else
+        if (req && req.status !== 'pending') {
+          const handledLabel = req.status === 'approved'
+            ? `✅ تم القبول مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`
+            : `❌ تم الرفض مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`;
+
+          const disabledRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`already_handled_${targetId}`)
+              .setLabel(handledLabel)
+              .setStyle(req.status === 'approved' ? ButtonStyle.Success : ButtonStyle.Danger)
+              .setDisabled(true)
+          );
+          await interaction.update({ components: [disabledRow] }).catch(() => {});
+          return interaction.followUp({
+            content: `⚠️ **عذراً يا عزيزنا <@${interaction.user.id}>**، تم التعامل مع هذا الطلب مسبقاً بواسطة **@${req.handledByName}**!`,
+            ephemeral: true
+          });
+        }
+
+        const rejecterName = interaction.user.displayName || interaction.user.username;
+
+        if (!requestsData[targetId]) {
+          requestsData[targetId] = { targetId, messages: [] };
+        }
+        requestsData[targetId].status = 'rejected';
+        requestsData[targetId].handledBy = interaction.user.id;
+        requestsData[targetId].handledByName = rejecterName;
+        requestsData[targetId].handledAt = Date.now();
+        saveVerificationRequests(requestsData);
+
+        // 1. Update clicking user's message
+        const rejecterRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`rejected_done_${targetId}`)
-            .setLabel(`❌ تم رفض الطلب بواسطتك (${interaction.user.displayName})`)
+            .setCustomId(`rejected_by_me_${targetId}`)
+            .setLabel(`❌ تم رفض الطلب بواسطتك (@${rejecterName})`)
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(true)
+        );
+        await interaction.update({ components: [rejecterRow] }).catch(() => {});
+
+        // 2. Broadcast button update to all other executives' DMs
+        const otherRejectRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`rejected_by_other_${targetId}`)
+            .setLabel(`❌ تم الرفض بواسطة: @${rejecterName}`)
             .setStyle(ButtonStyle.Danger)
             .setDisabled(true)
         );
 
-        await interaction.update({ components: [rejectRow] }).catch(() => {});
+        if (req && Array.isArray(req.messages)) {
+          for (const msgInfo of req.messages) {
+            if (msgInfo.execUserId !== interaction.user.id) {
+              try {
+                const execUser = await client.users.fetch(msgInfo.execUserId).catch(() => null);
+                if (execUser) {
+                  const dmChan = execUser.dmChannel || await execUser.createDM().catch(() => null);
+                  if (dmChan) {
+                    const msg = await dmChan.messages.fetch(msgInfo.messageId).catch(() => null);
+                    if (msg) await msg.edit({ components: [otherRejectRow] }).catch(() => {});
+                  }
+                }
+              } catch {}
+            }
+          }
+        }
 
         const targetMember = await guild.members.fetch(targetId).catch(() => null);
         if (targetMember) {
