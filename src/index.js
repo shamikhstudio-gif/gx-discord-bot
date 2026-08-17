@@ -603,6 +603,20 @@ function connectToVoiceChannel(channel) {
       });
 
       connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        if (currentVoiceOwner) {
+          console.warn('⚡ [فويس GX] رصد انقطاع اتصال البوت أثناء وجود المالك، جارٍ إعادة الاتصال التلقائي الفوري...');
+          setTimeout(() => {
+            if (currentVoiceOwner) {
+              const targetCh = client.guilds.cache.get(ALLOWED_GUILD_ID)?.channels.cache.get(currentVoiceOwner.channelId);
+              if (targetCh) {
+                setAuthorizedMove();
+                connectToVoiceChannel(targetCh);
+              }
+            }
+          }, 200);
+          return;
+        }
+
         try {
           await Promise.race([
             entersState(connection, VoiceConnectionStatus.Signalling, 5000),
@@ -1589,6 +1603,30 @@ client.once(Events.ClientReady, async (c) => {
         }
       }, 10 * 1000);
       console.log(`📊 [لوحة النظام الحية] تم تفعيل التحديث التلقائي كل 10 ثوان في #system-status.`);
+
+      // Voice Reconnection Watchdog (Maintains relentless persistence)
+      setInterval(async () => {
+        try {
+          if (currentVoiceOwner) {
+            const targetChannel = guild.channels.cache.get(currentVoiceOwner.channelId);
+            if (targetChannel) {
+              const isOwnerInCh = targetChannel.members.has(currentVoiceOwner.userId);
+              if (isOwnerInCh) {
+                const botVoiceChId = guild.members.me?.voice?.channelId;
+                if (botVoiceChId !== targetChannel.id) {
+                  console.log('⚡ [حارس الفويس] إعادة توجيه وربط البوت بالروم الصوتي لمالكه...');
+                  setAuthorizedMove();
+                  connectToVoiceChannel(targetChannel);
+                }
+              } else {
+                currentVoiceOwner = null;
+              }
+            } else {
+              currentVoiceOwner = null;
+            }
+          }
+        } catch {}
+      }, 3000);
     }
   }
 });
@@ -1665,7 +1703,13 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
           console.warn(`🛡️ [حماية الفويس] تم رصد محاولة فصل يدوي للبوت. جارٍ إعادة الاتصال فوراً...`);
 
           setAuthorizedMove();
-          connectToVoiceChannel(previousChannel);
+          const staleConn = getVoiceConnection(newState.guild.id);
+          if (staleConn) {
+            try { staleConn.destroy(); } catch {}
+          }
+          setTimeout(() => {
+            connectToVoiceChannel(previousChannel);
+          }, 150);
 
           const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberDisconnect);
 
