@@ -36,7 +36,6 @@ dotenv.config();
 let BOT_VERSION = '1.0';
 let TOKEN = process.env.DISCORD_TOKEN;
 let ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID?.trim();
-let SERVER_INVITE_LINK = process.env.SERVER_INVITE_LINK?.trim() || 'https://discord.gg/nezPrgAsnp';
 let AUTO_ROLE_NAME = process.env.AUTO_ROLE_NAME?.trim() || 'MEMBER';
 let AUTO_ROLE_ID = process.env.AUTO_ROLE_ID?.trim();
 let WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID?.trim() || '1538560876339265667';
@@ -511,7 +510,6 @@ function reloadConfiguration() {
   const result = dotenv.config({ override: true });
   TOKEN = process.env.DISCORD_TOKEN;
   ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID?.trim();
-  SERVER_INVITE_LINK = process.env.SERVER_INVITE_LINK?.trim() || 'https://discord.gg/nezPrgAsnp';
   AUTO_ROLE_NAME = process.env.AUTO_ROLE_NAME?.trim() || 'MEMBER';
   AUTO_ROLE_ID = process.env.AUTO_ROLE_ID?.trim();
   WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID?.trim() || '1538560876339265667';
@@ -1498,10 +1496,8 @@ async function handleUnauthorizedGuild(guild) {
         .setAuthor({ name: 'نظام الحماية والأمان | GX eSports', iconURL: client.user?.displayAvatarURL() })
         .setTitle('⛔ تنبيه: هذا البوت مخصص لسيرفر رسمي فقط')
         .setDescription(
-          `عذراً، هذا البوت مخصص حصرياً للعمل داخل سيرفر **GX eSports** ولا يعمل في السيرفرات الأخرى.\n\n` +
-          `🔹 **يمكنك تجربة البوت والانضمام إلى مجتمعنا الرسمي عبر الرابط التالي:**\n` +
-          `🔗 **[اضغط هنا للإنضمام إلى سيرفر GX eSports الرسمي](${SERVER_INVITE_LINK})**\n\n` +
-          `*⚠️ سيقوم البوت بمغادرة هذا السيرفر تلقائياً للحفاظ على الخصوصية.*`
+          `عذراً، هذا البوت مخصص حصرياً للعمل داخل سيرفر **GX eSports** (المعرف: \`${ALLOWED_GUILD_ID}\`) ولا يعمل في السيرفرات الأخرى.\n\n` +
+          `*⚠️ سيقوم البوت بمغادرة هذا السيرفر تلقائياً للحفاظ على الخصوصية والأمان.*`
         )
         .setFooter({ text: `GX eSports • الإصدار ${BOT_VERSION}`, iconURL: client.user?.displayAvatarURL() })
         .setTimestamp();
@@ -2428,7 +2424,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const embed = new EmbedBuilder()
           .setColor(0xED4245)
           .setTitle('⛔ غير مصرح')
-          .setDescription(`هذا البوت مخصص فقط لسيرفر **GX eSports**.\nرابط السيرفر: ${SERVER_INVITE_LINK}`)
+          .setDescription(`هذا البوت مخصص فقط لسيرفر **GX eSports** (المعرف: \`${ALLOWED_GUILD_ID}\`).`)
           .setFooter({ text: `الإصدار ${BOT_VERSION}` });
         await interaction.reply({ embeds: [embed], flags: [1 << 6] }).catch(() => {});
       }
