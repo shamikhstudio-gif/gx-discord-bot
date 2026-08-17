@@ -867,16 +867,91 @@ async function findOrCreateUntrustedRole(guild) {
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.ReadMessageHistory,
         PermissionFlagsBits.Connect,
-        PermissionFlagsBits.Speak
+        PermissionFlagsBits.Speak,
+        PermissionFlagsBits.UseVAD
       ],
-      reason: 'GX Security: Untrusted Restricted Member Role (View & Voice Only)'
+      reason: 'GX Security: Untrusted Restricted Member Role (View, Voice & Voice Activity Only)'
     }).catch(() => null);
 
     if (role) {
       console.log(`🛡️ [رتبة مقيدة] تم إنشاء وتأمين رتبة ${UNTRUSTED_ROLE_NAME} بنجاح.`);
     }
+  } else {
+    if (!role.permissions.has(PermissionFlagsBits.UseVAD)) {
+      await role.setPermissions([
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak,
+        PermissionFlagsBits.UseVAD
+      ]).catch(() => {});
+    }
   }
   return role;
+}
+
+/**
+ * ⚡ Checks if a user or member has permission to approve verification requests (OWNER, CEO, COO, or Server Owner).
+ */
+function isVerificationApprover(member, user) {
+  const u = user || member?.user;
+  if (!u) return false;
+  if (member?.guild?.ownerId === u.id) return true;
+  if (u.id === '1152686277255237663' || u.id === '1484535997893967980') return true;
+  const username = u.username?.toLowerCase() || '';
+  if (username === 'itszoki' || username === 'ice0090') return true;
+  if (member) {
+    if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+    const approverRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+    if (member.roles.cache.some((r) => approverRoleIds.includes(r.id))) return true;
+    const approverNames = ['owner', 'ceo', 'coo'];
+    if (member.roles.cache.some((r) => approverNames.some((n) => r.name.toLowerCase().trim().includes(n)))) return true;
+  }
+  return false;
+}
+
+/**
+ * 📩 Sends an interactive verification request to #log with approval buttons for OWNER, CEO, and COO.
+ */
+async function sendVerificationRequestToLog(guild, member) {
+  if (!guild || !member) return;
+
+  const logChannel = await getOrCreateLogChannel(guild);
+  if (!logChannel) return;
+
+  const approverPings = '<@&1538485406922838066> <@&1538485672795570196> <@&1538544110913454160>';
+
+  const embed = new EmbedBuilder()
+    .setColor(0xFEE75C)
+    .setAuthor({ name: '📩 طلب توثيق عضوية جديد | GX Security', iconURL: member.user.displayAvatarURL() })
+    .setTitle(`طلب ترقية وتوثيق: ${member.user.tag}`)
+    .setDescription(
+      `👤 **العضو:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+      `🆔 **المعرف (ID):** \`${member.id}\`\n` +
+      `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
+      `🔒 **الرتبة الحالية:** \`UNTRUSTED\` (مشاهدة وفويس فقط وممنوع من الكتابة)\n\n` +
+      `⚡ **صلاحية الموافقة:** مخصصة لـ **OWNER / CEO / COO**.\n` +
+      `👉 عند موافقة مسؤول واحد فقط، سيتم منح العضو رتبة **MEMBER** وسحب **UNTRUSTED** وتفعيل الكتابة فوراً.`
+    )
+    .setFooter({ text: `GX eSports Verification Engine • ${member.id}` })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`verify_approve_${member.id}`)
+      .setLabel('✅ موافقة ومنح MEMBER')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`verify_reject_${member.id}`)
+      .setLabel('❌ رفض الطلب')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await logChannel.send({
+    content: `📢 ${approverPings} **طلب توثيق عضوية جديد بحاجة لموافقة مسؤول واحد:**`,
+    embeds: [embed],
+    components: [row]
+  }).catch(() => {});
 }
 
 /**
@@ -1945,34 +2020,27 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
 
     for (const [, member] of humanMembers) {
       const isUntrusted = isUntrustedUser(member);
+      const hasAdminRole = hasAdminTierRole(member);
+      const isManager = isManagerMember(member);
+      const hasMemberRole = member.roles.cache.has(role.id);
+      const hasUntrustedRole = untrustedRole ? member.roles.cache.has(untrustedRole.id) : false;
 
-      // 0. Untrusted Member Isolation: strictly enforce UNTRUSTED role, strip MEMBER
+      // 0. Untrusted Member Isolation (specifically listed in untrusted_members.json):
       if (isUntrusted) {
-        if (untrustedRole && !member.roles.cache.has(untrustedRole.id)) {
+        if (untrustedRole && !hasUntrustedRole) {
           try {
             await member.roles.add(untrustedRole);
             console.log(`🛡️ [تقييد أمني] تم منح رتبة UNTRUSTED للعضو: ${member.user.tag}`);
           } catch {}
         }
-        if (member.roles.cache.has(role.id)) {
+        if (hasMemberRole) {
           try {
             await member.roles.remove(role);
             removedCount++;
           } catch {}
         }
         continue;
-      } else {
-        // If not untrusted but carries UNTRUSTED role -> Remove it
-        if (untrustedRole && member.roles.cache.has(untrustedRole.id)) {
-          try {
-            await member.roles.remove(untrustedRole);
-          } catch {}
-        }
       }
-
-      const hasAdminRole = hasAdminTierRole(member);
-      const isManager = isManagerMember(member);
-      const hasMemberRole = member.roles.cache.has(role.id);
 
       // 1. If user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN -> Ensure they have MANAGERS role
       if (hasAdminRole && managersRole && !member.roles.cache.has(managersRole.id)) {
@@ -1996,47 +2064,34 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
         }
       }
 
-      // 2. If Manager has MEMBER role -> REMOVE IT!
-      if ((isManager || hasAdminRole) && hasMemberRole) {
+      // 2. If Manager has MEMBER or UNTRUSTED role -> REMOVE IT!
+      if ((isManager || hasAdminRole) && (hasMemberRole || hasUntrustedRole)) {
         try {
-          if (botMember.roles.highest.comparePositionTo(role) > 0) {
+          if (hasMemberRole && botMember.roles.highest.comparePositionTo(role) > 0) {
             await member.roles.remove(role);
             removedCount++;
             console.log(`🗑️ [إزالة رتبة] تم بنجاح سحب رتبة "${role.name}" من العضو الإداري (${member.user.tag}) لحمله رتبة MANAGERS.`);
-
-            const logEmbed = new EmbedBuilder()
-              .setColor(0xED4245)
-              .setAuthor({ name: '👑 إزالة رتبة الأعضاء من الإدارة', iconURL: member.user.displayAvatarURL() })
-              .setDescription(`تم سحب رتبة <@&${role.id}> من الإداري <@${member.id}> (\`${member.user.tag}\`) لحمله رتبة **MANAGERS** 🛡️.`)
-              .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
-              .setTimestamp();
-            await sendToLogChannel(guild, logEmbed);
-            await new Promise((res) => setTimeout(res, 400));
+          }
+          if (hasUntrustedRole && untrustedRole && botMember.roles.highest.comparePositionTo(untrustedRole) > 0) {
+            await member.roles.remove(untrustedRole);
           }
         } catch (err) {
           console.error(`❌ تعذر إزالة الرتبة من الإداري ${member.user.tag}:`, err.message);
         }
       }
 
-      // 3. If Regular Member doesn't have MEMBER role -> ADD IT!
-      else if (!isManager && !hasAdminRole && !hasMemberRole) {
+      // 3. Regular member without MEMBER and without UNTRUSTED -> Give UNTRUSTED as default and send verification request
+      else if (!isManager && !hasAdminRole && !hasMemberRole && !hasUntrustedRole) {
         try {
-          if (botMember.roles.highest.comparePositionTo(role) > 0) {
-            await member.roles.add(role);
+          if (untrustedRole && botMember.roles.highest.comparePositionTo(untrustedRole) > 0) {
+            await member.roles.add(untrustedRole);
             givenCount++;
-            console.log(`✅ [ترقية عضو] تم إعطاء رتبة "${role.name}" للعضو: ${member.user.tag}`);
-
-            const logEmbed = new EmbedBuilder()
-              .setColor(0x57F287)
-              .setAuthor({ name: '👑 ترقية عضو تلقائياً', iconURL: member.user.displayAvatarURL() })
-              .setDescription(`تم منح رتبة <@&${role.id}> للعضو <@${member.id}> (\`${member.user.tag}\`).`)
-              .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
-              .setTimestamp();
-            await sendToLogChannel(guild, logEmbed);
+            console.log(`🛡️ [رتبة افتراضية] تم تعيين رتبة UNTRUSTED للعضو الجديد: ${member.user.tag}`);
+            await sendVerificationRequestToLog(guild, member);
             await new Promise((res) => setTimeout(res, 400));
           }
         } catch (err) {
-          console.error(`❌ تعذر إعطاء الرتبة للعضو ${member.user.tag}:`, err.message);
+          console.error(`❌ تعذر إعطاء رتبة UNTRUSTED للعضو ${member.user.tag}:`, err.message);
         }
       }
     }
@@ -2499,31 +2554,14 @@ client.on(Events.GuildMemberAdd, async (member) => {
   try {
     if (member.partial) await member.fetch();
 
-    // Check if user is in untrusted list
-    if (isUntrustedUser(member)) {
-      const untrustedRole = await findOrCreateUntrustedRole(member.guild);
-      if (untrustedRole) {
-        await member.roles.add(untrustedRole).catch(() => {});
-        console.log(`🛡️ [انضمام عضو غير موثوق] تم تقييد العضو ${member.user.tag} برتبة UNTRUSTED ومنعه من الكتابة.`);
-
-        const logEmbed = new EmbedBuilder()
-          .setColor(0xED4245)
-          .setAuthor({ name: '⛔ تقييد عضو غير موثوق تلقائياً', iconURL: member.user.displayAvatarURL() })
-          .setDescription(`انضم العضو <@${member.id}> (\`${member.user.tag}\`) وهو مسجل في قائمة غير الموثوقين. تم منحه رتبة <@&${untrustedRole.id}> وتقييده ومنعه من الكتابة.`)
-          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
-          .setTimestamp();
-        await sendToLogChannel(member.guild, logEmbed);
-      }
-      return;
-    }
-
-    const role = findAutoRole(member.guild);
+    const untrustedRole = await findOrCreateUntrustedRole(member.guild);
     const botMember = member.guild.members.me;
 
-    if (role && botMember?.permissions.has(PermissionFlagsBits.ManageRoles) && botMember.roles.highest.comparePositionTo(role) > 0) {
-      if (!member.user.bot && !isManagerMember(member)) {
-        await member.roles.add(role);
-        console.log(`✅ [إعطاء رتبة] تم بنجاح منح رتبة "${role.name}" للعضو ${member.user.tag}!`);
+    // Give default UNTRUSTED role to new human members
+    if (!member.user.bot && !isManagerMember(member)) {
+      if (untrustedRole && botMember?.permissions.has(PermissionFlagsBits.ManageRoles) && botMember.roles.highest.comparePositionTo(untrustedRole) > 0) {
+        await member.roles.add(untrustedRole);
+        console.log(`🛡️ [رتبة افتراضية للأعضاء الجدد] تم بنجاح منح رتبة UNTRUSTED للعضو ${member.user.tag}!`);
       }
     }
 
@@ -2536,17 +2574,18 @@ client.on(Events.GuildMemberAdd, async (member) => {
         saveWelcomedMembers(welcomedList);
       }
       await sendSecurityOnboardingDM(member);
+      await sendVerificationRequestToLog(member.guild, member);
     }
 
     // 2. Audit Log
     const isManager = isManagerMember(member);
     const logEmbed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setAuthor({ name: '📥 انضمام عضو جديد وترقيته', iconURL: member.user.displayAvatarURL() })
+      .setColor(0xFEE75C)
+      .setAuthor({ name: '📥 انضمام عضو جديد (قيد التوثيق)', iconURL: member.user.displayAvatarURL() })
       .addFields(
         { name: '👤 العضو', value: `<@${member.id}> (\`${member.user.tag}\`)`, inline: true },
         { name: '🆔 المعرف (ID)', value: `\`${member.id}\``, inline: true },
-        { name: '👑 الرتبة الممنوحة', value: isManager ? '`مستثنى (يحمل رتبة MANAGERS)` 🛡️' : (role ? `<@&${role.id}>` : 'لا توجد'), inline: true },
+        { name: '👑 الرتبة الممنوحة', value: isManager ? '`مستثنى (يحمل رتبة MANAGERS)` 🛡️' : (untrustedRole ? `<@&${untrustedRole.id}> (افتراضية)` : 'لا توجد'), inline: true },
         { name: '📅 تاريخ إنشاء الحساب', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
         { name: '👥 عدد الأعضاء الحالي', value: `\`${member.guild.memberCount}\` عضو`, inline: true }
       )
@@ -3733,6 +3772,126 @@ client.on(Events.InteractionCreate, async (interaction) => {
           } catch {}
         }, 5000);
         return;
+      }
+
+      // 8. زر قبول توثيق العضوية (خاص برتب OWNER / CEO / COO بموافقة مسؤول واحد فقط)
+      else if (interaction.customId.startsWith('verify_approve_')) {
+        const targetId = interaction.customId.replace('verify_approve_', '');
+
+        if (!isVerificationApprover(interaction.member, interaction.user)) {
+          return interaction.reply({
+            content: '❌ **عذراً، الموافقة على طلبات التوثيق مقتصرة فقط على رتب (OWNER / CEO / COO)!**',
+            ephemeral: true
+          });
+        }
+
+        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+        if (!targetMember) {
+          return interaction.reply({ content: '❌ لم يتم العثور على العضو في السيرفر (ربما غادر السيرفر).', ephemeral: true });
+        }
+
+        const memberRole = findAutoRole(interaction.guild);
+        const untrustedRole = await findOrCreateUntrustedRole(interaction.guild);
+
+        if (untrustedRole && targetMember.roles.cache.has(untrustedRole.id)) {
+          await targetMember.roles.remove(untrustedRole).catch(() => {});
+        }
+        if (memberRole && !targetMember.roles.cache.has(memberRole.id)) {
+          await targetMember.roles.add(memberRole).catch(() => {});
+        }
+
+        // Remove from untrusted_members.json if present
+        try {
+          let untrustedList = loadUntrustedMembers();
+          const username = targetMember.user.username.toLowerCase();
+          untrustedList = untrustedList.filter((entry) => {
+            const e = String(entry).toLowerCase().replace(/^@/, '');
+            return e !== targetId && e !== username;
+          });
+          saveUntrustedMembers(untrustedList);
+        } catch {}
+
+        const doneRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`approved_done_${targetId}`)
+            .setLabel(`✅ تم التوثيق بواسطة: ${interaction.user.displayName}`)
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(true)
+        );
+
+        await interaction.update({ components: [doneRow] }).catch(() => {});
+
+        // Direct DM to the approved member
+        const approvedDMEmbed = new EmbedBuilder()
+          .setColor(0x57F287)
+          .setAuthor({ name: '🎉 تم قبول التوثيق بنجاح | GX eSports', iconURL: interaction.guild.iconURL() })
+          .setTitle('👑 تهانينا! تمت ترقيتك وتفعيل حسابك بالكامل')
+          .setDescription(
+            `أهلاً بك <@${targetId}>! تمت مراجعة طلبك والموافقة على توثيق حسابك بواسطة الإدارة العليا (<@${interaction.user.id}>).\n\n` +
+            `✅ **تم منحك رتبة:** <@&${memberRole ? memberRole.id : ''}>\n` +
+            `🗑️ **تمت إزالة رتبة:** \`UNTRUSTED\`\n` +
+            `💬 **أصبح بإمكانك الآن الكتابة والتفاعل والمشاركة في جميع قنوات السيرفر بحرية.**\n\n` +
+            `نتمنى لك أوقاتاً ممتعة معنا في **GX eSports**! 🎮🔥`
+          )
+          .setFooter({ text: `GX eSports Security System • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+
+        await targetMember.send({ embeds: [approvedDMEmbed] }).catch(() => {});
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0x57F287)
+          .setAuthor({ name: '✅ قبول توثيق عضو', iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`قام المسؤول <@${interaction.user.id}> بالموافقة على توثيق <@${targetId}> (\`${targetMember.user.tag}\`) ومنحه رتبة **MEMBER** وسحب **UNTRUSTED** وتفعيل صلاحية الكتابة.`)
+          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+        await sendToLogChannel(interaction.guild, logEmbed);
+
+        return interaction.followUp({
+          content: `✅ **تم بنجاح توثيق العضو <@${targetId}> ومنحه رتبة MEMBER وإلغاء UNTRUSTED!**`,
+          ephemeral: true
+        });
+      }
+
+      // 9. زر رفض توثيق العضوية
+      else if (interaction.customId.startsWith('verify_reject_')) {
+        const targetId = interaction.customId.replace('verify_reject_', '');
+
+        if (!isVerificationApprover(interaction.member, interaction.user)) {
+          return interaction.reply({
+            content: '❌ **عذراً، رفض طلبات التوثيق مقتصر فقط على رتب (OWNER / CEO / COO)!**',
+            ephemeral: true
+          });
+        }
+
+        const rejectRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`rejected_done_${targetId}`)
+            .setLabel(`❌ تم الرفض بواسطة: ${interaction.user.displayName}`)
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(true)
+        );
+
+        await interaction.update({ components: [rejectRow] }).catch(() => {});
+
+        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+        if (targetMember) {
+          const rejectDMEmbed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setAuthor({ name: '❌ طلب التوثيق | GX eSports', iconURL: interaction.guild.iconURL() })
+            .setTitle('تنبيه بخصوص طلب توثيق العضوية')
+            .setDescription(
+              `عزيزنا <@${targetId}>، تم رفض طلب التوثيق الخاص بك حالياً من قِبل الإدارة العليا.\n` +
+              `ستبقى رتبتك كما هي \`UNTRUSTED\` (يمكنك مشاهدة القنوات ودخول الرومات الصوتية فقط).`
+            )
+            .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+          await targetMember.send({ embeds: [rejectDMEmbed] }).catch(() => {});
+        }
+
+        return interaction.followUp({
+          content: `❌ **تم رفض طلب التوثيق للعضو <@${targetId}>.**`,
+          ephemeral: true
+        });
       }
     }
 
