@@ -640,6 +640,52 @@
     ]
   },
   {
+    "name": "طوارئ_تفعيل",
+    "description": "🚨 تفعيل بروتوكول الدفاع العسكري وقفل كافة الشاتات والفويسات (حصري لـ OWNER / CEO / COO)",
+    "Public_Command": false,
+    "category": "security",
+    "permission": "Administrator",
+    "options": [
+      {
+        "name": "السبب",
+        "description": "سبب تفعيل بروتوكول الطوارئ العسكري",
+        "type": "STRING",
+        "required": false
+      },
+      {
+        "name": "المدة_بالدقائق",
+        "description": "مدة الطوارئ بالدقائق للرفع التلقائي (اختياري - افتراضي: يدوي)",
+        "type": "INTEGER",
+        "required": false,
+        "minValue": 1,
+        "maxValue": 1440
+      }
+    ]
+  },
+  {
+    "name": "طوارئ_إلغاء",
+    "description": "🛡️ إنهاء حالة الطوارئ العسكرية وإعادة فتح كافة القنوات والرومات (حصري لـ OWNER / CEO / COO)",
+    "Public_Command": false,
+    "category": "security",
+    "permission": "Administrator",
+    "options": [
+      {
+        "name": "السبب",
+        "description": "سبب رفع حالة الطوارئ وتأمين السيرفر",
+        "type": "STRING",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "طوارئ_حالة",
+    "description": "📊 عرض تقرير الحالة الأمنية وبروتوكول الدفاع العسكري الحالي للسيرفر",
+    "Public_Command": false,
+    "category": "security",
+    "permission": "Administrator",
+    "options": []
+  },
+  {
     "name": "مساعدة",
     "description": "عرض دليل وقائمة جميع أوامر البوت العامة والإدارية",
     "Public_Command": true,
