@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: gx-discord-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: ALLOWED_GUILD_ID
+        value: "1537461174222725120"
+      - key: AUTO_ROLE_NAME
+        value: "MEMBER"
+      - key: AUTO_ROLE_ID
+        value: "1538486805211389982"
+      - key: WELCOME_CHANNEL_ID
+        value: "1538560876339265667"
+      - key: LEAVE_CHANNEL_ID
+        value: "1538561457912946788"
