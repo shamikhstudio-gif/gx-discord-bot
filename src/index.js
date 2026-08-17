@@ -411,7 +411,9 @@ function setAuthorizedMove() {
   }, 3500);
 }
 
-/**
+// ----------------------------------------------------
+// 👑 Admin Roles & Managers System
+// ----------------------------------------------------
 const ADMIN_TIER_ROLE_NAMES = [
   'owner',
   'ceo',
