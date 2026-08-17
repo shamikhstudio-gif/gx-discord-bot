@@ -1659,12 +1659,10 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
 
     // B. Anti-Disconnect (Disconnected manually without /مغادرة by owner)
     if (oldState.channelId && !newState.channelId) {
-      if (!isAuthorizedBotMove && currentVoiceOwner) {
-        const previousChannel = oldState.channel || newState.guild.channels.cache.get(currentVoiceOwner.channelId);
-        const ownerMember = previousChannel ? previousChannel.members.get(currentVoiceOwner.userId) : null;
-
-        if (previousChannel && ownerMember) {
-          console.warn(`🛡️ [حماية الفويس] تم رصد فصل يدوي غير مصرح به للبوت أثناء تواجد مالكه ${currentVoiceOwner.userTag}. جارٍ إعادة الاتصال فوراً...`);
+      if (!isAuthorizedBotMove) {
+        const previousChannel = oldState.channel || newState.guild.channels.cache.get(currentVoiceOwner?.channelId);
+        if (previousChannel) {
+          console.warn(`🛡️ [حماية الفويس] تم رصد محاولة فصل يدوي للبوت. جارٍ إعادة الاتصال فوراً...`);
 
           setAuthorizedMove();
           connectToVoiceChannel(previousChannel);
@@ -1677,8 +1675,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
             .setTitle('⛔ منع الفصل اليدوي للبوت (Anti-Disconnect Protection)')
             .setDescription(
               `تم رصد محاولة فصل يدوي للبوت من قِبل ${executor ? `<@${executor.id}> (\`${executor.tag}\`)` : 'أحد الأعضاء'}.\n\n` +
-              `🔒 **البوت مملوك حصرياً للمستدعي الأول <@${currentVoiceOwner.userId}> ولن يغادر طالما مالكه متواجد بالروم!**\n` +
-              `✅ تمت إعادة اتصال البوت وتشغيل الصوت فوراً في: <#${previousChannel.id}>.`
+              `🔒 **البوت محصن ضد الفصل اليدوي وتمت إعادة اتصاله فوراً بالروم:** <#${previousChannel.id}>.`
             )
             .setFooter({ text: `GX eSports Voice Security • الإصدار ${BOT_VERSION}` })
             .setTimestamp();
@@ -1686,6 +1683,56 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
           await sendToLogChannel(newState.guild, reconEmbed);
           return;
         }
+      }
+    }
+
+    // C. Anti-Server Mute (Auto Unmute Bot)
+    if (newState.serverMute) {
+      try {
+        await newState.setMute(false, 'حصانة أمنية: البوت محصن ضد الكتم');
+        console.warn('🛡️ [حماية الفويس] تم إلغاء كتم البوت الإجباري فوراً.');
+
+        const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate);
+
+        const muteEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({ name: '🛡️ نظام حماية الفويس | GX eSports', iconURL: client.user?.displayAvatarURL() })
+          .setTitle('⛔ منع الكتم الإجباري للبوت (Anti-Server Mute)')
+          .setDescription(
+            `تم رصد محاولة كتم البوت إجبارياً من قِبل ${executor ? `<@${executor.id}> (\`${executor.tag}\`)` : 'أحد الأعضاء'}.\n\n` +
+            `🔒 **قام البوت بفك الكتم عن نفسه تلقائياً وبشكل فوري لضمان استمرار البث الصوتي.**`
+          )
+          .setFooter({ text: `GX eSports Voice Security • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+
+        await sendToLogChannel(newState.guild, muteEmbed);
+      } catch (err) {
+        console.error('خطأ في إلغاء كتم البوت:', err.message);
+      }
+    }
+
+    // D. Anti-Server Deafen (Auto Undeafen Bot)
+    if (newState.serverDeaf) {
+      try {
+        await newState.setDeaf(false, 'حصانة أمنية: البوت محصن ضد التصميت');
+        console.warn('🛡️ [حماية الفويس] تم إلغاء تصميت البوت الإجباري فوراً.');
+
+        const executor = await fetchAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate);
+
+        const deafEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({ name: '🛡️ نظام حماية الفويس | GX eSports', iconURL: client.user?.displayAvatarURL() })
+          .setTitle('⛔ منع التصميت الإجباري للبوت (Anti-Server Deafen)')
+          .setDescription(
+            `تم رصد محاولة تصميت البوت إجبارياً من قِبل ${executor ? `<@${executor.id}> (\`${executor.tag}\`)` : 'أحد الأعضاء'}.\n\n` +
+            `🔒 **قام البوت بفك التصميت عن نفسه تلقائياً وبشكل فوري.**`
+          )
+          .setFooter({ text: `GX eSports Voice Security • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+
+        await sendToLogChannel(newState.guild, deafEmbed);
+      } catch (err) {
+        console.error('خطأ في إلغاء تصميت البوت:', err.message);
       }
     }
   }
@@ -2814,6 +2861,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const targetUser = interaction.options.getUser('المستخدم');
       const reason = interaction.options.getString('السبب') || 'لم يتم تحديد سبب';
 
+      if (targetUser.id === client.user.id) {
+        return interaction.reply({ content: '❌ **لا يمكن طرد البوت من السيرفر! البوت محصن ومحمي أمنياً.**', flags: [1 << 6] });
+      }
+      if (targetUser.id === interaction.guild.ownerId) {
+        return interaction.reply({ content: '❌ **لا يمكن طرد مالك السيرفر!**', flags: [1 << 6] });
+      }
+
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
         return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', flags: [1 << 6] });
@@ -2841,6 +2895,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const targetUser = interaction.options.getUser('المستخدم');
       const reason = interaction.options.getString('السبب') || 'لم يتم تحديد سبب';
       const days = interaction.options.getInteger('مسح_الرسائل_أيام') || 0;
+
+      if (targetUser.id === client.user.id) {
+        return interaction.reply({ content: '❌ **لا يمكن حظر البوت من السيرفر! البوت محصن ومحمي أمنياً.**', flags: [1 << 6] });
+      }
+      if (targetUser.id === interaction.guild.ownerId) {
+        return interaction.reply({ content: '❌ **لا يمكن حظر مالك السيرفر!**', flags: [1 << 6] });
+      }
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       const botMember = interaction.guild.members.me;
@@ -2890,6 +2951,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const targetUser = interaction.options.getUser('المستخدم');
       const durationSeconds = parseInt(interaction.options.getString('المدة'));
       const reason = interaction.options.getString('السبب') || 'مخالفة القوانين';
+
+      if (targetUser.id === client.user.id) {
+        return interaction.reply({ content: '❌ **لا يمكن عزل البوت! البوت محصن ومحمي أمنياً.**', flags: [1 << 6] });
+      }
+      if (targetUser.id === interaction.guild.ownerId) {
+        return interaction.reply({ content: '❌ **لا يمكن عزل مالك السيرفر!**', flags: [1 << 6] });
+      }
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
