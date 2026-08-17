@@ -52,6 +52,8 @@ const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
 const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
+const EVENT_CHANNEL_ID = '1538600505012387860';
+const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
 const COMMANDS_CONFIG_FILE = path.resolve('src', 'commands.json');
 
 function safeWriteJson(filePath, data) {
@@ -198,6 +200,116 @@ function loadInfractionsMeta() {
 
 function saveInfractionsMeta(data) {
   safeWriteJson(INFRACTIONS_META_FILE, data);
+}
+
+function loadActiveEvent() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(ACTIVE_EVENT_FILE)) {
+      return JSON.parse(fs.readFileSync(ACTIVE_EVENT_FILE, 'utf-8'));
+    }
+  } catch {}
+  return null;
+}
+
+function saveActiveEvent(eventData) {
+  if (!eventData) {
+    try {
+      if (fs.existsSync(ACTIVE_EVENT_FILE)) fs.unlinkSync(ACTIVE_EVENT_FILE);
+    } catch {}
+  } else {
+    safeWriteJson(ACTIVE_EVENT_FILE, eventData);
+  }
+}
+
+/**
+ * 🎨 Renders the rich interactive event embed for #🎉・الـفـعـالـيـة
+ */
+function renderEventEmbed(eventData, clientUser) {
+  const count = eventData.participants ? eventData.participants.length : 0;
+  const maxStr = eventData.maxParticipants ? ` / ${eventData.maxParticipants}` : '';
+  const statusColor = eventData.status === 'started' ? 0x57F287 : 0xFEE75C;
+  const statusText = eventData.status === 'started' ? '🟢 الفعالية بدأت الآن!' : '🟡 باب التسجيل مفتوح';
+
+  const embed = new EmbedBuilder()
+    .setColor(statusColor)
+    .setAuthor({ name: '🎉 فعالية جديدة | GX eSports', iconURL: clientUser?.displayAvatarURL() })
+    .setTitle(`🔥 ${eventData.title}`)
+    .setDescription(
+      `${eventData.description}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📊 **حالة الفعالية:** ${statusText}\n` +
+      `👥 **المشاركون المسجلون:** \`${count}${maxStr}\` لاعب\n` +
+      (eventData.prize ? `🎁 **الجائزة:** **${eventData.prize}** 🏆\n` : '') +
+      (eventData.voiceChannelId ? `🎙️ **الروم الصوتي:** <#${eventData.voiceChannelId}>\n` : '') +
+      `👑 **المنظم:** <@${eventData.hostId}>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔹 *اضغط على زر **🎟️ انضمام للفعالية** بالأسفل لتسجيل اسمك والمشاركة!*`
+    )
+    .setFooter({ text: `GX eSports Event System • المعرف: ${eventData.id} • الإصدار ${BOT_VERSION}` })
+    .setTimestamp(eventData.createdAt);
+
+  return embed;
+}
+
+/**
+ * 🔘 Renders the action buttons for the event card
+ */
+function renderEventButtons(eventData) {
+  const isStarted = eventData.status === 'started';
+  const isFull = eventData.maxParticipants && eventData.participants.length >= eventData.maxParticipants;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`event_join_${eventData.id}`)
+      .setLabel('🎟️ انضمام للفعالية')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(isStarted || isFull),
+    new ButtonBuilder()
+      .setCustomId(`event_leave_${eventData.id}`)
+      .setLabel('🚪 انسحاب')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(isStarted),
+    new ButtonBuilder()
+      .setCustomId(`event_list_${eventData.id}`)
+      .setLabel(`👥 المشاركون (${eventData.participants ? eventData.participants.length : 0})`)
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+/**
+ * 🔄 Ensures the active event panel is posted and synced in #🎉・الـفـعـالـيـة
+ */
+async function ensureEventPanel(guild) {
+  if (!guild) return null;
+  const eventData = loadActiveEvent();
+  if (!eventData || eventData.status === 'ended') return null;
+
+  const eventChannel = guild.channels.cache.get(EVENT_CHANNEL_ID);
+  if (!eventChannel) return null;
+
+  const embed = renderEventEmbed(eventData, client.user);
+  const row = renderEventButtons(eventData);
+
+  if (eventData.messageId) {
+    const existingMsg = await eventChannel.messages.fetch(eventData.messageId).catch(() => null);
+    if (existingMsg) {
+      await existingMsg.edit({ embeds: [embed], components: [row] }).catch(() => null);
+      return existingMsg;
+    }
+  }
+
+  const newMsg = await eventChannel.send({
+    content: `🎉 @everyone **فعالية رسمية جديدة في سيرفر GX eSports!**`,
+    embeds: [embed],
+    components: [row]
+  }).catch(() => null);
+
+  if (newMsg) {
+    eventData.messageId = newMsg.id;
+    saveActiveEvent(eventData);
+  }
+  return newMsg;
 }
 
 /**
@@ -1663,6 +1775,7 @@ client.once(Events.ClientReady, async (c) => {
       await getOrCreateLogChannel(guild);
       await getOrCreateSystemStatusChannel(guild);
       await ensurePermanentTicketPanel(guild);
+      await ensureEventPanel(guild);
       await syncActiveTicketsMembers(guild);
       await syncAllMembersRole(guild, true);
       await welcomeExistingMembersSequentially(guild);
@@ -2369,6 +2482,49 @@ client.on(Events.MessageDelete, async (message) => {
     }, 1200);
   }
 
+  // 2. فحص ما إذا كانت الرسالة المحذوفة هي رسالة الفعالية لإعادة تثبيتها فوراً وإرسال التحذير للحاذف
+  const activeEvent = loadActiveEvent();
+  if (activeEvent && (message.id === activeEvent.messageId || (message.channel && message.channel.id === EVENT_CHANNEL_ID && message.author?.id === client.user?.id))) {
+    console.log('⚠️ [حذف رسالة الفعالية] تم رصد محاولة حذف رسالة الفعالية! جارٍ إعادة تثبيتها فوراً...');
+    setTimeout(() => {
+      ensureEventPanel(message.guild);
+    }, 1000);
+
+    // معرفة الشخص الذي قام بحذف الرسالة
+    fetchAuditExecutor(message.guild, AuditLogEvent.MessageDelete).then(async (executor) => {
+      if (executor && executor.id !== client.user.id) {
+        try {
+          const dmUser = await client.users.fetch(executor.id).catch(() => null);
+          if (dmUser && !dmUser.bot) {
+            const deleteWarningEmbed = new EmbedBuilder()
+              .setColor(0xED4245)
+              .setAuthor({ name: '⚠️ تحذير أمني خاص | GX eSports', iconURL: client.user?.displayAvatarURL() })
+              .setTitle('🚫 محاولة حذف رسالة الفعالية الرسمية')
+              .setDescription('كلب ابن كلب حقير ابن حقير ليش تنكح الرسالة حيوان')
+              .setImage('https://cdn.discordapp.com/attachments/1538578678789840897/anti_delete_warning.png')
+              .setFooter({ text: `GX eSports Security System • نظام الحماية التلقائي` })
+              .setTimestamp();
+
+            await dmUser.send({
+              content: 'كلب ابن كلب حقير ابن حقير ليش تنكح الرسالة حيوان',
+              embeds: [deleteWarningEmbed]
+            }).catch(() => {});
+          }
+        } catch (err) {
+          console.error('خطأ في إرسال رسالة الخاص للحاذف:', err.message);
+        }
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({ name: '🛡️ تصدي لحذف رسالة الفعالية', iconURL: executor.displayAvatarURL() })
+          .setDescription(`قام <@${executor.id}> (\`${executor.tag}\`) بمحاولة حذف رسالة الفعالية في <#${EVENT_CHANNEL_ID}>.\n🔒 **قام البوت بإعادة تثبيت الفعالية فوراً وإرسال التنبيه للحاذف في الخاص.**`)
+          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+        await sendToLogChannel(message.guild, logEmbed);
+      }
+    }).catch(() => {});
+  }
+
   if (message.author?.bot) return;
 
   const channelName = message.channel ? `#${message.channel.name}` : 'قناة غير معروفة';
@@ -2745,11 +2901,92 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     // ----------------------------------------------------
-    // 🎫 BUTTON INTERACTIONS HANDLER (Tickets)
+    // 🎫 BUTTON INTERACTIONS HANDLER (Tickets & Events)
     // ----------------------------------------------------
     if (interaction.isButton()) {
+      // ====================================================
+      // 🎉 EVENT BUTTON INTERACTIONS (انضمام / انسحاب / مشاركون)
+      // ====================================================
+      if (interaction.customId.startsWith('event_join_')) {
+        const eventId = interaction.customId.replace('event_join_', '');
+        const eventData = loadActiveEvent();
+        if (!eventData || eventData.id !== eventId || eventData.status === 'ended') {
+          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً للتسجيل فيها.', flags: [1 << 6] });
+        }
+        if (eventData.status === 'started') {
+          return interaction.reply({ content: '⛔ تم إغلاق باب التسجيل لأن الفعالية قد بدأت بالفعل!', flags: [1 << 6] });
+        }
+        if (eventData.participants && eventData.participants.includes(interaction.user.id)) {
+          return interaction.reply({ content: 'ℹ️ أنت مسجل بالفعل في هذه الفعالية! 🎉', flags: [1 << 6] });
+        }
+        if (eventData.maxParticipants && eventData.participants && eventData.participants.length >= eventData.maxParticipants) {
+          return interaction.reply({ content: `⛔ اكتمل العدد الأقصى للمشاركين في هذه الفعالية (${eventData.maxParticipants} مشارك)!`, flags: [1 << 6] });
+        }
+
+        if (!eventData.participants) eventData.participants = [];
+        eventData.participants.push(interaction.user.id);
+        saveActiveEvent(eventData);
+
+        const eventEmbed = renderEventEmbed(eventData, client.user);
+        const eventRow = renderEventButtons(eventData);
+        await interaction.update({ embeds: [eventEmbed], components: [eventRow] }).catch(() => {});
+
+        return interaction.followUp({
+          content: `🎉 **أهلاً بك <@${interaction.user.id}>!** تم تسجيلك بنجاح في فعالية **${eventData.title}**! ترقب موعد البدء.`,
+          flags: [1 << 6]
+        }).catch(() => {});
+      }
+
+      else if (interaction.customId.startsWith('event_leave_')) {
+        const eventId = interaction.customId.replace('event_leave_', '');
+        const eventData = loadActiveEvent();
+        if (!eventData || eventData.id !== eventId || eventData.status === 'ended') {
+          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', flags: [1 << 6] });
+        }
+        if (eventData.status === 'started') {
+          return interaction.reply({ content: '⛔ لا يمكن الانسحاب بعد بدء الفعالية!', flags: [1 << 6] });
+        }
+        if (!eventData.participants || !eventData.participants.includes(interaction.user.id)) {
+          return interaction.reply({ content: 'ℹ️ أنت لست مسجلاً في هذه الفعالية بالأصل.', flags: [1 << 6] });
+        }
+
+        eventData.participants = eventData.participants.filter((id) => id !== interaction.user.id);
+        saveActiveEvent(eventData);
+
+        const eventEmbed = renderEventEmbed(eventData, client.user);
+        const eventRow = renderEventButtons(eventData);
+        await interaction.update({ embeds: [eventEmbed], components: [eventRow] }).catch(() => {});
+
+        return interaction.followUp({
+          content: `🚪 تم إلغاء تسجيلك وانسحابك من الفعالية بنجاح.`,
+          flags: [1 << 6]
+        }).catch(() => {});
+      }
+
+      else if (interaction.customId.startsWith('event_list_')) {
+        const eventData = loadActiveEvent();
+        if (!eventData || eventData.status === 'ended') {
+          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', flags: [1 << 6] });
+        }
+
+        const count = eventData.participants ? eventData.participants.length : 0;
+        if (count === 0) {
+          return interaction.reply({ content: '📋 لم يسجل أي مشارك حتى الآن في الفعالية!', flags: [1 << 6] });
+        }
+
+        const participantsList = eventData.participants.map((id, index) => `${index + 1}. <@${id}> (\`${id}\`)`).join('\n');
+
+        const listEmbed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle(`👥 قائمة المشاركين في فعالية: ${eventData.title}`)
+          .setDescription(`إجمالي المشاركين المسجلين: **${count}**\n\n${participantsList.length > 3900 ? participantsList.slice(0, 3900) + '...' : participantsList}`)
+          .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` });
+
+        return interaction.reply({ embeds: [listEmbed], flags: [1 << 6] });
+      }
+
       // 1. زر فتح تذكرة دعم فني (عرض نافذة إدخال خاصة ومباشرة)
-      if (interaction.customId === 'open_ticket_btn') {
+      else if (interaction.customId === 'open_ticket_btn') {
         const modal = new ModalBuilder()
           .setCustomId('ticket_creation_modal')
           .setTitle('🎫 فتح تذكرة دعم فني | GX eSports');
@@ -4315,6 +4552,230 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+    }
+
+    // 37. أمر /فعالية_إنشاء
+    else if (commandName === 'فعالية_إنشاء') {
+      if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
+          flags: [1 << 6]
+        });
+      }
+
+      const title = interaction.options.getString('اسم_الفعالية');
+      const details = interaction.options.getString('التفاصيل');
+      const prize = interaction.options.getString('الجائزة'); // optional
+      const maxParticipants = interaction.options.getInteger('الحد_الأقصى'); // optional
+      const voiceChannel = interaction.options.getChannel('الروم_الصوتي'); // optional
+
+      const eventId = `ev_${Date.now()}`;
+      const eventData = {
+        id: eventId,
+        title,
+        description: details,
+        prize: prize || null,
+        maxParticipants: maxParticipants || null,
+        voiceChannelId: voiceChannel ? voiceChannel.id : null,
+        hostId: interaction.user.id,
+        hostTag: interaction.user.tag,
+        status: 'active',
+        participants: [],
+        createdAt: Date.now(),
+        messageId: null
+      };
+
+      saveActiveEvent(eventData);
+
+      await interaction.deferReply({ flags: [1 << 6] });
+      const eventMsg = await ensureEventPanel(interaction.guild);
+
+      if (eventMsg) {
+        await interaction.editReply({
+          content: `✅ **تم إنشاء ونشر الفعالية بنجاح في القناة <#${EVENT_CHANNEL_ID}>!**\n📌 رابط الرسالة: ${eventMsg.url}`
+        });
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0x57F287)
+          .setAuthor({ name: '🎉 إنشاء فعالية جديدة', iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`قام المنظم <@${interaction.user.id}> بإنشاء فعالية جديدة بعنوان: **${title}** في <#${EVENT_CHANNEL_ID}>.`)
+          .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+        await sendToLogChannel(interaction.guild, logEmbed);
+      } else {
+        await interaction.editReply({
+          content: `❌ تعذر نشر الفعالية في القناة <#${EVENT_CHANNEL_ID}>. يرجى التأكد من صلاحيات البوت في القناة.`
+        });
+      }
+    }
+
+    // 38. أمر /فعالية_بدء
+    else if (commandName === 'فعالية_بدء') {
+      if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
+          flags: [1 << 6]
+        });
+      }
+
+      const eventData = loadActiveEvent();
+      if (!eventData || eventData.status === 'ended') {
+        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لبدئها.', flags: [1 << 6] });
+      }
+
+      if (eventData.status === 'started') {
+        return interaction.reply({ content: 'ℹ️ الفعالية بدأت بالفعل مسبقاً!', flags: [1 << 6] });
+      }
+
+      eventData.status = 'started';
+      saveActiveEvent(eventData);
+
+      const eventChannel = interaction.guild.channels.cache.get(EVENT_CHANNEL_ID);
+      await ensureEventPanel(interaction.guild);
+
+      const participantsPings = eventData.participants && eventData.participants.length > 0
+        ? eventData.participants.map((id) => `<@${id}>`).join(' ')
+        : 'الجميع';
+
+      if (eventChannel) {
+        await eventChannel.send({
+          content: `🚀 @everyone **بدأت الفعالية رسمياً الآن: ${eventData.title}!**\n👥 **المشاركون المسجلون:** ${participantsPings}\n` +
+            (eventData.voiceChannelId ? `🎙️ **يرجى من جميع المشاركين الانضمام للروم الصوتي:** <#${eventData.voiceChannelId}>` : '')
+        });
+      }
+
+      await interaction.reply({
+        content: `🚀 **تم إعلان بدء الفعالية وإشعار جميع المشاركين في <#${EVENT_CHANNEL_ID}>!**`,
+        flags: [1 << 6]
+      });
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🚀 بدء الفعالية', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام <@${interaction.user.id}> بإعلان بدء الفعالية: **${eventData.title}** بمشاركة **${eventData.participants ? eventData.participants.length : 0}** لاعب.`)
+        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(interaction.guild, logEmbed);
+    }
+
+    // 39. أمر /فعالية_فائز
+    else if (commandName === 'فعالية_فائز') {
+      if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
+          flags: [1 << 6]
+        });
+      }
+
+      const eventData = loadActiveEvent();
+      if (!eventData || eventData.status === 'ended') {
+        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لتحديد الفائز.', flags: [1 << 6] });
+      }
+
+      const method = interaction.options.getString('طريقة_السحب');
+      const manualUser = interaction.options.getUser('الفائز_اليدوي');
+
+      let winnerId = null;
+
+      if (method === 'manual') {
+        if (!manualUser) {
+          return interaction.reply({ content: '❌ يجب اختيار الفائز اليدوي عند تحديد خيار التحديد اليدوي!', flags: [1 << 6] });
+        }
+        winnerId = manualUser.id;
+      } else {
+        if (!eventData.participants || eventData.participants.length === 0) {
+          return interaction.reply({ content: '❌ لا يوجد أي مشاركين مسجلين في الفعالية لإجراء سحب عشوائي!', flags: [1 << 6] });
+        }
+        const randomIndex = Math.floor(Math.random() * eventData.participants.length);
+        winnerId = eventData.participants[randomIndex];
+      }
+
+      const eventChannel = interaction.guild.channels.cache.get(EVENT_CHANNEL_ID);
+      const winnerEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setAuthor({ name: '🏆 إعلان الفائز بالفعالية | GX eSports', iconURL: interaction.guild.iconURL() })
+        .setTitle(`🎉 ألف مبروك للفائز بالفعالية!`)
+        .setDescription(
+          `👑 **الفائز بالمركز الأول:** <@${winnerId}>\n` +
+          `🔥 **الفعالية:** **${eventData.title}**\n` +
+          (eventData.prize ? `🎁 **الجائزة المستحقة:** **${eventData.prize}**\n` : '') +
+          `👥 **إجمالي المتنافسين:** \`${eventData.participants ? eventData.participants.length : 0}\` مشارك\n` +
+          `👮‍♂️ **المنظم:** <@${interaction.user.id}>\n\n` +
+          `✨ *نشكر جميع اللاعبين على المشاركة والحضور الحماسي، ترقبوا فعالياتنا القادمة!*`
+        )
+        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      if (eventChannel) {
+        await eventChannel.send({
+          content: `🏆 🎉 **ألف مبروك <@${winnerId}> فوزك بالفعالية!** @everyone`,
+          embeds: [winnerEmbed]
+        });
+      }
+
+      // End event
+      eventData.status = 'ended';
+      eventData.winnerId = winnerId;
+      saveActiveEvent(eventData);
+
+      await interaction.reply({
+        content: `🏆 **تم إعلان الفائز <@${winnerId}> بنجاح ونشر بطاقة التهنئة في <#${EVENT_CHANNEL_ID}>!**`,
+        flags: [1 << 6]
+      });
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setAuthor({ name: '🏆 فائز بالفعالية', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`تم إعلان <@${winnerId}> كفائز بفعالية **${eventData.title}** بواسطة المنظم <@${interaction.user.id}>.`)
+        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(interaction.guild, logEmbed);
+    }
+
+    // 40. أمر /فعالية_إلغاء
+    else if (commandName === 'فعالية_إلغاء') {
+      if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
+          flags: [1 << 6]
+        });
+      }
+
+      const eventData = loadActiveEvent();
+      if (!eventData || eventData.status === 'ended') {
+        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لإلغائها.', flags: [1 << 6] });
+      }
+
+      const reason = interaction.options.getString('السبب') || 'تم إلغاء الفعالية من قِبل الإدارة.';
+
+      const eventChannel = interaction.guild.channels.cache.get(EVENT_CHANNEL_ID);
+      if (eventChannel && eventData.messageId) {
+        const msg = await eventChannel.messages.fetch(eventData.messageId).catch(() => null);
+        if (msg) {
+          const cancelEmbed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle(`❌ تم إلغاء فعالية: ${eventData.title}`)
+            .setDescription(`**سبب الإلغاء:** ${reason}\n\nنعتذر لجميع المشاركين وسيتم الإعلان عن فعاليات جديدة قريباً.`)
+            .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+          await msg.edit({ embeds: [cancelEmbed], components: [] }).catch(() => null);
+        }
+      }
+
+      saveActiveEvent(null);
+
+      await interaction.reply({
+        content: `❌ **تم إلغاء الفعالية بنجاح وإغلاق باب التسجيل.**`,
+        flags: [1 << 6]
+      });
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '❌ إلغاء فعالية', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام <@${interaction.user.id}> بإلغاء فعالية **${eventData.title}**.\n**السبب:** ${reason}`)
+        .setFooter({ text: `GX eSports Event System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(interaction.guild, logEmbed);
     }
 
 
