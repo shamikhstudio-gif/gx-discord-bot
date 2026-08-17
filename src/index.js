@@ -543,7 +543,7 @@ async function registerSlashCommands(clientId, guildId) {
 // ----------------------------------------------------
 let currentVoicePlayer = null;
 let currentAudioResource = null;
-let currentVolumeLevel = 0.15; // 15% - صوت منخفض وهادئ ومريح للخلفية
+let currentVolumeLevel = 0.10; // 10% - صوت منخفض وهادئ ومريح للخلفية افتراضياً
 
 function playLoopAudio(connection) {
   try {
