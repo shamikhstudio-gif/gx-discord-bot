@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Example environment files (removed)
+.env.example
+
 # Runtime data & databases
 data/
 *.log
