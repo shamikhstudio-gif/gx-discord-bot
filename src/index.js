@@ -52,6 +52,8 @@ const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
 const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
+const UNTRUSTED_FILE = path.join(DATA_DIR, 'untrusted_members.json');
+const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
 const COMMANDS_CONFIG_FILE = path.resolve('src', 'commands.json');
@@ -169,6 +171,31 @@ function loadDMSecuritySent() {
 
 function saveDMSecuritySent(list) {
   safeWriteJson(DM_SECURITY_SENT_FILE, list);
+}
+
+function loadUntrustedMembers() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(UNTRUSTED_FILE)) {
+      const data = JSON.parse(fs.readFileSync(UNTRUSTED_FILE, 'utf-8'));
+      if (Array.isArray(data)) return data;
+    }
+  } catch {}
+  return ['hghdf0096'];
+}
+
+function saveUntrustedMembers(list) {
+  safeWriteJson(UNTRUSTED_FILE, list);
+}
+
+function isUntrustedUser(userOrMember) {
+  if (!userOrMember) return false;
+  const user = userOrMember.user || userOrMember;
+  const list = loadUntrustedMembers().map((s) => String(s).trim().toLowerCase().replace(/^@/, ''));
+  const userId = String(user.id || '').trim().toLowerCase();
+  const username = String(user.username || '').trim().toLowerCase();
+  const tag = String(user.tag || '').trim().toLowerCase();
+  return list.some((entry) => entry === userId || entry === username || entry === tag);
 }
 
 const INFRACTIONS_META_FILE = path.join(DATA_DIR, 'infractions_meta.json');
@@ -824,6 +851,32 @@ function hasAdminTierRole(member) {
     const name = r.name.toLowerCase().trim();
     return ADMIN_TIER_ROLE_NAMES.some((tier) => name === tier || name.includes(tier));
   });
+}
+
+/**
+ * 🛡️ Finds or creates the UNTRUSTED role with view & voice permissions only (strictly NO text/chat permissions).
+ */
+async function findOrCreateUntrustedRole(guild) {
+  if (!guild) return null;
+  let role = guild.roles.cache.find((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
+  if (!role) {
+    role = await guild.roles.create({
+      name: UNTRUSTED_ROLE_NAME,
+      color: 0x4F545C,
+      permissions: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak
+      ],
+      reason: 'GX Security: Untrusted Restricted Member Role (View & Voice Only)'
+    }).catch(() => null);
+
+    if (role) {
+      console.log(`🛡️ [رتبة مقيدة] تم إنشاء وتأمين رتبة ${UNTRUSTED_ROLE_NAME} بنجاح.`);
+    }
+  }
+  return role;
 }
 
 /**
@@ -1884,11 +1937,39 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
     const members = fetchRemote ? await guild.members.fetch().catch(() => guild.members.cache) : guild.members.cache;
     const humanMembers = members.filter((m) => !m.user.bot);
 
+    const untrustedRole = await findOrCreateUntrustedRole(guild);
+
     let givenCount = 0;
     let removedCount = 0;
     let managerGrantedCount = 0;
 
     for (const [, member] of humanMembers) {
+      const isUntrusted = isUntrustedUser(member);
+
+      // 0. Untrusted Member Isolation: strictly enforce UNTRUSTED role, strip MEMBER
+      if (isUntrusted) {
+        if (untrustedRole && !member.roles.cache.has(untrustedRole.id)) {
+          try {
+            await member.roles.add(untrustedRole);
+            console.log(`🛡️ [تقييد أمني] تم منح رتبة UNTRUSTED للعضو: ${member.user.tag}`);
+          } catch {}
+        }
+        if (member.roles.cache.has(role.id)) {
+          try {
+            await member.roles.remove(role);
+            removedCount++;
+          } catch {}
+        }
+        continue;
+      } else {
+        // If not untrusted but carries UNTRUSTED role -> Remove it
+        if (untrustedRole && member.roles.cache.has(untrustedRole.id)) {
+          try {
+            await member.roles.remove(untrustedRole);
+          } catch {}
+        }
+      }
+
       const hasAdminRole = hasAdminTierRole(member);
       const isManager = isManagerMember(member);
       const hasMemberRole = member.roles.cache.has(role.id);
@@ -2418,6 +2499,24 @@ client.on(Events.GuildMemberAdd, async (member) => {
   try {
     if (member.partial) await member.fetch();
 
+    // Check if user is in untrusted list
+    if (isUntrustedUser(member)) {
+      const untrustedRole = await findOrCreateUntrustedRole(member.guild);
+      if (untrustedRole) {
+        await member.roles.add(untrustedRole).catch(() => {});
+        console.log(`🛡️ [انضمام عضو غير موثوق] تم تقييد العضو ${member.user.tag} برتبة UNTRUSTED ومنعه من الكتابة.`);
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({ name: '⛔ تقييد عضو غير موثوق تلقائياً', iconURL: member.user.displayAvatarURL() })
+          .setDescription(`انضم العضو <@${member.id}> (\`${member.user.tag}\`) وهو مسجل في قائمة غير الموثوقين. تم منحه رتبة <@&${untrustedRole.id}> وتقييده ومنعه من الكتابة.`)
+          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+        await sendToLogChannel(member.guild, logEmbed);
+      }
+      return;
+    }
+
     const role = findAutoRole(member.guild);
     const botMember = member.guild.members.me;
 
@@ -2644,6 +2743,42 @@ client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
 
   logEmbed.setFooter({ text: `GX eSports Instant Logs • الإصدار ${BOT_VERSION}` }).setTimestamp();
   await sendToLogChannel(newRole.guild, logEmbed);
+});
+
+// ====================================================
+// 🚫 STRICT MESSAGE CHAT INTERCEPTOR (UNTRUSTED SHIELD)
+// ====================================================
+client.on(Events.MessageCreate, async (message) => {
+  if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID || message.author.bot) return;
+
+  // Intercept any message sent by untrusted members
+  const isUntrusted = isUntrustedUser(message.author) || message.member?.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
+  if (isUntrusted) {
+    try {
+      await message.delete();
+      const warnMsg = await message.channel.send({
+        content: `⛔ <@${message.author.id}> **أنت مقيد برتبة \`UNTRUSTED\` وممنوع من الكتابة وإرسال الرسائل في السيرفر بشكل قطعي!**`
+      }).catch(() => null);
+
+      if (warnMsg) {
+        setTimeout(() => warnMsg.delete().catch(() => {}), 4000);
+      }
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '⛔ منع وحذف رسالة عضو غير موثوق', iconURL: message.author.displayAvatarURL() })
+        .setDescription(
+          `تم اعتراض وحذف رسالة من العضو المقيد <@${message.author.id}> (\`${message.author.tag}\`) في القناة <#${message.channel.id}>.\n\n` +
+          `📝 **محتوى الرسالة المحذوفة:**\n\`\`\`\n${message.content.slice(0, 1000) || '[بدون نص / وسائط]'}\n\`\`\``
+        )
+        .setFooter({ text: `GX eSports Untrusted Shield • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      await sendToLogChannel(message.guild, logEmbed);
+    } catch (err) {
+      console.error('خطأ في اعتراض رسالة العضو غير الموثوق:', err.message);
+    }
+  }
 });
 
 client.on(Events.GuildRoleCreate, async (role) => {
