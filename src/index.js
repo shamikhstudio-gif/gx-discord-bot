@@ -3164,7 +3164,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setTitle('⛔ غير مصرح')
           .setDescription(`هذا البوت مخصص فقط لسيرفر **GX eSports** (المعرف: \`${ALLOWED_GUILD_ID}\`).`)
           .setFooter({ text: `الإصدار ${BOT_VERSION}` });
-        await interaction.reply({ embeds: [embed], flags: [1 << 6] }).catch(() => {});
+        await interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
       }
       if (interaction.guild) await handleUnauthorizedGuild(interaction.guild);
       return;
@@ -3176,7 +3176,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isModalSubmit()) {
       // 1. استلام نافذة فتح التذكرة الخاصة (مرئية للمشتكي فقط 100%)
       if (interaction.customId === 'ticket_creation_modal') {
-        await interaction.deferReply({ flags: [1 << 6] });
+        await interaction.deferReply({ ephemeral: true });
 
         const realName = interaction.fields.getTextInputValue('ticket_real_name').trim();
         const reason = interaction.fields.getTextInputValue('ticket_reason').trim();
@@ -3239,7 +3239,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return interaction.reply({
           content: '✅ **تم إرسال ردك بنجاح باسم وكيل الدعم الفني دون أي ظهور لحسابك الشخصي.**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -3257,23 +3257,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const eventId = interaction.customId.replace('event_join_', '');
         const eventData = loadActiveEvent();
         if (!eventData || eventData.id !== eventId || eventData.status === 'ended') {
-          return interaction.reply({ content: '❌ لا توجد فعالية أو بطولة نشطة حالياً للتسجيل فيها.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا توجد فعالية أو بطولة نشطة حالياً للتسجيل فيها.', ephemeral: true });
         }
         if (eventData.status === 'started') {
-          return interaction.reply({ content: '⛔ تم إغلاق باب التسجيل لأن البطولة قد بدأت بالفعل!', flags: [1 << 6] });
+          return interaction.reply({ content: '⛔ تم إغلاق باب التسجيل لأن البطولة قد بدأت بالفعل!', ephemeral: true });
         }
         if (eventData.participants && eventData.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: 'ℹ️ أنت مسجل بالفعل في هذه البطولة! 🎉', flags: [1 << 6] });
+          return interaction.reply({ content: 'ℹ️ أنت مسجل بالفعل في هذه البطولة! 🎉', ephemeral: true });
         }
         if (eventData.maxParticipants && eventData.participants && eventData.participants.length >= eventData.maxParticipants) {
-          return interaction.reply({ content: `⛔ اكتمل العدد الأقصى للمشاركين في هذه البطولة (${eventData.maxParticipants} مشارك)!`, flags: [1 << 6] });
+          return interaction.reply({ content: `⛔ اكتمل العدد الأقصى للمشاركين في هذه البطولة (${eventData.maxParticipants} مشارك)!`, ephemeral: true });
         }
 
         if (!eventData.participants) eventData.participants = [];
         eventData.participants.push(interaction.user.id);
         saveActiveEvent(eventData);
 
-        await interaction.deferReply({ flags: [1 << 6] });
+        await interaction.deferReply({ ephemeral: true });
 
         // Process Tournament Matching & Room Generation automatically
         await processTournamentMatching(interaction.guild, eventData);
@@ -3297,13 +3297,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const eventId = interaction.customId.replace('event_leave_', '');
         const eventData = loadActiveEvent();
         if (!eventData || eventData.id !== eventId || eventData.status === 'ended') {
-          return interaction.reply({ content: '❌ لا توجد فعالية أو بطولة نشطة حالياً.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا توجد فعالية أو بطولة نشطة حالياً.', ephemeral: true });
         }
         if (eventData.status === 'started') {
-          return interaction.reply({ content: '⛔ لا يمكن الانسحاب بعد انطلاق البطولة!', flags: [1 << 6] });
+          return interaction.reply({ content: '⛔ لا يمكن الانسحاب بعد انطلاق البطولة!', ephemeral: true });
         }
         if (!eventData.participants || !eventData.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: 'ℹ️ أنت لست مسجلاً في هذه البطولة بالأصل.', flags: [1 << 6] });
+          return interaction.reply({ content: 'ℹ️ أنت لست مسجلاً في هذه البطولة بالأصل.', ephemeral: true });
         }
 
         eventData.participants = eventData.participants.filter((id) => id !== interaction.user.id);
@@ -3315,14 +3315,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return interaction.followUp({
           content: `🚪 تم إلغاء تسجيلك وانسحابك من البطولة بنجاح.`,
-          flags: [1 << 6]
+          ephemeral: true
         }).catch(() => {});
       }
 
       else if (interaction.customId.startsWith('event_remind_')) {
         const eventData = loadActiveEvent();
         if (!eventData || eventData.status === 'ended') {
-          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', ephemeral: true });
         }
 
         if (!eventData.remindUsers) eventData.remindUsers = [];
@@ -3347,19 +3347,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return interaction.reply({
           content: `🔔 **تم تفعيل التذكير بنجاح!** ستصلك رسالة في الخاص قبل بدء البطولة لتنبيهك.`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
       else if (interaction.customId.startsWith('event_list_')) {
         const eventData = loadActiveEvent();
         if (!eventData || eventData.status === 'ended') {
-          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً.', ephemeral: true });
         }
 
         const count = eventData.participants ? eventData.participants.length : 0;
         if (count === 0) {
-          return interaction.reply({ content: '📋 لم يسجل أي مشارك حتى الآن في البطولة!', flags: [1 << 6] });
+          return interaction.reply({ content: '📋 لم يسجل أي مشارك حتى الآن في البطولة!', ephemeral: true });
         }
 
         let matchesText = 'لا توجد مواجهات مكتملة بعد.';
@@ -3380,7 +3380,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           )
           .setFooter({ text: `GX eSports Tournament System • الإصدار ${BOT_VERSION}` });
 
-        return interaction.reply({ embeds: [listEmbed], flags: [1 << 6] });
+        return interaction.reply({ embeds: [listEmbed], ephemeral: true });
       }
 
       // 1. زر فتح تذكرة دعم فني (عرض نافذة إدخال خاصة ومباشرة)
@@ -3423,7 +3423,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (ticket && ticket.claimedBy && ticket.claimedBy !== interaction.user.id && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
           return interaction.reply({
             content: `⚠️ عذراً، هذا الإجراء مخصص حصرياً للوكيل المستلم للتذكرة (<@${ticket.claimedBy}>).`,
-            flags: [1 << 6]
+            ephemeral: true
           });
         }
 
@@ -3452,7 +3452,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!isManagerMember(interaction.member)) {
           return interaction.reply({
             content: '❌ عذراً، هذا الإجراء مخصص فقط لأصحاب رتبة MANAGERS وفريق الإدارة!',
-            flags: [1 << 6]
+            ephemeral: true
           });
         }
 
@@ -3461,14 +3461,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const ticket = ticketsData.activeTickets ? ticketsData.activeTickets[threadId] : null;
 
         if (!ticket) {
-          return interaction.reply({ content: '❌ لم يتم العثور على بيانات هذه التذكرة أو تم إغلاقها.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لم يتم العثور على بيانات هذه التذكرة أو تم إغلاقها.', ephemeral: true });
         }
 
         // 🛡️ فحص التنافس: في حال سبق وكيل آخر بسحب التذكرة
         if (ticket.claimedBy) {
           return interaction.reply({
             content: `⚠️ **عذراً يا زميلنا العزيز <@${interaction.user.id}>**، تم استلام وسحب هذه التذكرة بالفعل من قِبل الوكيل <@${ticket.claimedBy}> قبل لحظات. شكراً لسرعة استجابتك!`,
-            flags: [1 << 6]
+            ephemeral: true
           });
         }
 
@@ -3534,7 +3534,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             `> • اضغط على الزر أدناه لكتابة الرد في نافذة منبثقة.\n` +
             `> • أو استخدم الأمر \`/رد <الرسالة>\` مباشرة في الشات.`,
           components: [agentQuickAction],
-          flags: [1 << 6]
+          ephemeral: true
         });
 
         const logEmbed = new EmbedBuilder()
@@ -3554,7 +3554,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const ticket = ticketsData.activeTickets ? ticketsData.activeTickets[threadId] : null;
 
         if (!ticket) {
-          return interaction.reply({ content: '❌ لم يتم العثور على بيانات هذه التذكرة.', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لم يتم العثور على بيانات هذه التذكرة.', ephemeral: true });
         }
 
         const isAgent = ticket.claimedBy && interaction.user.id === ticket.claimedBy;
@@ -3563,7 +3563,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!isAgent && !isCreator && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
           return interaction.reply({
             content: `⚠️ **عذراً يا زميلنا**، لا يمكن إغلاق هذه التذكرة إلا من قبل الوكيل المستلم لها (<@${ticket.claimedBy}>) أو صاحب التذكرة!`,
-            flags: [1 << 6]
+            ephemeral: true
           });
         }
 
@@ -3613,7 +3613,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const amount = interaction.options.getInteger('العدد');
       const targetUser = interaction.options.getUser('المستخدم');
 
-      await interaction.deferReply({ flags: [1 << 6] });
+      await interaction.deferReply({ ephemeral: true });
 
       try {
         const messages = await interaction.channel.messages.fetch({ limit: amount });
@@ -3647,20 +3647,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const reason = interaction.options.getString('السبب') || 'لم يتم تحديد سبب';
 
       if (targetUser.id === client.user.id) {
-        return interaction.reply({ content: '❌ **لا يمكن طرد البوت من السيرفر! البوت محصن ومحمي أمنياً.**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **لا يمكن طرد البوت من السيرفر! البوت محصن ومحمي أمنياً.**', ephemeral: true });
       }
       if (targetUser.id === interaction.guild.ownerId) {
-        return interaction.reply({ content: '❌ **لا يمكن طرد مالك السيرفر!**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **لا يمكن طرد مالك السيرفر!**', ephemeral: true });
       }
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
-        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', ephemeral: true });
       }
 
       const botMember = interaction.guild.members.me;
       if (!targetMember.kickable || botMember.roles.highest.comparePositionTo(targetMember.roles.highest) <= 0) {
-        return interaction.reply({ content: '❌ لا يمكن طرد هذا العضو لأن رتبته أعلى من البوت أو يملك صلاحيات محمية.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا يمكن طرد هذا العضو لأن رتبته أعلى من البوت أو يملك صلاحيات محمية.', ephemeral: true });
       }
 
       await targetMember.kick(`بواسطة ${interaction.user.tag}: ${reason}`);
@@ -3682,17 +3682,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const days = interaction.options.getInteger('مسح_الرسائل_أيام') || 0;
 
       if (targetUser.id === client.user.id) {
-        return interaction.reply({ content: '❌ **لا يمكن حظر البوت من السيرفر! البوت محصن ومحمي أمنياً.**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **لا يمكن حظر البوت من السيرفر! البوت محصن ومحمي أمنياً.**', ephemeral: true });
       }
       if (targetUser.id === interaction.guild.ownerId) {
-        return interaction.reply({ content: '❌ **لا يمكن حظر مالك السيرفر!**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **لا يمكن حظر مالك السيرفر!**', ephemeral: true });
       }
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       const botMember = interaction.guild.members.me;
 
       if (targetMember && (!targetMember.bannable || botMember.roles.highest.comparePositionTo(targetMember.roles.highest) <= 0)) {
-        return interaction.reply({ content: '❌ لا يمكن حظر هذا العضو لأن رتبته أعلى من البوت أو يملك صلاحيات محمية.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا يمكن حظر هذا العضو لأن رتبته أعلى من البوت أو يملك صلاحيات محمية.', ephemeral: true });
       }
 
       await interaction.guild.members.ban(targetUser.id, {
@@ -3727,7 +3727,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await interaction.reply({ embeds: [embed] });
       } catch (err) {
-        await interaction.reply({ content: `❌ تعذر فك الحظر: قد لا يكون هذا المعرف محظوراً أو غير صحيح (${err.message})`, flags: [1 << 6] });
+        await interaction.reply({ content: `❌ تعذر فك الحظر: قد لا يكون هذا المعرف محظوراً أو غير صحيح (${err.message})`, ephemeral: true });
       }
     }
 
@@ -3738,19 +3738,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const reason = interaction.options.getString('السبب') || 'مخالفة القوانين';
 
       if (targetUser.id === client.user.id) {
-        return interaction.reply({ content: '❌ **لا يمكن عزل البوت! البوت محصن ومحمي أمنياً.**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **لا يمكن عزل البوت! البوت محصن ومحمي أمنياً.**', ephemeral: true });
       }
       if (targetUser.id === interaction.guild.ownerId) {
-        return interaction.reply({ content: '❌ **لا يمكن عزل مالك السيرفر!**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **لا يمكن عزل مالك السيرفر!**', ephemeral: true });
       }
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
-        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو.', ephemeral: true });
       }
 
       if (isManagerMember(targetMember)) {
-        return interaction.reply({ content: '❌ لا يمكن تطبيق تايم آوت على المشرفين والإدارة!', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا يمكن تطبيق تايم آوت على المشرفين والإدارة!', ephemeral: true });
       }
 
       await targetMember.timeout(durationSeconds * 1000, `بواسطة ${interaction.user.tag}: ${reason}`);
@@ -3777,7 +3777,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
-        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو.', ephemeral: true });
       }
 
       await targetMember.timeout(null, `بواسطة ${interaction.user.tag}: ${reason}`);
@@ -3844,7 +3844,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (userWarns.length === 0) {
         return interaction.reply({
           content: `✅ العضو <@${targetUser.id}> (\`${targetUser.tag}\`) ليس لديه أي تحذيرات سابقة في سجله!`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -3907,7 +3907,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setTimestamp();
         await sendToLogChannel(interaction.guild, logEmbed);
       } catch (err) {
-        await interaction.reply({ content: `❌ تعذر قفل القناة: ${err.message}`, flags: [1 << 6] });
+        await interaction.reply({ content: `❌ تعذر قفل القناة: ${err.message}`, ephemeral: true });
       }
     }
 
@@ -3934,7 +3934,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setTimestamp();
         await sendToLogChannel(interaction.guild, logEmbed);
       } catch (err) {
-        await interaction.reply({ content: `❌ تعذر فتح القناة: ${err.message}`, flags: [1 << 6] });
+        await interaction.reply({ content: `❌ تعذر فتح القناة: ${err.message}`, ephemeral: true });
       }
     }
 
@@ -4007,7 +4007,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
-        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو.', ephemeral: true });
       }
 
       await targetMember.setNickname(newNick || null);
@@ -4026,7 +4026,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '⛔ **عذراً، صلاحية ترقية ومنح الرتب محصورة حصرياً بالقيادة العليا (<@1484535997893967980> و <@1152686277255237663>) فقط!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4035,12 +4035,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
-        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', ephemeral: true });
       }
 
       const botMember = interaction.guild.members.me;
       if (botMember.roles.highest.comparePositionTo(targetRole) <= 0) {
-        return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه منحها. يرجى سحب رتبة البوت لأعلى قائمة الرتب.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه منحها. يرجى سحب رتبة البوت لأعلى قائمة الرتب.', ephemeral: true });
       }
 
       await targetMember.roles.add(targetRole);
@@ -4069,7 +4069,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '⛔ **عذراً، صلاحية سحب وإدارة الرتب محصورة حصرياً بالقيادة العليا (<@1484535997893967980> و <@1152686277255237663>) فقط!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4078,12 +4078,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!targetMember) {
-        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.', ephemeral: true });
       }
 
       const botMember = interaction.guild.members.me;
       if (botMember.roles.highest.comparePositionTo(targetRole) <= 0) {
-        return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه سحبها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ رتبة البوت أدنى من هذه الرتبة ولا يمكنه سحبها.', ephemeral: true });
       }
 
       await targetMember.roles.remove(targetRole);
@@ -4116,7 +4116,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!targetVoiceChannel) {
         return interaction.reply({
           content: '❌ **يجب أن تكون متواجداً داخل روم صوتي لاستدعاء البوت!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4165,7 +4165,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (currentBotVoiceId === targetVoiceChannel.id) {
         return interaction.reply({
           content: `ℹ️ **البوت متواجد معك بالفعل في الروم الصوتي <#${targetVoiceChannel.id}>!**\n👑 المتحكم الحالي: <@${currentVoiceOwner?.userId || member.id}>`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4177,7 +4177,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (activeTransferCollector) {
           return interaction.reply({
             content: '⏳ **هناك طلب استئذان لنقل البوت قيد الانتظار حالياً، يرجى المحاولة بعد قليل.**',
-            flags: [1 << 6]
+            ephemeral: true
           });
         }
 
@@ -4227,7 +4227,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           if (!isCurrentOwner) {
             return btnInteraction.reply({
               content: `❌ **عذراً، قبول أو رفض نقل البوت محصور حصرياً بمالك البوت الحالي (<@${currentVoiceOwner.userId}>) فقط!**`,
-              flags: [1 << 6]
+              ephemeral: true
             });
           }
 
@@ -4352,14 +4352,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const botVoiceId = botMember?.voice?.channelId;
 
       if (!botVoiceId) {
-        return interaction.reply({ content: '❌ **البوت ليس متواجداً في أي روم صوتي حالياً.**', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **البوت ليس متواجداً في أي روم صوتي حالياً.**', ephemeral: true });
       }
 
       const memberVoiceId = interaction.member?.voice?.channelId;
       if (!memberVoiceId || memberVoiceId !== botVoiceId) {
         return interaction.reply({
           content: `❌ **يجب أن تكون متواجداً داخل نفس الروم الصوتي مع البوت (<#${botVoiceId}>) لاستخدام أمر المغادرة!**`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4369,7 +4369,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isOwner && !isLeader) {
         return interaction.reply({
           content: `❌ **عذراً، أمر المغادرة مخصص حصرياً لمالك البوت الحالي المتواجد معه بالروم (<@${currentVoiceOwner?.userId || 'المستدعي'}>)!**`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4400,7 +4400,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const botVoiceId = botMember?.voice?.channelId;
 
       if (!botVoiceId) {
-        return interaction.reply({ content: 'ℹ️ البوت ليس متصلاً بأي روم صوتي حالياً. يمكنك استخدام `/استدعاء` لاستدعائه.', flags: [1 << 6] });
+        return interaction.reply({ content: 'ℹ️ البوت ليس متصلاً بأي روم صوتي حالياً. يمكنك استخدام `/استدعاء` لاستدعائه.', ephemeral: true });
       }
 
       const voiceChannel = interaction.guild.channels.cache.get(botVoiceId);
@@ -4430,7 +4430,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const botVoiceId = botMember?.voice?.channelId;
 
       if (!botVoiceId) {
-        return interaction.reply({ content: '❌ البوت ليس متصلاً بروم صوتي حالياً.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ البوت ليس متصلاً بروم صوتي حالياً.', ephemeral: true });
       }
 
       const isOwner = currentVoiceOwner && currentVoiceOwner.userId === interaction.user.id;
@@ -4439,7 +4439,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isOwner && !isAdmin) {
         return interaction.reply({
           content: `❌ فقط المتحكم الحالي بالبوت (<@${currentVoiceOwner?.userId}>) أو الإدارة يمكنهم نقل صلاحية التحكم!`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4449,7 +4449,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!targetMember || targetMember.voice?.channelId !== botVoiceId) {
         return interaction.reply({
           content: `❌ يجب أن يكون العضو <@${targetUser.id}> متواجداً معك في نفس الروم الصوتي لنقل التحكم إليه!`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4477,7 +4477,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const botVoiceId = botMember?.voice?.channelId;
 
       if (!botVoiceId) {
-        return interaction.reply({ content: '❌ البوت ليس متواجداً في روم صوتي حالياً.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ البوت ليس متواجداً في روم صوتي حالياً.', ephemeral: true });
       }
 
       const voiceChannel = interaction.guild.channels.cache.get(botVoiceId);
@@ -4485,7 +4485,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const hasPermission = interaction.member.permissions.has(PermissionFlagsBits.MuteMembers);
 
       if (!isOwner && !hasPermission) {
-        return interaction.reply({ content: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.', ephemeral: true });
       }
 
       await interaction.deferReply();
@@ -4523,7 +4523,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const botVoiceId = botMember?.voice?.channelId;
 
       if (!botVoiceId) {
-        return interaction.reply({ content: '❌ البوت ليس متواجداً في روم صوتي حالياً.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ البوت ليس متواجداً في روم صوتي حالياً.', ephemeral: true });
       }
 
       const voiceChannel = interaction.guild.channels.cache.get(botVoiceId);
@@ -4531,7 +4531,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const hasPermission = interaction.member.permissions.has(PermissionFlagsBits.MuteMembers);
 
       if (!isOwner && !hasPermission) {
-        return interaction.reply({ content: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.', ephemeral: true });
       }
 
       await interaction.deferReply();
@@ -4563,7 +4563,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (currentVoiceOwner && !isOwner && !isGuildOwner) {
         return interaction.reply({
           content: `❌ **التحكم بمستوى الصوت مخصص حصرياً للمستدعي الأول للبوت (<@${currentVoiceOwner.userId}>).**`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4709,7 +4709,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (!member) {
-        return interaction.reply({ content: '❌ تعذر العثور على بيانات هذا العضو.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ تعذر العثور على بيانات هذا العضو.', ephemeral: true });
       }
 
       const roles = member.roles.cache.filter((r) => r.id !== interaction.guild.id).map((r) => `<@&${r.id}>`).slice(0, 10).join(' ') || 'لا توجد رتب';
@@ -4779,7 +4779,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // 30. أمر /تذكرة
     else if (commandName === 'تذكرة') {
-      await interaction.deferReply({ flags: [1 << 6] });
+      await interaction.deferReply({ ephemeral: true });
       try {
         const thread = await openTicketThread(interaction.guild, interaction.channel, interaction.user);
         await interaction.editReply({
@@ -4793,7 +4793,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 31. أمر /لوحة_التذاكر
     else if (commandName === 'لوحة_التذاكر') {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: '❌ هذا الأمر مخصص فقط لإدارة السيرفر.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ هذا الأمر مخصص فقط لإدارة السيرفر.', ephemeral: true });
       }
 
       const targetChannel = interaction.options.getChannel('القناة') || interaction.channel;
@@ -4819,7 +4819,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       );
 
       await targetChannel.send({ embeds: [panelEmbed], components: [row] });
-      await interaction.reply({ content: `✅ تم إرسال لوحة التذاكر بنجاح إلى القناة <#${targetChannel.id}>!`, flags: [1 << 6] });
+      await interaction.reply({ content: `✅ تم إرسال لوحة التذاكر بنجاح إلى القناة <#${targetChannel.id}>!`, ephemeral: true });
     }
 
     // 31. أمر /تذكرة (فتح نافذة التذكرة الفورية)
@@ -4858,7 +4858,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.channel.isThread()) {
         return interaction.reply({
           content: '❌ هذا الأمر مخصص للاستخدام داخل تذاكر الدعم الفني فقط.',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4868,14 +4868,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!ticket) {
         return interaction.reply({
           content: '❌ هذه القناة ليست تذكرة دعم فني نشطة.',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
       if (ticket.claimedBy && ticket.claimedBy !== interaction.user.id && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({
           content: `⚠️ عذراً، الرد في هذه التذكرة مخصص حصرياً للوكيل المستلم لها (<@${ticket.claimedBy}>).`,
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -4904,7 +4904,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return interaction.reply({
         content: '✅ **تم إرسال ردك بنجاح باسم وكيل الدعم الفني دون أي ظهور لحسابك الشخصي.**',
-        flags: [1 << 6]
+        ephemeral: true
       });
     }
 
@@ -4957,7 +4957,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
@@ -5016,7 +5016,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       saveActiveEvent(eventData);
 
-      await interaction.deferReply({ flags: [1 << 6] });
+      await interaction.deferReply({ ephemeral: true });
       const eventMsg = await ensureEventPanel(interaction.guild);
 
       if (eventMsg) {
@@ -5043,17 +5043,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
       const eventData = loadActiveEvent();
       if (!eventData || eventData.status === 'ended') {
-        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لبدئها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لبدئها.', ephemeral: true });
       }
 
       if (eventData.status === 'started') {
-        return interaction.reply({ content: 'ℹ️ البطولة بدأت بالفعل مسبقاً!', flags: [1 << 6] });
+        return interaction.reply({ content: 'ℹ️ البطولة بدأت بالفعل مسبقاً!', ephemeral: true });
       }
 
       eventData.status = 'started';
@@ -5093,7 +5093,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.reply({
         content: `🚀 **تم إعلان انطلاق البطولة وإشعار جميع المشاركين في <#${EVENT_CHANNEL_ID}> والخاص!**`,
-        flags: [1 << 6]
+        ephemeral: true
       });
 
       const logEmbed = new EmbedBuilder()
@@ -5110,23 +5110,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
       const eventData = loadActiveEvent();
       if (!eventData || eventData.status === 'ended') {
-        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لإرسال تذكير لها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لإرسال تذكير لها.', ephemeral: true });
       }
 
       const customNote = interaction.options.getString('ملاحظة_إضافية');
       const recipients = new Set([...(eventData.participants || []), ...(eventData.remindUsers || [])]);
 
       if (recipients.size === 0) {
-        return interaction.reply({ content: '📋 لا يوجد أي لاعبين مسجلين في البطولة حتى الآن لإرسال التذكير.', flags: [1 << 6] });
+        return interaction.reply({ content: '📋 لا يوجد أي لاعبين مسجلين في البطولة حتى الآن لإرسال التذكير.', ephemeral: true });
       }
 
-      await interaction.deferReply({ flags: [1 << 6] });
+      await interaction.deferReply({ ephemeral: true });
 
       const reminderEmbed = new EmbedBuilder()
         .setColor(0xFEE75C)
@@ -5161,13 +5161,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
       const eventData = loadActiveEvent();
       if (!eventData || eventData.status === 'ended') {
-        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لتحديد الفائز.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا توجد فعالية نشطة حالياً لتحديد الفائز.', ephemeral: true });
       }
 
       const method = interaction.options.getString('طريقة_السحب');
@@ -5177,12 +5177,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (method === 'manual') {
         if (!manualUser) {
-          return interaction.reply({ content: '❌ يجب اختيار الفائز اليدوي عند تحديد خيار التحديد اليدوي!', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ يجب اختيار الفائز اليدوي عند تحديد خيار التحديد اليدوي!', ephemeral: true });
         }
         winnerId = manualUser.id;
       } else {
         if (!eventData.participants || eventData.participants.length === 0) {
-          return interaction.reply({ content: '❌ لا يوجد أي مشاركين مسجلين في الفعالية لإجراء سحب عشوائي!', flags: [1 << 6] });
+          return interaction.reply({ content: '❌ لا يوجد أي مشاركين مسجلين في الفعالية لإجراء سحب عشوائي!', ephemeral: true });
         }
         const randomIndex = Math.floor(Math.random() * eventData.participants.length);
         winnerId = eventData.participants[randomIndex];
@@ -5250,7 +5250,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.reply({
         content: `🏆 **تم إعلان الفائز <@${winnerId}> بنجاح وتنظيف الرومات والرتب المؤقتة!**`,
-        flags: [1 << 6]
+        ephemeral: true
       });
 
       const logEmbed = new EmbedBuilder()
@@ -5267,13 +5267,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isManagerMember(interaction.member) && !isAuthorizedRoleManager(interaction.member, interaction.user)) {
         return interaction.reply({
           content: '❌ **عذراً، هذا الأمر مخصص فقط لفريق الإدارة والمنظمين!**',
-          flags: [1 << 6]
+          ephemeral: true
         });
       }
 
       const eventData = loadActiveEvent();
       if (!eventData || eventData.status === 'ended') {
-        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لإلغائها.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ لا توجد بطولة نشطة حالياً لإلغائها.', ephemeral: true });
       }
 
       const reason = interaction.options.getString('السبب') || 'تم إلغاء البطولة من قِبل الإدارة.';
@@ -5299,7 +5299,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.reply({
         content: `❌ **تم إلغاء البطولة بنجاح وحذف جميع الرومات والرتب المؤقتة.**`,
-        flags: [1 << 6]
+        ephemeral: true
       });
 
       const logEmbed = new EmbedBuilder()
@@ -5351,7 +5351,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply({ content: `❌ **حدث خطأ أثناء معالجة الأمر:**\n\`${err.message}\`` }).catch(() => {});
         } else {
-          await interaction.reply({ content: `❌ **حدث خطأ أثناء معالجة الأمر:**\n\`${err.message}\``, flags: [1 << 6] }).catch(() => {});
+          await interaction.reply({ content: `❌ **حدث خطأ أثناء معالجة الأمر:**\n\`${err.message}\``, ephemeral: true }).catch(() => {});
         }
       }
     } catch {}
