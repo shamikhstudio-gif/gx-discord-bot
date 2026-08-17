@@ -3488,14 +3488,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setFooter({ text: `GX eSports Voice System • مهلة الرد: 60 ثانية` })
           .setTimestamp();
 
-        const transferMessage = await interaction.channel.send({
-          content: `🔔 تنبيه: <@${currentVoiceOwner.userId}> يرجى مراجعة طلب نقل ملكية البوت من <@${member.id}>.`,
+        const ownerVoiceChannel = interaction.guild.channels.cache.get(currentBotVoiceId) || interaction.channel;
+
+        const transferMessage = await ownerVoiceChannel.send({
+          content: `🔔 تنبيه: <@${currentVoiceOwner.userId}> يرجى مراجعة طلب نقل ملكية واستدعاء البوت من <@${member.id}> إلى الروم <#${targetVoiceChannel.id}>.`,
           embeds: [requestEmbed],
           components: [row]
         });
 
         await interaction.editReply({
-          content: `⏳ **تم إرسال طلب استئذان رسمي إلى مالك البوت الحالي (<@${currentVoiceOwner.userId}>).** يرجى الانتظار حتى يرد.`
+          content: `⏳ **تم إرسال طلب استئذان رسمي داخل شات الروم الصوتي <#${currentBotVoiceId}> إلى مالك البوت الحالي (<@${currentVoiceOwner.userId}>).** يرجى الانتظار حتى يرد.`
         });
 
         const collector = transferMessage.createMessageComponentCollector({
@@ -3636,19 +3638,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const botVoiceId = botMember?.voice?.channelId;
 
       if (!botVoiceId) {
-        return interaction.reply({ content: '❌ البوت ليس متواجداً في أي روم صوتي حالياً.', flags: [1 << 6] });
+        return interaction.reply({ content: '❌ **البوت ليس متواجداً في أي روم صوتي حالياً.**', flags: [1 << 6] });
       }
 
-      const isOwner = currentVoiceOwner && currentVoiceOwner.userId === interaction.user.id;
-      const isGuildOwner = interaction.user.id === interaction.guild.ownerId;
-
-      if (!isOwner && !isGuildOwner) {
+      const memberVoiceId = interaction.member?.voice?.channelId;
+      if (!memberVoiceId || memberVoiceId !== botVoiceId) {
         return interaction.reply({
-          content: `❌ **عذراً، البوت مملوك حالياً للمستدعي الأول (<@${currentVoiceOwner?.userId}>).**\nفقط من قام باستدعاء البوت يمكنه فصله من الروم!`,
+          content: `❌ **يجب أن تكون متواجداً داخل نفس الروم الصوتي مع البوت (<#${botVoiceId}>) لاستخدام أمر المغادرة!**`,
           flags: [1 << 6]
         });
       }
 
+      const isOwner = currentVoiceOwner && currentVoiceOwner.userId === interaction.user.id;
+      const isLeader = isAuthorizedRoleManager(interaction.member, interaction.user);
+
+      if (!isOwner && !isLeader) {
+        return interaction.reply({
+          content: `❌ **عذراً، أمر المغادرة مخصص حصرياً لمالك البوت الحالي المتواجد معه بالروم (<@${currentVoiceOwner?.userId || 'المستدعي'}>)!**`,
+          flags: [1 << 6]
+        });
+      }
+
+      setAuthorizedMove();
       disconnectVoice();
 
       const embed = new EmbedBuilder()
