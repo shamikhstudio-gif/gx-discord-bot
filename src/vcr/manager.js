@@ -207,6 +207,9 @@ export class VCRManager {
   }
 
   trackMemberPresence(session, userId, guild) {
+    if (userId === this.mainClient?.user?.id || VCR_BOT_IDS.has(userId)) return null;
+    const u = guild.members.cache.get(userId);
+    if (u?.user?.bot) return null;
     if (!session.membersPresence.has(userId)) {
       const u = guild.members.cache.get(userId);
       session.membersPresence.set(userId, {
