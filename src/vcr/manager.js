@@ -406,7 +406,7 @@ export class VCRManager {
     }
   }
 
-  async runWatchdog(guild) {
+    async runWatchdog(guild) {
     if (!guild) return;
 
     try {
@@ -416,7 +416,41 @@ export class VCRManager {
         .sort((a, b) => a.position - b.position);
 
       const voiceList = [...voiceChannels.values()];
+      if (voiceList.length === 0) return;
 
+      // 1. Inspect for duplicate bots in the same channel (Prevent 2 VCR bots in one room)
+      const channelToWorkers = new Map(); // channelId -> Array of worker
+      const assignedWorkerIds = new Set();
+
+      for (let i = 0; i < this.workers.length; i++) {
+        const worker = this.workers[i];
+        const vGuild = worker.client.guilds.cache.get(guild.id);
+        const currentVoiceId = vGuild?.members.me?.voice?.channelId;
+
+        if (currentVoiceId) {
+          if (!channelToWorkers.has(currentVoiceId)) channelToWorkers.set(currentVoiceId, []);
+          channelToWorkers.get(currentVoiceId).push(worker);
+        }
+      }
+
+      // Check if any channel has > 1 VCR bots
+      for (const [chId, workersInCh] of channelToWorkers) {
+        if (workersInCh.length > 1) {
+          console.warn(`⚠️ [رصد تكرار] تم رصد ${workersInCh.length} مسجلات في نفس الروم الصوتي (${chId}). جارٍ إعادة التوزيع فوراً...`);
+          // Find empty voice channels that have 0 VCR bots
+          for (let j = 1; j < workersInCh.length; j++) {
+            const extraWorker = workersInCh[j];
+            const emptyCh = voiceList.find(c => !channelToWorkers.has(c.id) || channelToWorkers.get(c.id).length === 0);
+            if (emptyCh) {
+              console.log(`🔄 [نقل مسجل] نقل ${extraWorker.name} إلى الروم الفارغ: #${emptyCh.name} (${emptyCh.id})`);
+              await extraWorker.joinChannel(emptyCh, guild);
+              channelToWorkers.set(emptyCh.id, [extraWorker]);
+            }
+          }
+        }
+      }
+
+      // 2. Ensure every voice channel has its dedicated VCR bot stationed
       for (let i = 0; i < this.workers.length; i++) {
         const worker = this.workers[i];
         const targetChannel = voiceList[i] || voiceList[voiceList.length - 1];
@@ -426,13 +460,14 @@ export class VCRManager {
         if (!vGuild) continue;
 
         const currentVoiceId = vGuild.members.me?.voice?.channelId;
-        if (!currentVoiceId || currentVoiceId !== targetChannel.id || !worker.connection) {
+        if (!currentVoiceId || !worker.connection) {
           try {
             await worker.joinChannel(targetChannel, guild);
           } catch {}
         }
       }
 
+      // 3. Track member presence & handle session finalization when <= 1 members remain
       for (const vCh of voiceList) {
         const humanMembers = vCh.members.filter(m => !m.user.bot);
         const session = this.activeSessions.get(vCh.id);
