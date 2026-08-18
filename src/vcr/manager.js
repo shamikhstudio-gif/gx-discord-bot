@@ -1,14 +1,8 @@
 import { ChannelType, PermissionFlagsBits, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { spawn } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
-import fs from 'fs';
-import path from 'path';
-import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, SECRET_VCR_CHANNEL_ID, MUTE_COOLDOWN_MS, MUTE_DURATION_MS, VCR_RECORDS_DIR } from './config.js';
+import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, SECRET_VCR_CHANNEL_ID, MUTE_COOLDOWN_MS, MUTE_DURATION_MS } from './config.js';
 import { VCRWorker } from './worker.js';
-
-if (!fs.existsSync(VCR_RECORDS_DIR)) {
-  fs.mkdirSync(VCR_RECORDS_DIR, { recursive: true });
-}
 
 export class VCRManager {
   constructor(mainClient, mainBotVersion = '1.0') {
@@ -147,17 +141,13 @@ export class VCRManager {
     let session = this.activeSessions.get(channel.id);
     if (!session) {
       const timestamp = Date.now();
-      const pcmPath = path.join(VCR_RECORDS_DIR, `rec_${channel.id}_${timestamp}.pcm`);
-      const pcmStream = fs.createWriteStream(pcmPath, { flags: 'a' });
-
       session = {
         worker,
         channelId: channel.id,
         channelName: channel.name,
         guild,
         startTime: timestamp,
-        pcmFilePath: pcmPath,
-        pcmWriteStream: pcmStream,
+        pcmChunks: [], // 100% In-Memory Buffer (Zero Disk Files)
         totalRecordedBytes: 0,
         membersPresence: new Map(),
         lastActivityTime: timestamp,
@@ -184,10 +174,6 @@ export class VCRManager {
     return session.membersPresence.get(userId);
   }
 
-  /**
-   * Centralized Server Mute & Unmute executed directly by the MAIN BOT (GX Bot)
-   * Ensures reliable unmute even if the user moves between voice rooms.
-   */
   async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue) {
     if (!member || !member.voice?.channel) return;
     const userId = member.id;
@@ -199,7 +185,6 @@ export class VCRManager {
     console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صراخ حاد (${energyValue} RMS) في #${channel.name} من ${member.user.tag}. تطبيق ميوت 30 ثانية عبر البوت الأساسي...`);
 
     try {
-      // Fetch fresh member via Main Bot Client to ensure global guild control
       const mainGuild = this.mainClient.guilds.cache.get(guild.id) || await this.mainClient.guilds.fetch(guild.id).catch(() => null);
       const targetMember = mainGuild ? (await mainGuild.members.fetch(userId).catch(() => null)) : member;
 
@@ -207,12 +192,10 @@ export class VCRManager {
         await targetMember.voice.setMute(true, 'رصد أصوات عالية / صراخ حاد في الفويس (كتم صوتي إجباري لمدة 30 ثانية)');
         console.log(`🔇 [كتم مركزي] تم كتم العضو ${targetMember.user.tag} لمدة 30 ثانية بواسطة البوت الأساسي.`);
 
-        // Clear existing timer if any
         if (this.activeMuteTimers.has(userId)) {
           clearTimeout(this.activeMuteTimers.get(userId));
         }
 
-        // Global unmute timer on Main Bot
         const timer = setTimeout(async () => {
           try {
             this.activeMuteTimers.delete(userId);
@@ -245,7 +228,7 @@ export class VCRManager {
 
       await member.send({ embeds: [userDMEmbed] }).catch(() => {});
 
-      const adminTierRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+      const adminTierRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160', '1538569735057178745'];
       const recipients = new Set();
       if (guild.ownerId) recipients.add(guild.ownerId);
 
@@ -283,35 +266,46 @@ export class VCRManager {
     }
   }
 
-    async convertPcmToMp3(pcmPath, mp3Path) {
+  /**
+   * 100% In-Memory OGG Opus Conversion:
+   * Uses highpass, vocal clarity equalizer, dynamic loudnorm and encodes to Discord-native OGG Opus.
+   * Zero disk I/O / 0 bytes created on hard drive.
+   */
+  async convertPcmBufferToOgg(pcmBuffer) {
     return new Promise((resolve) => {
-      if (!fs.existsSync(pcmPath) || fs.statSync(pcmPath).size === 0) {
-        return resolve(false);
-      }
+      if (!pcmBuffer || pcmBuffer.length === 0) return resolve(null);
 
-      // Studio-Grade Vocal DSP Chain:
-      // 1. highpass: eliminates desk vibration & mic rumble (< 75Hz)
-      // 2. equalizer: enhances vocal presence & timbre clarity (3.2kHz +3dB)
-      // 3. loudnorm: EBU R128 dynamic speech normalization for balanced speaker levels
-      // 4. 320kbps 48kHz: Maximum MP3 Bitrate for crystal-clear, realistic voices
       const proc = spawn(ffmpegStatic, [
         '-y',
         '-f', 's16le',
         '-ar', '48000',
         '-ac', '2',
-        '-i', pcmPath,
+        '-i', 'pipe:0',
         '-af', 'highpass=f=75,equalizer=f=3200:width_type=h:width=1800:g=3,loudnorm=I=-16:TP=-1.5:LRA=11',
-        '-c:a', 'libmp3lame',
-        '-b:a', '320k',
-        '-ar', '48000',
-        mp3Path
+        '-c:a', 'libopus',
+        '-b:a', '64k',
+        '-vbr', 'on',
+        '-application', 'voip',
+        '-f', 'ogg',
+        'pipe:1'
       ]);
 
+      const outputChunks = [];
+      proc.stdout.on('data', chunk => outputChunks.push(chunk));
+      proc.stderr.on('data', () => {});
+
       proc.on('close', (code) => {
-        resolve(code === 0 && fs.existsSync(mp3Path) && fs.statSync(mp3Path).size > 0);
+        if (code === 0 && outputChunks.length > 0) {
+          resolve(Buffer.concat(outputChunks));
+        } else {
+          resolve(null);
+        }
       });
 
-      proc.on('error', () => resolve(false));
+      proc.on('error', () => resolve(null));
+
+      proc.stdin.write(pcmBuffer);
+      proc.stdin.end();
     });
   }
 
@@ -322,17 +316,10 @@ export class VCRManager {
     session.isFinalizing = true;
     this.activeSessions.delete(channelId);
 
-    if (session.pcmWriteStream) {
-      try { session.pcmWriteStream.end(); } catch {}
-    }
-
     const durationSeconds = Math.floor((Date.now() - session.startTime) / 1000);
     const hasRecordedAudio = (session.totalRecordedBytes || 0) > 4000;
 
     if (durationSeconds < 3 || session.membersPresence.size === 0 || (!session.hasSpoken && !hasRecordedAudio)) {
-      if (fs.existsSync(session.pcmFilePath)) {
-        try { fs.unlinkSync(session.pcmFilePath); } catch {}
-      }
       session.isFinalizing = false;
       return;
     }
@@ -352,18 +339,19 @@ export class VCRManager {
         return `**${idx + 1}.** <@${m.id}> (` + m.tag + `)\n   • 📥 **الدخول:** ${joinStr} ➔ 📤 **الخروج:** ${leaveStr}\n   • 🗣️ **عدد مرات التحدث:** \`${m.totalSpokenCount}\` مرة`;
       }).join('\n\n') || 'لا توجد بيانات مسجلة';
 
-      const mp3Path = session.pcmFilePath.replace('.pcm', '.mp3');
-      const mp3Converted = await this.convertPcmToMp3(session.pcmFilePath, mp3Path);
+      // 100% In-Memory Conversion to Discord Native OGG Opus Audio
+      const rawPcm = Buffer.concat(session.pcmChunks);
+      const oggBuffer = await this.convertPcmBufferToOgg(rawPcm);
 
       const files = [];
-      if (mp3Converted) {
+      if (oggBuffer) {
         const safeName = session.channelName.replace(/[^a-zA-Z0-9_-]/g, '_');
-        files.push(new AttachmentBuilder(mp3Path, { name: `GX_Voice_Rec_${safeName}_${Date.now()}.mp3` }));
+        files.push(new AttachmentBuilder(oggBuffer, { name: `GX_Voice_Rec_${safeName}_${Date.now()}.ogg` }));
       }
 
       const reportEmbed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setAuthor({ name: '🎙️ تقرير الجلسة الصوتية وملف التسجيل MP3 | GX VCR Archive', iconURL: guild.iconURL() })
+        .setAuthor({ name: '🎙️ تقرير الجلسة الصوتية وملف التسجيل OGG Opus | GX VCR Archive', iconURL: guild.iconURL() })
         .setTitle(`📁 أرشفة الجلسة الصوتية في روم: #${session.channelName}`)
         .setDescription(
           `تم إنهاء الجلسة وتوليد الملف الصوتي وسجل الدخول والخروج بدقة.\n\n` +
@@ -371,7 +359,7 @@ export class VCRManager {
           `⏱️ **إجمالي مدة الجلسة:** \`${durationStr}\`\n` +
           `📅 **بداية الجلسة:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
           `🏁 **نهاية الجلسة:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-          `🎵 **ملف التسجيل الصوتي:** ${mp3Converted ? '✅ مرفق بصيغة MP3 أدناه' : '⚠️ لم يتم رصد تسجيل مسموع'}\n` +
+          `🎵 **ملف التسجيل الصوتي:** ${oggBuffer ? '✅ مرفق بصيغة OGG Opus النقية أدناه' : '⚠️ لم يتم رصد تسجيل مسموع'}\n` +
           `📝 **سبب الأرشفة:** ${reason}\n\n` +
           `👥 **سجل الأعضاء والتوقيتات (${session.membersPresence.size} أعضاء):**\n${memberTimelines}`
         )
@@ -379,31 +367,19 @@ export class VCRManager {
         .setTimestamp();
 
       await logChannel.send({ embeds: [reportEmbed], files }).catch(() => {});
-      console.log(`📁 [أرشفة VCR] تم بنجاح إرسال تقرير وتسجيل الروم #${session.channelName} بصيغة MP3.`);
-
-      if (fs.existsSync(session.pcmFilePath)) {
-        try { fs.unlinkSync(session.pcmFilePath); } catch {}
-      }
-      if (fs.existsSync(mp3Path)) {
-        try { fs.unlinkSync(mp3Path); } catch {}
-      }
+      console.log(`📁 [أرشفة VCR سحابية] تم بنجاح إرسال تقرير وتسجيل الروم #${session.channelName} بصيغة OGG Opus (ذاكرة رام كاملة 0MB قرص).`);
     } catch (err) {
       console.error('خطأ في أرشفة التقرير الصوتي:', err.message);
     } finally {
       session.isFinalizing = false;
+      session.pcmChunks = [];
     }
   }
 
-  /**
-   * Real-time VoiceStateUpdate Handler:
-   * Instantly triggered whenever a member leaves or transfers between voice rooms.
-   * If remaining human members <= 1 -> immediately finalize and send recording!
-   */
   async onVoiceStateUpdate(oldState, newState) {
     const oldCh = oldState.channel;
     const newCh = newState.channel;
 
-    // Track leave from old channel
     if (oldCh && oldCh.isVoiceBased() && oldCh.id !== newCh?.id) {
       const session = this.activeSessions.get(oldCh.id);
       if (session) {
@@ -413,7 +389,6 @@ export class VCRManager {
         }
 
         const humanMembers = oldCh.members.filter(m => !m.user.bot);
-        // If remaining human members <= 1 -> FINALIZE AND SEND MP3 RECORDING IMMEDIATELY!
         if (humanMembers.size <= 1 && (session.hasSpoken || (session.totalRecordedBytes || 0) > 0)) {
           const reason = humanMembers.size === 0 
             ? 'مغادرة جميع الأعضاء للروم الصوتي' 
@@ -423,7 +398,6 @@ export class VCRManager {
       }
     }
 
-    // Track join to new channel
     if (newCh && newCh.isVoiceBased() && oldCh?.id !== newCh.id) {
       const session = this.activeSessions.get(newCh.id);
       if (session && !newState.member.user.bot) {
@@ -483,7 +457,6 @@ export class VCRManager {
             }
           }
 
-          // In watchdog check: If human members <= 1 -> finalize recording
           if (humanMembers.size <= 1 && (session.hasSpoken || (session.totalRecordedBytes || 0) > 0)) {
             const reason = humanMembers.size === 0 
               ? 'مغادرة جميع الأعضاء للروم الصوتي' 
