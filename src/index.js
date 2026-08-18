@@ -2715,6 +2715,7 @@ client.on(Events.GuildCreate, async (guild) => {
 // 🎙️ VOICE STATE MANAGEMENT & ANTI-DRAG SECURITY
 // ====================================================
 client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  vcrManager.onVoiceStateUpdate(oldState, newState).catch(() => {});
   if (newState.guild.id !== ALLOWED_GUILD_ID) return;
   const member = newState.member;
   if (!member) return;
