@@ -7382,6 +7382,59 @@ const healthServer = http.createServer((req, res) => {
     }));
   }
 
+  // 1b. Server-Sent Events (SSE) — real-time push every 500ms
+  if (url === '/api/stream') {
+    res.writeHead(200, {
+      'Content-Type':                'text/event-stream',
+      'Cache-Control':               'no-cache',
+      'Connection':                  'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'X-Accel-Buffering':          'no'
+    });
+    res.write('retry: 1000\n\n');
+
+    function buildPayload() {
+      const g = client.guilds.cache.get(ALLOWED_GUILD_ID);
+      return {
+        status: 'operational',
+        uptimeSeconds: Math.floor(process.uptime()),
+        ping: Math.max(1, Math.round(client.ws.ping || 0)),
+        timestamp: new Date().toISOString(),
+        mainBot: {
+          tag: client.user ? client.user.tag : 'GX Bot#3131',
+          id: client.user ? client.user.id : '1507671146487742464',
+          version: BOT_VERSION,
+          commandsCount: 42
+        },
+        guild: g ? { id: g.id, name: g.name, memberCount: g.memberCount || 0 } : null,
+        vcrFleet: vcrManager.workers.map(w => ({
+          id: w.id, name: w.name,
+          status: w.isReady ? 'online' : 'connecting',
+          defaultChannelId: w.defaultChannelId,
+          defaultChannelName: w.defaultChannelName,
+          assignedChannelId: w.assignedChannelId
+        })),
+        memory: process.memoryUsage()
+      };
+    }
+
+    // Send immediately
+    res.write(`data: ${JSON.stringify(buildPayload())}\n\n`);
+
+    // Then push every 500ms
+    const sseInterval = setInterval(() => {
+      try {
+        res.write(`data: ${JSON.stringify(buildPayload())}\n\n`);
+      } catch {
+        clearInterval(sseInterval);
+      }
+    }, 500);
+
+    // Cleanup when client disconnects
+    req.on('close', () => clearInterval(sseInterval));
+    return;
+  }
+
   // 2. Serve Static Website Files (Websites/Status)
   let filePath = path.join(STATUS_DIR, 'index.html');
   let contentType = 'text/html; charset=utf-8';
