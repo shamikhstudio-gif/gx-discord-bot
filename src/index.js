@@ -975,6 +975,81 @@ function loadCommandsConfig() {
 /**
  * Translates Discord channel types into pure, elegant Arabic.
  */
+
+/**
+ * Translates Discord Permission names to elegant Arabic.
+ */
+function translatePermissionName(perm) {
+  const map = {
+    Administrator: 'مسؤول كامل (Administrator)',
+    ManageGuild: 'إدارة الخادم (Manage Server)',
+    ManageRoles: 'إدارة الرتب (Manage Roles)',
+    ManageChannels: 'إدارة القنوات (Manage Channels)',
+    KickMembers: 'طرد الأعضاء (Kick Members)',
+    BanMembers: 'حظر الأعضاء (Ban Members)',
+    ManageMessages: 'إدارة وحذف الرسائل (Manage Messages)',
+    MentionEveryone: 'منشن للجميع (@everyone)',
+    MuteMembers: 'كتم الأعضاء صوتياً (Mute Members)',
+    DeafenMembers: 'تصميت الأعضاء صوتياً (Deafen Members)',
+    MoveMembers: 'سحب ونقل الأعضاء (Move Members)',
+    ManageNicknames: 'إدارة ألقاب الأعضاء (Manage Nicknames)',
+    ManageWebhooks: 'إدارة الويب هوك (Manage Webhooks)',
+    ManageEmojisAndStickers: 'إدارة الإيموجي والملصقات',
+    ManageThreads: 'إدارة الثريدات (Manage Threads)',
+    ModerateMembers: 'عزل الأعضاء (Timeout / Moderate Members)',
+    ViewAuditLog: 'عرض سجل التدقيق (View Audit Log)',
+    ViewGuildInsights: 'عرض إحصائيات الخادم',
+    SendMessages: 'إرسال الرسائل',
+    SendMessagesInThreads: 'إرسال الرسائل في الثريدات',
+    EmbedLinks: 'تضمين الروابط (Embed Links)',
+    AttachFiles: 'إرفاق الملفات والصور',
+    ReadMessageHistory: 'قراءة سجل الرسائل',
+    AddReactions: 'إضافة تفاعلات (Reactions)',
+    Connect: 'الاتصال بالرومات الصوتية',
+    Speak: 'التحدث في الفويس',
+    Stream: 'البث المباشر ومشاركة الشاشة (Go Live)',
+    UseVAD: 'استخدام التحدث الصوتي الحر (Voice Activity)'
+  };
+  return map[perm] || perm;
+}
+
+/**
+ * Translates Discord Server Verification Levels to Arabic.
+ */
+function translateVerificationLevel(level) {
+  switch (level) {
+    case 0: return 'بدون قيود (None)';
+    case 1: return 'منخفض (Low) - بريد إلكتروني موثق';
+    case 2: return 'متوسط (Medium) - مسجل منذ 5 دقائق';
+    case 3: return 'عالي (High) - عضو بالسيرفر منذ 10 دقائق';
+    case 4: return 'أعلى حماية (Very High) - رقم هاتف موثق';
+    default: return `مستوى ${level}`;
+  }
+}
+
+/**
+ * Translates Explicit Content Filter Levels to Arabic.
+ */
+function translateContentFilter(level) {
+  switch (level) {
+    case 0: return 'معطل (Disabled)';
+    case 1: return 'فحص رسائل الأعضاء بدون رتب فقط';
+    case 2: return 'فحص رسائل جميع الأعضاء (All Members)';
+    default: return `مستوى ${level}`;
+  }
+}
+
+/**
+ * Translates Default Notification Levels to Arabic.
+ */
+function translateNotificationLevel(level) {
+  switch (level) {
+    case 0: return 'جميع الرسائل (All Messages)';
+    case 1: return 'المنشن فقط (@mentions only)';
+    default: return `مستوى ${level}`;
+  }
+}
+
 function translateChannelType(type) {
   switch (type) {
     case ChannelType.GuildText:
@@ -1013,7 +1088,8 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildEmojisAndStickers,
     GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildMessageReactions
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildWebhooks
   ]
 });
 
@@ -2821,6 +2897,254 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
 // ====================================================
 // 📋 MEMBER JOIN & LEAVE EVENTS (WITH WELCOME & GOODBYE)
 // ====================================================
+
+// ====================================================
+// 👑 1. GUILD UPDATE LOGS (SERVER SETTINGS, NAME & ICON)
+// ====================================================
+client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
+  if (newGuild.id !== ALLOWED_GUILD_ID) return;
+
+  const executor = await fetchAuditExecutor(newGuild, AuditLogEvent.GuildUpdate);
+  const changes = [];
+
+  // A. Server Name Change
+  if (oldGuild.name !== newGuild.name) {
+    changes.push(`🏛️ **اسم السيرفر:** من \`${oldGuild.name}\` ⬅️ إلى \`${newGuild.name}\``);
+  }
+
+  // B. Server Icon Change
+  let iconChanged = false;
+  if (oldGuild.icon !== newGuild.icon) {
+    changes.push(`🖼️ **أيقونة/شعار السيرفر:** تم تحديث الشعار الرسمي للخادم.`);
+    iconChanged = true;
+  }
+
+  // C. Server Banner / Splash Change
+  if (oldGuild.banner !== newGuild.banner) {
+    changes.push(`🎨 **بانر السيرفر (Banner):** ${newGuild.banner ? 'تم تعيين بانر جديد 🖼️' : 'تمت إزالة البانر 🗑️'}`);
+  }
+  if (oldGuild.splash !== newGuild.splash) {
+    changes.push(`✨ **صورة الدعوة (Splash):** ${newGuild.splash ? 'تم تعيين خلفية دعوة جديدة 🖼️' : 'تمت إزالة خلفية الدعوة'}`);
+  }
+
+  // D. Server Description & Vanity URL
+  if (oldGuild.description !== newGuild.description) {
+    changes.push(`📝 **وصف السيرفر:** من \`${oldGuild.description || 'لا يوجد'}\` ⬅️ إلى \`${newGuild.description || 'لا يوجد'}\``);
+  }
+  if (oldGuild.vanityURLCode !== newGuild.vanityURLCode) {
+    changes.push(`🔗 **الرابط المخصص (Vanity URL):** من \`discord.gg/${oldGuild.vanityURLCode || 'لا يوجد'}\` ⬅️ إلى \`discord.gg/${newGuild.vanityURLCode || 'لا يوجد'}\``);
+  }
+
+  // E. AFK Channel & Timeout
+  if (oldGuild.afkChannelId !== newGuild.afkChannelId) {
+    const oldAfk = oldGuild.afkChannel ? `#${oldGuild.afkChannel.name}` : 'لا يوجد';
+    const newAfk = newGuild.afkChannel ? `#${newGuild.afkChannel.name}` : 'لا يوجد';
+    changes.push(`💤 **روم الخمول (AFK Channel):** من \`${oldAfk}\` ⬅️ إلى \`${newAfk}\``);
+  }
+  if (oldGuild.afkTimeout !== newGuild.afkTimeout) {
+    changes.push(`⏱️ **مهلة الخمول (AFK Timeout):** من \`${oldGuild.afkTimeout / 60}\` دقيقة ⬅️ إلى \`${newGuild.afkTimeout / 60}\` دقيقة`);
+  }
+
+  // F. Security & Moderation Settings
+  if (oldGuild.verificationLevel !== newGuild.verificationLevel) {
+    changes.push(`🛡️ **مستوى التحقق والأمان:** من \`${translateVerificationLevel(oldGuild.verificationLevel)}\` ⬅️ إلى \`${translateVerificationLevel(newGuild.verificationLevel)}\``);
+  }
+  if (oldGuild.explicitContentFilter !== newGuild.explicitContentFilter) {
+    changes.push(`🔞 **فلتر المحتوى الصريح:** من \`${translateContentFilter(oldGuild.explicitContentFilter)}\` ⬅️ إلى \`${translateContentFilter(newGuild.explicitContentFilter)}\``);
+  }
+  if (oldGuild.defaultMessageNotifications !== newGuild.defaultMessageNotifications) {
+    changes.push(`🔔 **إشعارات السيرفر الافتراضية:** من \`${translateNotificationLevel(oldGuild.defaultMessageNotifications)}\` ⬅️ إلى \`${translateNotificationLevel(newGuild.defaultMessageNotifications)}\``);
+  }
+
+  // G. System, Rules, Updates Channels
+  if (oldGuild.systemChannelId !== newGuild.systemChannelId) {
+    changes.push(`📢 **قناة رسائل النظام:** من ${oldGuild.systemChannel ? `<#${oldGuild.systemChannelId}>` : '\`لا توجد\`'} ⬅️ إلى ${newGuild.systemChannel ? `<#${newGuild.systemChannelId}>` : '\`لا توجد\`'}`);
+  }
+  if (oldGuild.rulesChannelId !== newGuild.rulesChannelId) {
+    changes.push(`📜 **قناة القوانين:** من ${oldGuild.rulesChannel ? `<#${oldGuild.rulesChannelId}>` : '\`لا توجد\`'} ⬅️ إلى ${newGuild.rulesChannel ? `<#${newGuild.rulesChannelId}>` : '\`لا توجد\`'}`);
+  }
+
+  // H. Server Owner Transfer
+  if (oldGuild.ownerId !== newGuild.ownerId) {
+    changes.push(`👑 **نقل ملكية السيرفر:** من <@${oldGuild.ownerId}> ⬅️ إلى <@${newGuild.ownerId}>`);
+  }
+
+  if (changes.length === 0) return;
+
+  const logEmbed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setAuthor({ name: '🏛️ تعديل إعدادات وبيانات السيرفر (Server Update)', iconURL: newGuild.iconURL({ dynamic: true }) })
+    .setTitle(`تم تحديث إعدادات: ${newGuild.name}`)
+    .setDescription(changes.join('\n\n'))
+    .addFields(
+      { name: '🆔 معرف السيرفر (Guild ID)', value: `\`${newGuild.id}\``, inline: true },
+      { name: '👥 إجمالي الأعضاء', value: `\`${newGuild.memberCount}\` عضو`, inline: true }
+    );
+
+  if (iconChanged && newGuild.iconURL()) {
+    logEmbed.setThumbnail(newGuild.iconURL({ dynamic: true, size: 512 }));
+  }
+
+  if (executor) {
+    logEmbed.addFields({ name: '👮‍♂️ تم التعديل بواسطة', value: `<@${executor.id}> (\`${executor.tag}\`)`, inline: true });
+  }
+
+  logEmbed.setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` }).setTimestamp();
+  await sendToLogChannel(newGuild, logEmbed);
+});
+
+// ====================================================
+// 🎭 2. EMOJIS & STICKERS LOGS
+// ====================================================
+client.on(Events.GuildEmojisUpdate, async (emojis, guild) => {
+  if (guild.id !== ALLOWED_GUILD_ID) return;
+  // Audit log entry handles specific details
+});
+
+client.on(Events.GuildAuditLogEntryCreate, async (auditEntry, guild) => {
+  if (guild.id !== ALLOWED_GUILD_ID) return;
+
+  try {
+    // A. Emoji Creation / Deletion / Update
+    if (auditEntry.action === AuditLogEvent.EmojiCreate) {
+      const emoji = guild.emojis.cache.get(auditEntry.targetId);
+      const logEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '😀 إضافة إيموجي جديد (Emoji Created)', iconURL: guild.iconURL() })
+        .addFields(
+          { name: '✨ الإيموجي', value: emoji ? `${emoji} (\`:${emoji.name}:\`)` : `\`${auditEntry.targetId}\``, inline: true },
+          { name: '🆔 المعرف', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ أضيف بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      if (emoji) logEmbed.setThumbnail(emoji.url);
+      await sendToLogChannel(guild, logEmbed);
+    } else if (auditEntry.action === AuditLogEvent.EmojiDelete) {
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🗑️ حذف إيموجي (Emoji Deleted)', iconURL: guild.iconURL() })
+        .addFields(
+          { name: '🆔 معرف الإيموجي المحذوف', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ حُذف بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(guild, logEmbed);
+    }
+
+    // B. Sticker Creation / Deletion
+    else if (auditEntry.action === AuditLogEvent.StickerCreate) {
+      const sticker = guild.stickers.cache.get(auditEntry.targetId);
+      const logEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🏷️ إضافة ملصق جديد (Sticker Created)', iconURL: guild.iconURL() })
+        .addFields(
+          { name: '🏷️ اسم الملصق', value: sticker ? `\`${sticker.name}\`` : `\`${auditEntry.targetId}\``, inline: true },
+          { name: '🆔 المعرف', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ أضيف بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      if (sticker?.url) logEmbed.setThumbnail(sticker.url);
+      await sendToLogChannel(guild, logEmbed);
+    } else if (auditEntry.action === AuditLogEvent.StickerDelete) {
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🗑️ حذف ملصق (Sticker Deleted)', iconURL: guild.iconURL() })
+        .addFields(
+          { name: '🆔 معرف الملصق المحذوف', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ حُذف بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(guild, logEmbed);
+    }
+
+    // C. Webhook Creation / Deletion
+    else if (auditEntry.action === AuditLogEvent.WebhookCreate) {
+      const logEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🔗 إنشاء ويب هوك جديد (Webhook Created)', iconURL: guild.iconURL() })
+        .addFields(
+          { name: '🆔 معرف الويب هوك', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ أنشئ بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(guild, logEmbed);
+    } else if (auditEntry.action === AuditLogEvent.WebhookDelete) {
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🗑️ حذف ويب هوك (Webhook Deleted)', iconURL: guild.iconURL() })
+        .addFields(
+          { name: '🆔 معرف الويب هوك المحذوف', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ حُذف بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(guild, logEmbed);
+    }
+
+    // D. Bot / Integration Added
+    else if (auditEntry.action === AuditLogEvent.BotAdd) {
+      const botUser = await client.users.fetch(auditEntry.targetId).catch(() => null);
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setAuthor({ name: '🤖 إضافة بوت جديد للسيرفر (Bot Added)', iconURL: botUser?.displayAvatarURL() || guild.iconURL() })
+        .addFields(
+          { name: '🤖 البوت المضاف', value: botUser ? `<@${botUser.id}> (\`${botUser.tag}\`)` : `\`${auditEntry.targetId}\``, inline: true },
+          { name: '🆔 المعرف (ID)', value: `\`${auditEntry.targetId}\``, inline: true },
+          { name: '👮‍♂️ تمت الإضافة بواسطة', value: auditEntry.executor ? `<@${auditEntry.executor.id}> (\`${auditEntry.executor.tag}\`)` : 'غير معروف', inline: true }
+        )
+        .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(guild, logEmbed);
+    }
+  } catch (err) {
+    console.error('خطأ في معالجة سجل التدقيق:', err.message);
+  }
+});
+
+// ====================================================
+// 📨 3. INVITE CREATE & DELETE LOGS
+// ====================================================
+client.on(Events.InviteCreate, async (invite) => {
+  if (invite.guild?.id !== ALLOWED_GUILD_ID) return;
+
+  const logEmbed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setAuthor({ name: '📨 إنشاء رابط دعوة جديد (Invite Created)', iconURL: invite.guild.iconURL() })
+    .addFields(
+      { name: '🔗 رابط الدعوة', value: `[discord.gg/${invite.code}](${invite.url})`, inline: true },
+      { name: '💬 القناة المستهدفة', value: invite.channel ? `<#${invite.channel.id}>` : 'غير محددة', inline: true },
+      { name: '👤 المنشئ', value: invite.inviter ? `<@${invite.inviter.id}> (\`${invite.inviter.tag}\`)` : 'غير معروف', inline: true },
+      { name: '🔢 أقصى عدد للاستخدام', value: invite.maxUses === 0 ? '\`غير محدود (∞)\`' : `\`${invite.maxUses}\` استخدام`, inline: true },
+      { name: '⏱️ تاريخ الصلاحية', value: invite.maxAge === 0 ? '\`دائم لا ينتهي\`' : `<t:${Math.floor((Date.now() + (invite.maxAge * 1000)) / 1000)}:R>`, inline: true }
+    )
+    .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+    .setTimestamp();
+
+  await sendToLogChannel(invite.guild, logEmbed);
+});
+
+client.on(Events.InviteDelete, async (invite) => {
+  if (invite.guild?.id !== ALLOWED_GUILD_ID) return;
+
+  const logEmbed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setAuthor({ name: '🗑️ حذف أو انتهاء رابط دعوة (Invite Deleted)', iconURL: invite.guild.iconURL() })
+    .addFields(
+      { name: '🔗 كود الدعوة', value: `\`${invite.code}\``, inline: true },
+      { name: '💬 القناة', value: invite.channel ? `<#${invite.channel.id}>` : 'غير محددة', inline: true }
+    )
+    .setFooter({ text: `GX eSports Advanced Logs • الإصدار ${BOT_VERSION}` })
+    .setTimestamp();
+
+  await sendToLogChannel(invite.guild, logEmbed);
+});
+
+
 client.on(Events.GuildMemberAdd, async (member) => {
   if (member.guild.id !== ALLOWED_GUILD_ID) return;
   console.log(`👋 انضمام عضو جديد: ${member.user.tag} (${member.id})`);
@@ -3023,32 +3347,50 @@ client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
   let changes = [];
 
   if (oldRole.name !== newRole.name) {
-    changes.push(`**تغيير الاسم:** من \`${oldRole.name}\` ⬅️ إلى \`${newRole.name}\``);
+    changes.push(`✏️ **تغيير الاسم:** من \`${oldRole.name}\` ⬅️ إلى \`${newRole.name}\``);
   }
   if (oldRole.hexColor !== newRole.hexColor) {
-    changes.push(`**تغيير اللون:** من \`${oldRole.hexColor}\` ⬅️ إلى \`${newRole.hexColor}\``);
+    changes.push(`🎨 **تغيير اللون:** من \`${oldRole.hexColor}\` ⬅️ إلى \`${newRole.hexColor}\``);
   }
   if (oldRole.hoist !== newRole.hoist) {
-    changes.push(`**فصل الرتبة في قائمة الأعضاء:** \`${newRole.hoist ? 'مفعل' : 'ملغى'}\``);
+    changes.push(`📌 **فصل الرتبة في قائمة الأعضاء:** \`${newRole.hoist ? 'مفعل 🟢' : 'ملغى 🔴'}\``);
   }
   if (oldRole.mentionable !== newRole.mentionable) {
-    changes.push(`**إمكانية المنشن للرتبة:** \`${newRole.mentionable ? 'مسموح للجميع' : 'مغلق'}\``);
+    changes.push(`📢 **إمكانية المنشن للرتبة:** \`${newRole.mentionable ? 'مسموح للجميع 🟢' : 'مغلق 🔴'}\``);
   }
+  if (oldRole.icon !== newRole.icon) {
+    changes.push(`🖼️ **أيقونة الرتبة:** ${newRole.icon ? 'تم تعيين أيقونة جديدة 🎨' : 'تمت إزالة الأيقونة 🗑️'}`);
+  }
+
+  // Smart Permissions Diff Calculation
   if (oldRole.permissions.bitfield !== newRole.permissions.bitfield) {
-    changes.push(`**تم تعديل صلاحيات الرتبة.**`);
+    const addedPerms = newRole.permissions.toArray().filter((p) => !oldRole.permissions.has(p));
+    const removedPerms = oldRole.permissions.toArray().filter((p) => !newRole.permissions.has(p));
+
+    if (addedPerms.length > 0) {
+      changes.push(`🟢 **الصلاحيات المضافة (+):**\n` + addedPerms.map((p) => `• \`+\` ${translatePermissionName(p)}`).join('\n'));
+    }
+    if (removedPerms.length > 0) {
+      changes.push(`🔴 **الصلاحيات المسحوبة (-):**\n` + removedPerms.map((p) => `• \`-\` ${translatePermissionName(p)}`).join('\n'));
+    }
   }
 
   if (changes.length === 0) return;
 
   const logEmbed = new EmbedBuilder()
-    .setColor(0xFEE75C)
+    .setColor(newRole.color || 0xFEE75C)
     .setAuthor({ name: '👑 تعديل رتبة (Role Update)', iconURL: newRole.guild.iconURL() })
     .setTitle(`تم تعديل الرتبة: <@&${newRole.id}> (\`${newRole.name}\`)`)
+    .setDescription(changes.join('\n\n'))
     .addFields(
       { name: '🆔 معرف الرتبة', value: `\`${newRole.id}\``, inline: true },
       { name: '🎨 اللون الحالي', value: `\`${newRole.hexColor}\``, inline: true },
-      { name: '📝 التغييرات التي تمت', value: changes.join('\n'), inline: false }
+      { name: '👥 عدد حاملي الرتبة', value: `\`${newRole.members.size}\` عضو`, inline: true }
     );
+
+  if (newRole.iconURL()) {
+    logEmbed.setThumbnail(newRole.iconURL());
+  }
 
   if (executor) {
     logEmbed.addFields({ name: '👮‍♂️ تم التعديل بواسطة', value: `<@${executor.id}> (\`${executor.tag}\`)`, inline: true });
@@ -3058,9 +3400,6 @@ client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
   await sendToLogChannel(newRole.guild, logEmbed);
 });
 
-// ====================================================
-// 🚫 STRICT MESSAGE CHAT INTERCEPTOR & SMART ANTI-SPAM
-// ====================================================
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID || message.author.bot) return;
 
