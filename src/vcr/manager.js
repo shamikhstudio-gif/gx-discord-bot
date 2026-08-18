@@ -51,7 +51,7 @@ export class VCRManager {
           { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }
         ];
 
-        for (const roleId of ['1538485406922838066', '1538485672795570196', '1538544110913454160']) {
+        for (const roleId of ['1538485406922838066', '1538485672795570196', '1538544110913454160', '1538569735057178745']) {
           const r = guild.roles.cache.get(roleId);
           if (r) {
             overwrites.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
