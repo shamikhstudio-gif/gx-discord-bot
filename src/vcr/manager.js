@@ -1,6 +1,14 @@
-import { ChannelType, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
-import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, MUTE_COOLDOWN_MS, MUTE_DURATION_MS } from './config.js';
+import { ChannelType, PermissionFlagsBits, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { spawn } from 'child_process';
+import ffmpegStatic from 'ffmpeg-static';
+import fs from 'fs';
+import path from 'path';
+import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, SECRET_VCR_CHANNEL_ID, MUTE_COOLDOWN_MS, MUTE_DURATION_MS, VCR_RECORDS_DIR } from './config.js';
 import { VCRWorker } from './worker.js';
+
+if (!fs.existsSync(VCR_RECORDS_DIR)) {
+  fs.mkdirSync(VCR_RECORDS_DIR, { recursive: true });
+}
 
 export class VCRManager {
   constructor(mainClient, mainBotVersion = '1.0') {
@@ -30,7 +38,9 @@ export class VCRManager {
 
   async findOrCreateVCRLogChannel(guild) {
     if (!guild) return null;
-    let ch = guild.channels.cache.find(c => c && (c.name === SECRET_VCR_CHANNEL_NAME || c.name.includes('سجلات-التسجيلات')));
+    let ch = guild.channels.cache.get(SECRET_VCR_CHANNEL_ID) ||
+             guild.channels.cache.find(c => c && (c.name === SECRET_VCR_CHANNEL_NAME || c.name.includes('سجلات-التسجيلات')));
+
     if (!ch) {
       try {
         const botMember = guild.members.me;
@@ -135,14 +145,21 @@ export class VCRManager {
   getOrCreateSession(channel, guild, worker) {
     let session = this.activeSessions.get(channel.id);
     if (!session) {
+      const timestamp = Date.now();
+      const pcmPath = path.join(VCR_RECORDS_DIR, `rec_${channel.id}_${timestamp}.pcm`);
+      const pcmStream = fs.createWriteStream(pcmPath, { flags: 'a' });
+
       session = {
         worker,
         channelId: channel.id,
         channelName: channel.name,
         guild,
-        startTime: Date.now(),
+        startTime: timestamp,
+        pcmFilePath: pcmPath,
+        pcmWriteStream: pcmStream,
+        totalRecordedBytes: 0,
         membersPresence: new Map(),
-        lastActivityTime: Date.now(),
+        lastActivityTime: timestamp,
         hasSpoken: false,
         isFinalizing: false
       };
@@ -166,7 +183,7 @@ export class VCRManager {
     return session.membersPresence.get(userId);
   }
 
-  async handleLoudSoundViolation(guild, channel, member, speakerInfo) {
+  async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue) {
     if (!member || !member.voice?.channel) return;
     const userId = member.id;
 
@@ -174,7 +191,7 @@ export class VCRManager {
     if (Date.now() - lastMute < MUTE_COOLDOWN_MS) return;
     this.userMuteCooldowns.set(userId, Date.now());
 
-    console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صراخ حاد في #${channel.name} من ${member.user.tag}. تطبيق ميوت 30 ثانية...`);
+    console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صراخ حاد (${energyValue} RMS) في #${channel.name} من ${member.user.tag}. تطبيق ميوت 30 ثانية...`);
 
     try {
       if (guild.members.me?.permissions.has(PermissionFlagsBits.MuteMembers)) {
@@ -226,7 +243,7 @@ export class VCRManager {
         .setAuthor({ name: '🚨 إنذار رصد إزعاج صوتي | GX VCR Sentinel', iconURL: member.user.displayAvatarURL() })
         .setTitle('⚠️ رصد صراخ / أصوات صاخبة وكتم المستخدم 30 ثانية')
         .setDescription(
-          `تم رصد ارتفاع حاد في مستوى الصوت (Loud Sound / dB Peak) في أحد الرومات الصوتية وتم اتخاذ الإجراء التلقائي فوراً.\n\n` +
+          `تم رصد ارتفاع حاد في مستوى الصوت (Loud Sound / Peak: \`${energyValue} RMS\`) في أحد الرومات الصوتية وتم اتخاذ الإجراء التلقائي فوراً.\n\n` +
           `👤 **العضو المخالف:** <@${member.id}> (\`${member.user.tag}\`)\n` +
           `🔊 **الروم الصوتي:** <#${channel.id}> (\`#${channel.name}\`)\n` +
           `⏱️ **الإجراء التلقائي:** تم كتم العضو صوتياً (Server Mute) لمدة \`30 ثانية\` وتم إرسال تنبيه في الخاص له.\n` +
@@ -248,6 +265,30 @@ export class VCRManager {
     }
   }
 
+  async convertPcmToMp3(pcmPath, mp3Path) {
+    return new Promise((resolve) => {
+      if (!fs.existsSync(pcmPath) || fs.statSync(pcmPath).size === 0) {
+        return resolve(false);
+      }
+
+      const proc = spawn(ffmpegStatic, [
+        '-y',
+        '-f', 's16le',
+        '-ar', '48000',
+        '-ac', '2',
+        '-i', pcmPath,
+        '-b:a', '128k',
+        mp3Path
+      ]);
+
+      proc.on('close', (code) => {
+        resolve(code === 0 && fs.existsSync(mp3Path) && fs.statSync(mp3Path).size > 0);
+      });
+
+      proc.on('error', () => resolve(false));
+    });
+  }
+
   async finalizeAndSendRecording(channelId, reason = 'مغادرة جميع الأعضاء وانتهاء الجلسة') {
     const session = this.activeSessions.get(channelId);
     if (!session || session.isFinalizing) return;
@@ -255,8 +296,17 @@ export class VCRManager {
     session.isFinalizing = true;
     this.activeSessions.delete(channelId);
 
+    if (session.pcmWriteStream) {
+      try { session.pcmWriteStream.end(); } catch {}
+    }
+
     const durationSeconds = Math.floor((Date.now() - session.startTime) / 1000);
-    if (durationSeconds < 5 || session.membersPresence.size === 0 || !session.hasSpoken) {
+    const hasRecordedAudio = (session.totalRecordedBytes || 0) > 4000;
+
+    if (durationSeconds < 3 || session.membersPresence.size === 0 || (!session.hasSpoken && !hasRecordedAudio)) {
+      if (fs.existsSync(session.pcmFilePath)) {
+        try { fs.unlinkSync(session.pcmFilePath); } catch {}
+      }
       session.isFinalizing = false;
       return;
     }
@@ -276,24 +326,42 @@ export class VCRManager {
         return `**${idx + 1}.** <@${m.id}> (` + m.tag + `)\n   • 📥 **الدخول:** ${joinStr} ➔ 📤 **الخروج:** ${leaveStr}\n   • 🗣️ **عدد مرات التحدث:** \`${m.totalSpokenCount}\` مرة`;
       }).join('\n\n') || 'لا توجد بيانات مسجلة';
 
+      const mp3Path = session.pcmFilePath.replace('.pcm', '.mp3');
+      const mp3Converted = await this.convertPcmToMp3(session.pcmFilePath, mp3Path);
+
+      const files = [];
+      if (mp3Converted) {
+        const safeName = session.channelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+        files.push(new AttachmentBuilder(mp3Path, { name: `GX_Voice_Rec_${safeName}_${Date.now()}.mp3` }));
+      }
+
       const reportEmbed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setAuthor({ name: '🎙️ تقرير الجلسة الصوتية وسجل الحضور | GX VCR Archive', iconURL: guild.iconURL() })
+        .setAuthor({ name: '🎙️ تقرير الجلسة الصوتية وملف التسجيل MP3 | GX VCR Archive', iconURL: guild.iconURL() })
         .setTitle(`📁 أرشفة الجلسة الصوتية في روم: #${session.channelName}`)
         .setDescription(
-          `تم إنهاء الجلسة الصوتية وتوثيق جدول دخول وخروج كافة الأعضاء وتوقيتاتهم بدقة.\n\n` +
+          `تم إنهاء الجلسة وتوليد الملف الصوتي وسجل الدخول والخروج بدقة.\n\n` +
           `🔊 **الروم الصوتي:** <#${session.channelId}> (\`#${session.channelName}\`)\n` +
           `⏱️ **إجمالي مدة الجلسة:** \`${durationStr}\`\n` +
           `📅 **بداية الجلسة:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
           `🏁 **نهاية الجلسة:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-          `📝 **سبب الإنهاء والأرشفة:** ${reason}\n\n` +
+          `🎵 **ملف التسجيل الصوتي:** ${mp3Converted ? '✅ مرفق بصيغة MP3 أدناه' : '⚠️ لم يتم رصد تسجيل مسموع'}\n` +
+          `📝 **سبب الأرشفة:** ${reason}\n\n` +
           `👥 **سجل الأعضاء والتوقيتات (${session.membersPresence.size} أعضاء):**\n${memberTimelines}`
         )
         .setFooter({ text: `GX eSports Autonomous Surveillance • ${session.worker.name}` })
         .setTimestamp();
 
-      await logChannel.send({ embeds: [reportEmbed] }).catch(() => {});
-      console.log(`📁 [أرشفة VCR] تم بنجاح إرسال تقرير الروم #${session.channelName} مع سجل الأعضاء والتوقيتات.`);
+      await logChannel.send({ embeds: [reportEmbed], files }).catch(() => {});
+      console.log(`📁 [أرشفة VCR] تم بنجاح إرسال تقرير وتسجيل الروم #${session.channelName} بصيغة MP3.`);
+
+      // Cleanup local temp files
+      if (fs.existsSync(session.pcmFilePath)) {
+        try { fs.unlinkSync(session.pcmFilePath); } catch {}
+      }
+      if (fs.existsSync(mp3Path)) {
+        try { fs.unlinkSync(mp3Path); } catch {}
+      }
     } catch (err) {
       console.error('خطأ في أرشفة التقرير الصوتي:', err.message);
     } finally {
@@ -352,7 +420,8 @@ export class VCRManager {
             }
           }
 
-          if (humanMembers.size === 0 && session.hasSpoken) {
+          // When everyone leaves, finalize the session and attach MP3
+          if (humanMembers.size === 0 && (session.hasSpoken || (session.totalRecordedBytes || 0) > 0)) {
             await this.finalizeAndSendRecording(vCh.id, 'مغادرة جميع الأعضاء للروم الصوتي');
           }
         }
