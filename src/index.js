@@ -1,3 +1,4 @@
+import { enforceSuspiciousAccountBan, handleAppealButton, handleAppealModalSubmit, SPY_ACCOUNT_CUTOFF_TIMESTAMP } from './security/spyDefense.js';
 import {
   Client,
   GatewayIntentBits,
@@ -1903,6 +1904,8 @@ async function welcomeExistingMembersSequentially(guild) {
 
   let countIndex = 1;
   for (const [, member] of humanMembers) {
+      // Check & ban suspicious accounts created on/after 16 August 2026
+      if (await enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION)) continue;
     if (!tracker.members[member.id]) {
       tracker.members[member.id] = {
         number: countIndex,
@@ -3197,6 +3200,10 @@ client.on(Events.GuildMemberAdd, async (member) => {
   try {
     if (member.partial) await member.fetch();
 
+    // 🛡️ SPY & SUSPICIOUS ACCOUNT DEFENSE (Created on or after August 16, 2026)
+    const wasSpy = await enforceSuspiciousAccountBan(member, member.guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION);
+    if (wasSpy) return;
+
     // Check if new member is one of our VCR Bots
     if (VCR_BOT_IDS.has(member.id)) {
       const vcrRole = await findOrCreateVCRRole(member.guild);
@@ -4042,6 +4049,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 🪟 MODAL SUBMIT HANDLER (Ticket Creation & Agent Reply)
     // ----------------------------------------------------
     if (interaction.isModalSubmit()) {
+      if (await handleAppealModalSubmit(interaction, client, getExecutiveMembers, ALLOWED_GUILD_ID)) return;
       // 1. استلام نافذة فتح التذكرة الخاصة (مرئية للمشتكي فقط 100%)
       if (interaction.customId === 'ticket_creation_modal') {
         await interaction.deferReply({ ephemeral: true });
@@ -4118,6 +4126,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 🎫 BUTTON INTERACTIONS HANDLER (Tickets & Events)
     // ----------------------------------------------------
     if (interaction.isButton()) {
+      if (await handleAppealButton(interaction, client, sendToLogChannel, isVerificationApprover, ALLOWED_GUILD_ID, BOT_VERSION)) return;
       // ====================================================
       // 🎉 EVENT BUTTON INTERACTIONS (انضمام / انسحاب / تذكير / مشاركون)
       // ====================================================
