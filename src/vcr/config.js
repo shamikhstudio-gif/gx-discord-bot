@@ -1,36 +1,39 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 export const VCR_CONFIGS = [
   { 
     id: '1539231767683137646', 
     name: 'GX VCR #1', 
-    token: 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.Gkf3Fx.vGNWnJPkznujkNruXkVRgO59S6Azm_GtCYozwM',
+    token: process.env.VCR_TOKEN_1?.trim() || 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.G-ZyYY.x3iA8A6eShq-9aA40_30hrdG5uKhkufQJ9wE34',
     defaultChannelId: '1537461175908958259',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟏'
   },
   { 
     id: '1539241189629362246', 
     name: 'GX VCR #2', 
-    token: 'MTUzOTI0MTE4OTYyOTM2MjI0Ng.GD4es9.op6hFAccGcCdxk3rNKVwzp9kYHQwFomH79LIUM',
+    token: process.env.VCR_TOKEN_2?.trim() || 'MTUzOTI0MTE4OTYyOTM2MjI0Ng.GqMtoI.vQ9iPPK8l1xKOi6_aHaX-RxbRO2Gs7E4hYB4cw',
     defaultChannelId: '1538568733692530798',
     defaultChannelName: '🔒・فويس الإدارة'
   },
   { 
     id: '1539241414318227466', 
     name: 'GX VCR #3', 
-    token: 'MTUzOTI0MTQxNDMxODIyNzQ2Ng.GX1bC4.PuKwmdSFkPqbNOSdBglS6MSWcnIPqTK1NMAMyM',
+    token: process.env.VCR_TOKEN_3?.trim() || 'MTUzOTI0MTQxNDMxODIyNzQ2Ng.GmQmdA.up4h9-c0plP9hMM5EiG0Yz96Uk7aZLXgJ3DG9c',
     defaultChannelId: '1538564154141577276',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟐'
   },
   { 
     id: '1539241621328101497', 
     name: 'GX VCR #4', 
-    token: 'MTUzOTI0MTYyMTMyODEwMTQ5Nw.GI0Upa.B39f0NNxKaBmcT3plb4Pwf-C8amlPLkkNDB7rQ',
+    token: process.env.VCR_TOKEN_4?.trim() || 'MTUzOTI0MTYyMTMyODEwMTQ5Nw.GVzYka.9c17mlSOI_7VaQR0q06ok0GSvtcrVZa75q7pk8',
     defaultChannelId: '1538564786680233984',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟑'
   },
   { 
     id: '1539241867105927209', 
     name: 'GX VCR #5', 
-    token: 'MTUzOTI0MTg2NzEwNTkyNzIwOQ.Gm5orN.ihvx7BGFF_JF5bIREsnS4qE9WkNA4t8Rl6Ox4w',
+    token: process.env.VCR_TOKEN_5?.trim() || 'MTUzOTI0MTg2NzEwNTkyNzIwOQ.G88qtg.sfomenKJbYA3dOINXg0RomvA33WUo7rx8Uukv8',
     defaultChannelId: '1538564321905479731',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟒'
   }
@@ -55,9 +58,6 @@ export const TOP_EXEC_USER_IDS = ['1152686277255237663', '1484535997893967980'];
 export const TOP_EXEC_USERNAMES = ['itszoki', 'ice0090'];
 
 // 🔊 Advanced Acoustic Scream & Ear-Rape Calibration
-// Normal speech: 800-3500 RMS. Laughs/Coughs: momentary ~5000-8000 RMS.
-// Real Sustained Screams: RMS >= 11000 for 3+ consecutive frames (~60-100ms).
-// Instant Ear-Rape / Mic Blasts: RMS >= 16000 or Peak >= 29000.
 export const SUSTAINED_SCREAM_RMS_THRESHOLD = 11000;
 export const SUSTAINED_SCREAM_FRAMES_REQUIRED = 3;
 export const INSTANT_EAR_RAPE_RMS_THRESHOLD = 16000;
