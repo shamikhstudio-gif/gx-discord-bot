@@ -4,9 +4,39 @@ import { Readable } from 'stream';
 import prism from 'prism-media';
 import { LOUD_SOUND_THRESHOLD } from './config.js';
 
-class SilenceStream extends Readable {
+/**
+ * Standard WebRTC Timed Silence Stream (1 Opus frame every 20ms = 50 packets/sec).
+ * Prevents UDP buffer flooding, packet loss, and RTC desync that triggers the yellow "!" icon!
+ */
+class TimedSilenceStream extends Readable {
+  constructor(options = {}) {
+    super(options);
+    this.interval = null;
+  }
+
   _read() {
-    this.push(Buffer.from([0xF8, 0xFF, 0xFE]));
+    if (!this.interval) {
+      this.interval = setInterval(() => {
+        try {
+          const pushOk = this.push(Buffer.from([0xF8, 0xFF, 0xFE]));
+          if (!pushOk) {
+            clearInterval(this.interval);
+            this.interval = null;
+          }
+        } catch {
+          clearInterval(this.interval);
+          this.interval = null;
+        }
+      }, 20);
+    }
+  }
+
+  _destroy(err, callback) {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+    callback(err);
   }
 }
 
@@ -23,6 +53,7 @@ export class VCRWorker {
     this.player = null;
     this.assignedChannelId = config.defaultChannelId;
     this.isReady = false;
+    this.isReconnecting = false;
     this.activeUserSubscriptions = new Map(); // userId -> { opusStream, opusDecoder }
   }
 
@@ -42,6 +73,20 @@ export class VCRWorker {
         resolve(true);
       });
 
+      // Direct auto-unmute and auto-undeafen listener
+      this.client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+        if (newState.id === this.id) {
+          if (newState.serverMute) {
+            console.warn(`🛡️ [حماية VCR] إلغاء كتم السيرفر الإجباري عن ${this.name} فوراً...`);
+            await newState.setMute(false, 'GX VCR Immune Policy: Un-Server-Mute').catch(() => {});
+          }
+          if (newState.serverDeaf) {
+            console.warn(`🛡️ [حماية VCR] إلغاء تصميت السيرفر الإجباري عن ${this.name} فوراً...`);
+            await newState.setDeaf(false, 'GX VCR Immune Policy: Un-Server-Deaf').catch(() => {});
+          }
+        }
+      });
+
       this.client.on(Events.Error, (err) => {
         console.warn(`⚠️ [تحذير مسجل ${this.name}]`, err.message);
       });
@@ -57,7 +102,7 @@ export class VCRWorker {
     const player = createAudioPlayer();
     const playSilence = () => {
       try {
-        const resource = createAudioResource(new SilenceStream(), { inputType: StreamType.Opus });
+        const resource = createAudioResource(new TimedSilenceStream(), { inputType: StreamType.Opus });
         player.play(resource);
       } catch {}
     };
@@ -93,8 +138,14 @@ export class VCRWorker {
     try {
       this.cleanupSubscriptions();
 
+      // Cleanly destroy any existing voice connection before joining
       if (this.connection) {
-        try { this.connection.destroy(); } catch {}
+        try {
+          if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+            this.connection.destroy();
+          }
+        } catch {}
+        this.connection = null;
       }
 
       this.connection = joinVoiceChannel({
@@ -112,15 +163,30 @@ export class VCRWorker {
       this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
         try {
           await Promise.race([
-            entersState(this.connection, VoiceConnectionStatus.Signalling, 3000),
-            entersState(this.connection, VoiceConnectionStatus.Connecting, 3000)
+            entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
+            entersState(this.connection, VoiceConnectionStatus.Connecting, 5000)
           ]);
         } catch {
-          console.warn(`⚡ [إعادة اتصال فوري] انقطع اتصال ${this.name} من #${channel.name}. جارٍ إعادة الربط...`);
-          setTimeout(() => {
-            this.joinChannel(channel, guild, true).catch(() => {});
-          }, 1000);
+          console.warn(`⚡ [إعادة اتصال فوري] انقطع اتصال ${this.name} من #${channel.name}. جارٍ إعادة الربط النظيف...`);
+          try {
+            if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+              this.connection.destroy();
+            }
+          } catch {}
+          this.connection = null;
+
+          if (!this.isReconnecting) {
+            this.isReconnecting = true;
+            setTimeout(async () => {
+              this.isReconnecting = false;
+              await this.joinChannel(channel, guild, true).catch(() => {});
+            }, 800);
+          }
         }
+      });
+
+      this.connection.on(VoiceConnectionStatus.Destroyed, () => {
+        this.cleanupSubscriptions();
       });
 
       this.connection.on('error', (err) => {
@@ -212,6 +278,11 @@ export class VCRWorker {
             if (rms > LOUD_SOUND_THRESHOLD) {
               const violatingMember = guild.members.cache.get(userId);
               if (violatingMember) {
+                // Strict check: Is member COO, CEO, or OWNER?
+                if (this.manager.isVCRImmuneExecutive(violatingMember)) {
+                  // Completely immune!
+                  return;
+                }
                 this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, Math.round(rms));
               }
             }
