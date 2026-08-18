@@ -1,5 +1,8 @@
-import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const VCR_CONFIGS = [
   { id: '1539231767683137646', name: 'GX VCR #1', token: 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.Gkf3Fx.vGNWnJPkznujkNruXkVRgO59S6Azm_GtCYozwM' },
@@ -10,12 +13,13 @@ export const VCR_CONFIGS = [
 ];
 
 export const VCR_ROLE_NAME = '🎙️ GX VCR';
-export const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
 export const SECRET_VCR_CHANNEL_NAME = '📁・سجلات-التسجيلات-الصوتية';
+export const SECRET_VCR_CHANNEL_ID = '1539266769695547454';
+export const ALLOWED_GUILD_ID = '1537461174222725120';
 
-export const LOUD_SOUND_THRESHOLD = 215; // Decibel / Audio amplitude peak threshold
+// PCM RMS Energy Threshold for Loud Noise / Ear-Rape / Screaming (> 16000 RMS on 16-bit PCM)
+export const LOUD_SOUND_THRESHOLD = 16000;
 export const MUTE_DURATION_MS = 30000; // 30 seconds fixed server mute
-export const MUTE_COOLDOWN_MS = 35000; // 35 seconds per-user mute lock
+export const MUTE_COOLDOWN_MS = 35000;
 
-export const VCR_RECORDS_DIR = path.resolve('data', 'vcr_recordings');
-if (!fs.existsSync(VCR_RECORDS_DIR)) fs.mkdirSync(VCR_RECORDS_DIR, { recursive: true });
+export const VCR_RECORDS_DIR = path.resolve(__dirname, '../../data/vcr_recordings');
