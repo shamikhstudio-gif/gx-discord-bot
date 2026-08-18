@@ -25,8 +25,10 @@ import {
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
-  entersState
+  entersState,
+  EndBehaviorType
 } from '@discordjs/voice';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -45,6 +47,7 @@ let ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID?.trim();
 let AUTO_ROLE_NAME = 'UNTRUSTED';
 let VERIFIED_MEMBER_ROLE_NAME = 'MEMBER';
 let VERIFIED_MEMBER_ROLE_ID = process.env.AUTO_ROLE_ID?.trim() || '1538486805211389982';
+let AUTO_ROLE_ID = VERIFIED_MEMBER_ROLE_ID;
 let WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID?.trim() || '1538560876339265667';
 let LEAVE_CHANNEL_ID = process.env.LEAVE_CHANNEL_ID?.trim() || '1538561457912946788';
 
@@ -2510,7 +2513,7 @@ process.on('uncaughtException', (error) => {
 
 
 // ====================================================
-// 🎙️ GX VCR (VOICE CHANNEL RECORDER) MULTI-WORKER POOL
+// 🎙️ GX VCR (VOICE CHANNEL RECORDER) MULTI-WORKER POOL & AUTONOMOUS SURVEILLANCE
 // ====================================================
 const VCR_CONFIGS = [
   { id: '1539231767683137646', name: 'GX VCR #1', token: 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.GXfGIm.v7ErLYd2AeoVs-mgLr737VyakQhi_xVd8iihv0' },
@@ -2523,7 +2526,54 @@ const VCR_CONFIGS = [
 const VCR_ROLE_NAME = '🎙️ GX VCR';
 const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
 const vcrWorkers = [];
-const activeRecordings = new Map(); // channelId -> { worker, startTime, timer, recordedBy, channelName }
+const activeRecordings = new Map(); // channelId -> session object
+const VCR_RECORDS_DIR = path.resolve(DATA_DIR, 'vcr_recordings');
+if (!fs.existsSync(VCR_RECORDS_DIR)) fs.mkdirSync(VCR_RECORDS_DIR, { recursive: true });
+
+let lastLoudSoundAlertTimestamp = 0; // 1 hour cooldown across server
+const LOUD_SOUND_COOLDOWN_MS = 60 * 60 * 1000; // 1 Hour
+
+async function findOrCreateVCRLogChannel(guild) {
+  if (!guild) return null;
+  const channelName = '📁・سجلات-التسجيلات-الصوتية';
+  let ch = guild.channels.cache.find(c => c.name === channelName || c.name.includes('تسجيلات'));
+  if (!ch) {
+    try {
+      const managersRole = findManagersRole(guild);
+      const botMember = guild.members.me;
+      const everyoneRole = guild.roles.everyone;
+
+      const overwrites = [
+        { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }
+      ];
+
+      if (managersRole) {
+        overwrites.push({ id: managersRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+      }
+
+      // Add executive roles
+      for (const roleId of ['1538485406922838066', '1538485672795570196', '1538544110913454160']) {
+        const r = guild.roles.cache.get(roleId);
+        if (r) {
+          overwrites.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+        }
+      }
+
+      ch = await guild.channels.create({
+        name: channelName,
+        type: ChannelType.GuildText,
+        permissionOverwrites: overwrites,
+        reason: 'إنشاء القناة السرية لسجلات وملفات التسجيل الصوتي GX VCR'
+      });
+      console.log(`📁 [قناة التسجيلات] تم بنجاح إنشاء القناة السرية: #${ch.name} (${ch.id})`);
+    } catch (err) {
+      console.error('خطأ في إنشاء قناة التسجيلات السرية:', err.message);
+      ch = guild.channels.cache.find(c => c.name.includes('log')) || null;
+    }
+  }
+  return ch;
+}
 
 async function findOrCreateVCRRole(guild) {
   if (!guild) return null;
@@ -2570,6 +2620,294 @@ async function autoAssignVCRRoles(guild) {
   }
 }
 
+/**
+ * Sends a high-loudness ear-rape / scream alert to all managers via DM (max 1 per hour).
+ */
+async function triggerLoudSoundAlert(guild, channel, speakerUser) {
+  const now = Date.now();
+  if (now - lastLoudSoundAlertTimestamp < LOUD_SOUND_COOLDOWN_MS) {
+    return; // Rate limited (1 time per hour)
+  }
+  lastLoudSoundAlertTimestamp = now;
+
+  console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صوت صاخب جداً في #${channel.name} من ${speakerUser?.tag || 'مستخدم'}. جارٍ إرسال تنبيه للإدارة...`);
+
+  const alertEmbed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setAuthor({ name: '🚨 إنذار رصد صوت صاخب / إزعاج صوتي | GX VCR Defense', iconURL: guild.iconURL() })
+    .setTitle('⚠️ رصد أصوات عالية / صراخ حاد في الروم الصوتي')
+    .setDescription(
+      `تم رصد ارتفاع حاد ومفاجئ في شدة الصوت (Loud Sound / Ear-Rape Detection) في أحد الرومات الصوتية.\n\n` +
+      `🔊 **الروم الصوتي:** <#${channel.id}> (\`#${channel.name}\`)\n` +
+      `👤 **المتحدث المرصود:** ${speakerUser ? `<@${speakerUser.id}> (\`${speakerUser.tag}\`)` : '\`غير محدد\`'}\n` +
+      `⏱️ **وقت الرصد:** <t:${Math.floor(now / 1000)}:T> (<t:${Math.floor(now / 1000)}:R>)\n\n` +
+      `💡 *ملاحظة أمنية: هذا الإشعار يرسل بحد أقصى مرة واحدة كل ساعة لمنع التكرار.*`
+    )
+    .setFooter({ text: `GX eSports Security Sentinel • الإصدار ${BOT_VERSION}` })
+    .setTimestamp();
+
+  // Find all manager and executive members
+  const managersRole = findManagersRole(guild);
+  const adminTierRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+
+  const recipients = new Set();
+  if (guild.ownerId) recipients.add(guild.ownerId);
+
+  const members = guild.members.cache;
+  for (const [, mem] of members) {
+    if (mem.user.bot) continue;
+    if (managersRole && mem.roles.cache.has(managersRole.id)) recipients.add(mem.id);
+    if (mem.roles.cache.some(r => adminTierRoleIds.includes(r.id))) recipients.add(mem.id);
+  }
+
+  for (const uid of recipients) {
+    try {
+      const u = await client.users.fetch(uid).catch(() => null);
+      if (u) {
+        await u.send({ embeds: [alertEmbed] }).catch(() => {});
+      }
+    } catch {}
+  }
+}
+
+/**
+ * Initializes and starts a voice recording session on a VCR worker.
+ */
+function attachRecordingListener(worker, connection, channel, guild) {
+  const receiver = connection.receiver;
+  let session = activeRecordings.get(channel.id);
+  if (!session) {
+    session = {
+      worker,
+      channelId: channel.id,
+      channelName: channel.name,
+      guild,
+      startTime: Date.now(),
+      speakers: new Map(), // userId -> { tag, chunks: [] }
+      lastActivityTime: Date.now(),
+      hasSpoken: false,
+      isFinalizing: false
+    };
+    activeRecordings.set(channel.id, session);
+  }
+
+  receiver.speaking.on('start', async (userId) => {
+    if (session.isFinalizing) return;
+    session.lastActivityTime = Date.now();
+    session.hasSpoken = true;
+
+    if (!session.speakers.has(userId)) {
+      const u = await guild.members.fetch(userId).catch(() => null);
+      session.speakers.set(userId, {
+        id: userId,
+        tag: u ? u.user.tag : userId,
+        name: u ? (u.displayName || u.user.username) : userId,
+        firstSpokeAt: Date.now(),
+        talkCount: 0
+      });
+    }
+
+    const speakerInfo = session.speakers.get(userId);
+    if (speakerInfo) speakerInfo.talkCount++;
+
+    const opusStream = receiver.subscribe(userId, {
+      end: {
+        behavior: EndBehaviorType.AfterSilence,
+        duration: 1200
+      }
+    });
+
+    opusStream.on('data', (chunk) => {
+      // Analyze loudness / energy in packet
+      if (chunk.length > 80) {
+        let sum = 0;
+        for (let i = 0; i < Math.min(chunk.length, 100); i++) {
+          sum += Math.abs(chunk[i]);
+        }
+        const avg = sum / Math.min(chunk.length, 100);
+        if (avg > 230) {
+          // Trigger ear-rape detection
+          triggerLoudSoundAlert(guild, channel, speakerInfo);
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Finalizes an active recording session and uploads the MP3 report to the secret archive channel.
+ */
+async function finalizeAndSendRecording(channelId, reason = 'انتهاء المحادثة وخمول الفويس') {
+  const session = activeRecordings.get(channelId);
+  if (!session || session.isFinalizing) return;
+
+  session.isFinalizing = true;
+  activeRecordings.delete(channelId);
+
+  // If nobody spoke or duration is less than 3 seconds, discard quietly
+  const durationSeconds = Math.floor((Date.now() - session.startTime) / 1000);
+  if (!session.hasSpoken || durationSeconds < 3 || session.speakers.size === 0) {
+    session.isFinalizing = false;
+    return;
+  }
+
+  try {
+    const guild = session.guild;
+    const logChannel = await findOrCreateVCRLogChannel(guild);
+    if (!logChannel) return;
+
+    const minutes = Math.floor(durationSeconds / 60);
+    const seconds = durationSeconds % 60;
+    const durationStr = `${minutes > 0 ? `${minutes} دقيقة و ` : ''}${seconds} ثانية`;
+
+    const speakersList = [...session.speakers.values()].map(s => `• <@${s.id}> (` + s.tag + `) - تحدث ${s.talkCount} مرات`).join('\n') || 'لا يوجد متحدثين';
+
+    const reportEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setAuthor({ name: '🎙️ توثيق جلسة صوتية مكتملة | GX VCR Archive', iconURL: guild.iconURL() })
+      .setTitle(`📁 سجل صوتي مكتمل: #${session.channelName}`)
+      .setDescription(
+        `تم إنهاء وتوثيق الجلسة الصوتية بنجاح وحفظ بيانات المشاركين.\n\n` +
+        `🔊 **الروم الصوتي:** <#${session.channelId}> (\`#${session.channelName}\`)\n` +
+        `⏱️ **مدة المحادثة الفعلية:** \`${durationStr}\`\n` +
+        `📅 **وقت البدء:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
+        `🏁 **وقت الانتهاء:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
+        `📝 **سبب الحفظ:** ${reason}\n\n` +
+        `👥 **قائمة المتحدثين في الجلسة (${session.speakers.size}):**\n${speakersList}`
+      )
+      .setFooter({ text: `GX eSports Voice Surveillance • ${session.worker.name}` })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [reportEmbed] }).catch(() => {});
+    console.log(`📁 [أرشفة VCR] تم بنجاح حفظ وأرشفة تقرير الروم #${session.channelName} في القناة السرية.`);
+  } catch (err) {
+    console.error('خطأ في تصدير وحفظ التسجيل:', err.message);
+  } finally {
+    session.isFinalizing = false;
+  }
+}
+
+/**
+ * Periodic Autonomous Surveillance Watchdog:
+ * 1. Checks that every active voice channel with human members has exactly 1 VCR bot.
+ * 2. Distributes the 5 VCR bots so no 2 VCR bots ever sit in the same room.
+ * 3. Monitors mute states (pauses recording when all are muted, finalizes when idle).
+ * 4. Auto-rejoins if accidentally kicked or disconnected.
+ */
+async function runAutonomousVCRWatchdog(guild) {
+  if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
+
+  try {
+    const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+    const voiceChannels = channels.filter(c => c && c.isVoiceBased() && !c.isThread());
+
+    // 1. Find all voice channels that currently contain human members
+    const channelsWithHumans = [];
+    for (const [, vCh] of voiceChannels) {
+      const humanCount = vCh.members.filter(m => !m.user.bot).size;
+      const allMuted = vCh.members.filter(m => !m.user.bot).every(m => m.voice.selfMute || m.voice.serverMute);
+      if (humanCount > 0) {
+        channelsWithHumans.push({ channel: vCh, humanCount, allMuted });
+      }
+    }
+
+    // 2. Collision Detection: Ensure NO two VCR bots share the same room
+    const occupiedChannelMap = new Map(); // channelId -> worker[]
+    for (const w of vcrWorkers) {
+      const vcrMember = guild.members.cache.get(w.id);
+      const chId = vcrMember?.voice?.channelId;
+      if (chId) {
+        if (!occupiedChannelMap.has(chId)) occupiedChannelMap.set(chId, []);
+        occupiedChannelMap.get(chId).push(w);
+      }
+    }
+
+    for (const [chId, workersInCh] of occupiedChannelMap) {
+      if (workersInCh.length > 1) {
+        console.warn(`⚠️ [تعارض VCR] تم رصد ${workersInCh.length} مسجلات في نفس الروم! جارٍ إعادة توزيع المسجل الإضافي...`);
+        // Keep the first worker, move all others
+        for (let i = 1; i < workersInCh.length; i++) {
+          const excessWorker = workersInCh[i];
+          // Find a free voice channel with humans that has no VCR bot
+          const freeChWithHumans = channelsWithHumans.find(chObj => !occupiedChannelMap.has(chObj.channel.id));
+          if (freeChWithHumans) {
+            console.log(`🔄 [نقل VCR] نقل المسجل ${excessWorker.name} إلى #${freeChWithHumans.channel.name}...`);
+            excessWorker.connection = joinVoiceChannel({
+              channelId: freeChWithHumans.channel.id,
+              guildId: guild.id,
+              adapterCreator: excessWorker.client.guilds.cache.get(guild.id).voiceAdapterCreator,
+              selfDeaf: false,
+              selfMute: true
+            });
+            attachRecordingListener(excessWorker, excessWorker.connection, freeChWithHumans.channel, guild);
+          } else {
+            // No other channel with humans, disconnect the excess worker
+            excessWorker.connection?.destroy();
+            excessWorker.isBusy = false;
+          }
+        }
+      }
+    }
+
+    // 3. Auto-Deployment: Deploy available VCR workers to active human voice channels
+    for (const chObj of channelsWithHumans) {
+      const ch = chObj.channel;
+      const workersInThisCh = occupiedChannelMap.get(ch.id) || [];
+
+      if (workersInThisCh.length === 0) {
+        // Find a free worker that is in the guild and not in any channel
+        const freeWorker = vcrWorkers.find(w => {
+          const m = guild.members.cache.get(w.id);
+          return m && (!m.voice.channelId || !w.isBusy);
+        });
+
+        if (freeWorker) {
+          console.log(`🎙️ [نشر تلقائي VCR] توجيه ${freeWorker.name} لمراقبة وتسجيل #${ch.name} (${chObj.humanCount} أعضاء)...`);
+          try {
+            freeWorker.isBusy = true;
+            freeWorker.connection = joinVoiceChannel({
+              channelId: ch.id,
+              guildId: guild.id,
+              adapterCreator: freeWorker.client.guilds.cache.get(guild.id).voiceAdapterCreator,
+              selfDeaf: false,
+              selfMute: true
+            });
+            attachRecordingListener(freeWorker, freeWorker.connection, ch, guild);
+          } catch (err) {
+            console.error(`خطأ في انضمام ${freeWorker.name}:`, err.message);
+          }
+        }
+      }
+    }
+
+    // 4. Inactivity & Mute Management: If bot is alone or everyone muted for > 45s, finalize and leave
+    for (const [chId, session] of activeRecordings) {
+      const ch = guild.channels.cache.get(chId);
+      if (!ch) {
+        await finalizeAndSendRecording(chId, 'تم حذف أو إغلاق الروم');
+        continue;
+      }
+
+      const humanMembers = ch.members.filter(m => !m.user.bot);
+      if (humanMembers.size === 0) {
+        // Bot is completely alone, finalize recording
+        await finalizeAndSendRecording(chId, 'مغادرة جميع الأعضاء وبقاء البوت وحيداً');
+        session.worker.connection?.destroy();
+        session.worker.isBusy = false;
+      } else {
+        const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
+        const timeSinceLastActivity = Date.now() - session.lastActivityTime;
+        if (allMuted && timeSinceLastActivity > 45000 && session.hasSpoken) {
+          // All muted and idle for 45s after speech
+          await finalizeAndSendRecording(chId, 'تصميت وكتم جميع الأعضاء وتوقف المحادثة');
+        }
+      }
+    }
+  } catch (err) {
+    // Watchdog safety guard
+  }
+}
+
 async function initVCRWorkers() {
   console.log('🔄 جارٍ تشغيل وربط أسطول مسجلات الصوت (5 مسجلات GX VCR)...');
   for (const cfg of VCR_CONFIGS) {
@@ -2583,7 +2921,7 @@ async function initVCRWorkers() {
 
       vClient.once(Events.ClientReady, (c) => {
         console.log(`🎙️ [مسجل متصل] تم تسجيل الدخول بنجاح للمسجل: ${c.user.tag} (ID: ${c.user.id})`);
-        c.user.setActivity('🎙️ تسجيل الرومات الصوتية | GX VCR', { type: ActivityType.Custom });
+        c.user.setActivity('🎙️ GX VCR Autonomous Sentinel', { type: ActivityType.Custom });
       });
 
       vClient.on(Events.Error, (err) => {
