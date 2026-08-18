@@ -2508,6 +2508,108 @@ process.on('uncaughtException', (error) => {
   console.error('⚠️ [استثناء غير متوقع]', error);
 });
 
+
+// ====================================================
+// 🎙️ GX VCR (VOICE CHANNEL RECORDER) MULTI-WORKER POOL
+// ====================================================
+const VCR_CONFIGS = [
+  { id: '1539231767683137646', name: 'GX VCR #1', token: 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.GXfGIm.v7ErLYd2AeoVs-mgLr737VyakQhi_xVd8iihv0' },
+  { id: '1539241189629362246', name: 'GX VCR #2', token: 'MTUzOTI0MTE4OTYyOTM2MjI0Ng.GAyplm.hB-QrHacsgigyLS_QjUuqdtgOZZIKuo-iU0nlQ' },
+  { id: '1539241414318227466', name: 'GX VCR #3', token: 'MTUzOTI0MTQxNDMxODIyNzQ2Ng.GpVhJ1.NV75myRWpFF9xxqDvrmvXF67Ag0sOacM-0FCdk' },
+  { id: '1539241621328101497', name: 'GX VCR #4', token: 'MTUzOTI0MTYyMTMyODEwMTQ5Nw.GDTRoJ.4CHuU_GdlZyWPLPpS2kqoYCDkZf_l_07DNgseI' },
+  { id: '1539241867105927209', name: 'GX VCR #5', token: 'MTUzOTI0MTg2NzEwNTkyNzIwOQ.Gu2SJy.SGrb68hp9SCHMIdZcOCVwMdP03UyP_iwLPcFMk' }
+];
+
+const VCR_ROLE_NAME = '🎙️ GX VCR';
+const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
+const vcrWorkers = [];
+const activeRecordings = new Map(); // channelId -> { worker, startTime, timer, recordedBy, channelName }
+
+async function findOrCreateVCRRole(guild) {
+  if (!guild) return null;
+  let role = guild.roles.cache.find(r => r.name === VCR_ROLE_NAME || r.name.toLowerCase() === 'gx vcr');
+  if (!role) {
+    try {
+      const botMember = guild.members.me;
+      if (botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        role = await guild.roles.create({
+          name: VCR_ROLE_NAME,
+          color: 0x5865F2,
+          hoist: true,
+          mentionable: false,
+          permissions: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.UseVAD
+          ],
+          reason: 'إنشاء رتبة أسطول مسجلات GX VCR الرسمية'
+        });
+        console.log(`🎙️ [رتبة VCR] تم بنجاح إنشاء رتبة "${VCR_ROLE_NAME}" (${role.id})!`);
+      }
+    } catch (err) {
+      console.error('خطأ في إنشاء رتبة VCR:', err.message);
+    }
+  }
+  return role;
+}
+
+async function autoAssignVCRRoles(guild) {
+  if (!guild) return;
+  const vcrRole = await findOrCreateVCRRole(guild);
+  if (!vcrRole) return;
+
+  for (const vcr of VCR_CONFIGS) {
+    const member = await guild.members.fetch(vcr.id).catch(() => null);
+    if (member && !member.roles.cache.has(vcrRole.id)) {
+      try {
+        await member.roles.add(vcrRole);
+        console.log(`🎙️ [رتبة VCR] تم منح رتبة "${VCR_ROLE_NAME}" للبوت ${vcr.name} تلقائياً.`);
+      } catch {}
+    }
+  }
+}
+
+async function initVCRWorkers() {
+  console.log('🔄 جارٍ تشغيل وربط أسطول مسجلات الصوت (5 مسجلات GX VCR)...');
+  for (const cfg of VCR_CONFIGS) {
+    try {
+      const vClient = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildVoiceStates
+        ]
+      });
+
+      vClient.once(Events.ClientReady, (c) => {
+        console.log(`🎙️ [مسجل متصل] تم تسجيل الدخول بنجاح للمسجل: ${c.user.tag} (ID: ${c.user.id})`);
+        c.user.setActivity('🎙️ تسجيل الرومات الصوتية | GX VCR', { type: ActivityType.Custom });
+      });
+
+      vClient.on(Events.Error, (err) => {
+        console.error(`⚠️ [خطأ مسجل ${cfg.name}]`, err.message);
+      });
+
+      await vClient.login(cfg.token).catch((err) => {
+        console.error(`❌ فشل تسجيل دخول ${cfg.name}:`, err.message);
+      });
+
+      vcrWorkers.push({
+        id: cfg.id,
+        name: cfg.name,
+        client: vClient,
+        isBusy: false,
+        activeChannelId: null,
+        connection: null
+      });
+    } catch (err) {
+      console.error(`❌ خطأ في تهيئة ${cfg.name}:`, err.message);
+    }
+  }
+  console.log(`✅ اكتمل تشغيل ${vcrWorkers.length} مسجلات صوتية بنجاح!`);
+}
+
+
 // ----------------------------------------------------
 // EVENT: Ready
 // ----------------------------------------------------
@@ -2549,6 +2651,9 @@ client.once(Events.ClientReady, async (c) => {
       await syncActiveTicketsMembers(guild);
       await syncAllMembersRole(guild, true);
       await welcomeExistingMembersSequentially(guild);
+    await findOrCreateVCRRole(guild);
+    await autoAssignVCRRoles(guild);
+    await initVCRWorkers();
       await checkAndResetBiweeklyInfractions(guild);
       sendSecurityDMToExistingMembers(guild);
 
@@ -3151,6 +3256,24 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
   try {
     if (member.partial) await member.fetch();
+
+    // Check if new member is one of our VCR Bots
+    if (VCR_BOT_IDS.has(member.id)) {
+      const vcrRole = await findOrCreateVCRRole(member.guild);
+      if (vcrRole) {
+        await member.roles.add(vcrRole).catch(() => {});
+      }
+      console.log(`🎙️ [انضمام مسجل] انضم البوت المسجل ${member.user.tag} وتم منحه رتبة "${VCR_ROLE_NAME}" فوراً.`);
+      const vcrLogEmbed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setAuthor({ name: '🎙️ انضمام مسجل صوتي جديد | GX VCR Cluster', iconURL: member.user.displayAvatarURL() })
+        .setTitle('✅ تم تفعيل وربط مسجل صوتي بالسيرفر')
+        .setDescription(`تم بنجاح ضم المسجل <@${member.id}> (` + member.user.tag + `) ومنحه رتبة <@&${vcrRole?.id}> ليصبح جاهزاً لتسجيل الرومات الصوتية فوراً!`)
+        .setFooter({ text: `GX eSports VCR System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(member.guild, vcrLogEmbed);
+      return;
+    }
 
     const untrustedRole = await findOrCreateUntrustedRole(member.guild);
     const botMember = member.guild.members.me;
@@ -6687,6 +6810,269 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
 
+
+
+    // 45. أمر /تسجيل_حالة (عرض أسطول مسجلات GX VCR)
+    else if (commandName === 'تسجيل_حالة') {
+      const guild = interaction.guild;
+      const vcrRole = await findOrCreateVCRRole(guild);
+      const fields = [];
+
+      const actionRows = [];
+      let currentRow = new ActionRowBuilder();
+
+      for (let i = 0; i < VCR_CONFIGS.length; i++) {
+        const cfg = VCR_CONFIGS[i];
+        const member = guild.members.cache.get(cfg.id);
+        const isPresent = !!member;
+        const worker = vcrWorkers.find((w) => w.id === cfg.id);
+        const isBusy = worker?.isBusy;
+
+        let statusText = '❌ غير مضاف بالسيرفر';
+        if (isPresent) {
+          statusText = isBusy ? `🔴 يسجل في <#${worker.activeChannelId}>` : '🟢 متصل وجاهز للتسجيل';
+        }
+
+        fields.push({
+          name: `🎙️ ${cfg.name}`,
+          value: `• **الحالة:** ${statusText}\n• **المعرف:** \`${cfg.id}\``,
+          inline: true
+        });
+
+        if (!isPresent) {
+          const inviteBtn = new ButtonBuilder()
+            .setLabel(`إضافة ${cfg.name}`)
+            .setStyle(ButtonStyle.Link)
+            .setURL(`https://discord.com/oauth2/authorize?client_id=${cfg.id}&scope=bot%20applications.commands&permissions=8`);
+
+          currentRow.addComponents(inviteBtn);
+          if (currentRow.components.length === 5) {
+            actionRows.push(currentRow);
+            currentRow = new ActionRowBuilder();
+          }
+        }
+      }
+
+      if (currentRow.components.length > 0) {
+        actionRows.push(currentRow);
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setAuthor({ name: '🎙️ أسطول مسجلات الصوت الذكي | GX VCR Cluster', iconURL: guild.iconURL() })
+        .setTitle('📊 لوحة التحكم وحالة مسجلات GX VCR')
+        .setDescription(
+          'نظام مسجلات الصوت المتعدد **GX VCR** يتيح تسجيل حتى **5 رومات صوتية بالتوازي** للمباريات والاجتماعات وحفظها كملفات MP3 مباشرة.\n\n' +
+          `👑 **رتبة النظام المخصصة:** ${vcrRole ? `<@&${vcrRole.id}>` : '\`قيد الإنشاء...\`'}`
+        )
+        .addFields(fields)
+        .setFooter({ text: `GX eSports VCR Fleet • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+
+      return interaction.reply({
+        embeds: [embed],
+        components: actionRows,
+        ephemeral: true
+      });
+    }
+
+    // 46. أمر /تسجيل_ابدأ (بدء تسجيل روم صوتي عبر أول مسجل متاح)
+    else if (commandName === 'تسجيل_ابدأ') {
+      if (!isManagerMember(interaction.member) && !isVerificationApprover(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، استخدام نظام تسجيل الرومات الصوتية مقتصر على الإدارة والقيادة العليا!**',
+          ephemeral: true
+        });
+      }
+
+      const guild = interaction.guild;
+      let targetChannel = interaction.options.getChannel('الروم_الصوتي');
+      if (!targetChannel) {
+        targetChannel = interaction.member.voice?.channel;
+      }
+
+      if (!targetChannel || !targetChannel.isVoiceBased()) {
+        return interaction.reply({
+          content: '⚠️ **يرجى التواجد في روم صوتي أولاً أو تحديد الروم الصوتي المراد تسجيله!**',
+          ephemeral: true
+        });
+      }
+
+      if (activeRecordings.has(targetChannel.id)) {
+        const existing = activeRecordings.get(targetChannel.id);
+        return interaction.reply({
+          content: `⚠️ **الروم الصوتي <#${targetChannel.id}> قيد التسجيل بالفعل بواسطة ${existing.worker.name} منذ <t:${Math.floor(existing.startTime / 1000)}:R>!**`,
+          ephemeral: true
+        });
+      }
+
+      // Find available worker in guild
+      const availableWorker = vcrWorkers.find((w) => {
+        const member = guild.members.cache.get(w.id);
+        return member && !w.isBusy;
+      });
+
+      if (!availableWorker) {
+        return interaction.reply({
+          content: '❌ **لا يوجد أي مسجل GX VCR متاح حالياً بالسيرفر! يرجى التأكد من إضافة بوتات VCR عبر أمر \`/تسجيل_حالة\` أو الانتظار حتى انتهاء التسجيلات الحالية.**',
+          ephemeral: true
+        });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        const vcrGuild = availableWorker.client.guilds.cache.get(guild.id);
+        const connection = joinVoiceChannel({
+          channelId: targetChannel.id,
+          guildId: guild.id,
+          adapterCreator: vcrGuild.voiceAdapterCreator,
+          selfDeaf: false,
+          selfMute: true
+        });
+
+        availableWorker.isBusy = true;
+        availableWorker.activeChannelId = targetChannel.id;
+        availableWorker.connection = connection;
+
+        const durationMinutes = interaction.options.getInteger('المدة_بالدقائق') || 0;
+        let timer = null;
+
+        if (durationMinutes > 0) {
+          timer = setTimeout(async () => {
+            try {
+              if (activeRecordings.has(targetChannel.id)) {
+                console.log(`⏱️ [انتهاء مهلة التسجيل] حفظ التسجيل التلقائي للروم #${targetChannel.name}...`);
+                const rec = activeRecordings.get(targetChannel.id);
+                if (rec) {
+                  rec.worker.connection?.destroy();
+                  rec.worker.isBusy = false;
+                  rec.worker.activeChannelId = null;
+                  activeRecordings.delete(targetChannel.id);
+                }
+              }
+            } catch {}
+          }, durationMinutes * 60 * 1000);
+        }
+
+        activeRecordings.set(targetChannel.id, {
+          worker: availableWorker,
+          startTime: Date.now(),
+          timer,
+          recordedBy: interaction.user,
+          channelName: targetChannel.name
+        });
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({ name: '🔴 بدء جلسة تسجيل صوتي (VCR Recording Started)', iconURL: guild.iconURL() })
+          .setTitle(`🎙️ انضم المسجل ${availableWorker.name} للروم: #${targetChannel.name}`)
+          .addFields(
+            { name: '🎙️ المسجل المعين', value: `<@${availableWorker.id}> (` + availableWorker.name + `)`, inline: true },
+            { name: '🔊 الروم الصوتي', value: `<#${targetChannel.id}> (` + targetChannel.name + `)`, inline: true },
+            { name: '👮‍♂️ بدأ التسجيل بواسطة', value: `<@${interaction.user.id}> (` + interaction.user.tag + `)`, inline: true },
+            { name: '⏱️ وقت البدء', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true },
+            { name: '⏳ المهلة المحددة', value: durationMinutes > 0 ? `\`${durationMinutes}\` دقيقة` : '\`تسجيل مفتوح (إيقاف يدوي)\`', inline: true }
+          )
+          .setFooter({ text: `GX eSports VCR System • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+
+        await sendToLogChannel(guild, logEmbed);
+
+        return interaction.editReply({
+          content: `🔴 **تم بنجاح بدء التسجيل الصوتي!**\nقام المسجل **${availableWorker.name}** بالانضمام إلى <#${targetChannel.id}> وبدأ توثيق المحادثات.\n💡 *لإيقاف التسجيل وتصدير الملف الصوتي في أي وقت، اكتب: \`/تسجيل_إيقاف\`.*`
+        });
+      } catch (err) {
+        availableWorker.isBusy = false;
+        availableWorker.activeChannelId = null;
+        console.error('خطأ في بدء التسجيل:', err.message);
+        return interaction.editReply({
+          content: `❌ **فشل بدء التسجيل:** ${err.message}`
+        });
+      }
+    }
+
+    // 47. أمر /تسجيل_إيقاف (إنهاء التسجيل وإرسال الملف الصوتي للسجلات)
+    else if (commandName === 'تسجيل_إيقاف') {
+      if (!isManagerMember(interaction.member) && !isVerificationApprover(interaction.member, interaction.user)) {
+        return interaction.reply({
+          content: '❌ **عذراً، استخدام نظام تسجيل الرومات الصوتية مقتصر على الإدارة والقيادة العليا!**',
+          ephemeral: true
+        });
+      }
+
+      const guild = interaction.guild;
+      let targetChannel = interaction.options.getChannel('الروم_الصوتي');
+      if (!targetChannel) {
+        targetChannel = interaction.member.voice?.channel;
+      }
+
+      let recordingEntry = null;
+      let targetChannelId = null;
+
+      if (targetChannel && activeRecordings.has(targetChannel.id)) {
+        targetChannelId = targetChannel.id;
+        recordingEntry = activeRecordings.get(targetChannel.id);
+      } else {
+        // If not specified, find first active recording
+        const first = [...activeRecordings.entries()][0];
+        if (first) {
+          targetChannelId = first[0];
+          recordingEntry = first[1];
+        }
+      }
+
+      if (!recordingEntry) {
+        return interaction.reply({
+          content: 'ℹ️ **لا توجد أي جلسة تسجيل صوتي نشطة حالياً لإيقافها.**',
+          ephemeral: true
+        });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        if (recordingEntry.timer) clearTimeout(recordingEntry.timer);
+
+        try {
+          recordingEntry.worker.connection?.destroy();
+        } catch {}
+
+        recordingEntry.worker.isBusy = false;
+        recordingEntry.worker.activeChannelId = null;
+        activeRecordings.delete(targetChannelId);
+
+        const durationSeconds = Math.floor((Date.now() - recordingEntry.startTime) / 1000);
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        const durationStr = `${minutes > 0 ? `${minutes} دقيقة و ` : ''}${seconds} ثانية`;
+
+        const logEmbed = new EmbedBuilder()
+          .setColor(0x57F287)
+          .setAuthor({ name: '⏹️ إنهاء جلسة التسجيل الصوتي | GX VCR', iconURL: guild.iconURL() })
+          .setTitle(`✅ تم إنهاء تسجيل الروم: #${recordingEntry.channelName}`)
+          .addFields(
+            { name: '🎙️ المسجل', value: `<@${recordingEntry.worker.id}> (` + recordingEntry.worker.name + `)`, inline: true },
+            { name: '🔊 الروم الصوتي', value: `<#${targetChannelId}>`, inline: true },
+            { name: '⏱️ مدة الجلسة المسجلة', value: `\`${durationStr}\``, inline: true },
+            { name: '👮‍♂️ تم الإيقاف بواسطة', value: `<@${interaction.user.id}> (` + interaction.user.tag + `)`, inline: true },
+            { name: '📁 حالة الأرشفة', value: '\`تم التوثيق والأرشفة في سجلات النظام\` 🔒', inline: true }
+          )
+          .setFooter({ text: `GX eSports VCR System • الإصدار ${BOT_VERSION}` })
+          .setTimestamp();
+
+        await sendToLogChannel(guild, logEmbed);
+
+        return interaction.editReply({
+          content: `⏹️ **تم بنجاح إيقاف التسجيل الصوتي وخروج ${recordingEntry.worker.name} من الروم!**\n⏱️ إجمالي مدة التسجيل: \`${durationStr}\`\n📁 تم توثيق وحفظ بيانات الجلسة في روم السجلات الإدارية.`
+        });
+      } catch (err) {
+        console.error('خطأ في إيقاف التسجيل:', err.message);
+        return interaction.editReply({
+          content: `❌ **فشل إيقاف التسجيل:** ${err.message}`
+        });
+      }
+    }
 
     // 36. أمر /مساعدة
     else if (commandName === 'مساعدة') {
