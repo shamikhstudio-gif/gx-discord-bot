@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
 import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus } from '@discordjs/voice';
 import { Readable } from 'stream';
+import prism from 'prism-media';
 import { LOUD_SOUND_THRESHOLD } from './config.js';
 
 class SilenceStream extends Readable {
@@ -86,7 +87,7 @@ export class VCRWorker {
         adapterCreator: vGuild.voiceAdapterCreator,
         selfDeaf: false,
         selfMute: false,
-        group: this.id // Multi-bot per guild isolated voice connection group!
+        group: this.id // Multi-bot per guild isolated voice connection group
       });
 
       this.player = this.createKeepAlivePlayer();
@@ -135,21 +136,39 @@ export class VCRWorker {
         }
       });
 
-      opusStream.on('data', (chunk) => {
-        if (chunk.length > 80) {
-          let sum = 0;
-          for (let i = 0; i < Math.min(chunk.length, 120); i++) {
-            sum += Math.abs(chunk[i]);
-          }
-          const avgEnergy = sum / Math.min(chunk.length, 120);
-          if (avgEnergy > LOUD_SOUND_THRESHOLD) {
-            const violatingMember = guild.members.cache.get(userId);
-            if (violatingMember) {
-              this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence);
-            }
+      // Decode compressed Opus stream to 16-bit 48kHz Stereo PCM
+      const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
+      const pcmStream = opusStream.pipe(opusDecoder);
+
+      pcmStream.on('data', (pcmChunk) => {
+        if (!pcmChunk || pcmChunk.length === 0) return;
+
+        // 1. Write to Session PCM Stream for MP3 generation
+        if (session.pcmWriteStream && !session.isFinalizing) {
+          session.pcmWriteStream.write(pcmChunk);
+          session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
+        }
+
+        // 2. Exact 16-bit PCM RMS Loudness / Scream Detection
+        let sumSquares = 0;
+        const sampleCount = pcmChunk.length / 2;
+        for (let i = 0; i < pcmChunk.length; i += 2) {
+          const sample = pcmChunk.readInt16LE(i);
+          sumSquares += sample * sample;
+        }
+        const rms = Math.sqrt(sumSquares / sampleCount);
+
+        // Scream / Ear-Rape Trigger (> 16,000 RMS)
+        if (rms > LOUD_SOUND_THRESHOLD) {
+          const violatingMember = guild.members.cache.get(userId);
+          if (violatingMember) {
+            this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, Math.round(rms));
           }
         }
       });
+
+      opusStream.on('error', () => {});
+      opusDecoder.on('error', () => {});
     });
   }
 }
