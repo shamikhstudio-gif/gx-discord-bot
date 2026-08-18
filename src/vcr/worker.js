@@ -143,9 +143,9 @@ export class VCRWorker {
       pcmStream.on('data', (pcmChunk) => {
         if (!pcmChunk || pcmChunk.length === 0) return;
 
-        // 1. Write to Session PCM Stream for MP3 generation
-        if (session.pcmWriteStream && !session.isFinalizing) {
-          session.pcmWriteStream.write(pcmChunk);
+        // 1. Buffer in Memory (Zero Disk Waste)
+        if (session.pcmChunks && !session.isFinalizing) {
+          session.pcmChunks.push(pcmChunk);
           session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
         }
 
@@ -158,7 +158,7 @@ export class VCRWorker {
         }
         const rms = Math.sqrt(sumSquares / sampleCount);
 
-        // Scream / Ear-Rape Trigger (> 16,000 RMS)
+        // Scream / Ear-Rape Trigger (> 25,000 RMS)
         if (rms > LOUD_SOUND_THRESHOLD) {
           const violatingMember = guild.members.cache.get(userId);
           if (violatingMember) {
