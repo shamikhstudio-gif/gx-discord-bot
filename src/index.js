@@ -2800,9 +2800,9 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
       }
     }
 
-    // B. Anti-Disconnect (Disconnected manually without /مغادرة by owner)
+    // B. Anti-Disconnect (Only if controlled by active owner)
     if (oldState.channelId && !newState.channelId) {
-      if (!isAuthorizedBotMove) {
+      if (!isAuthorizedBotMove && currentVoiceOwner) {
         const previousChannel = oldState.channel || newState.guild.channels.cache.get(currentVoiceOwner?.channelId);
         if (previousChannel) {
           console.warn(`🛡️ [حماية الفويس] تم رصد محاولة فصل يدوي للبوت. جارٍ إعادة الاتصال فوراً...`);
