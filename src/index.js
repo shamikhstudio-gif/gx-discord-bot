@@ -7332,10 +7332,10 @@ const PORT = process.env.PORT || 3000;
 const STATUS_DIR = path.resolve('Websites', 'Status');
 
 const healthServer = http.createServer((req, res) => {
-  const url = req.url.split('?')[0];
+  const url = req.url.split('?')[0].toLowerCase();
 
   // 1. Live Telemetry API Endpoint
-  if (url === '/api/status') {
+  if (url === '/api/status' || url === '/status.json') {
     const targetGuild = client.guilds.cache.get(ALLOWED_GUILD_ID);
     const vcrFleetData = vcrManager.workers.map(w => ({
       id: w.id,
@@ -7347,7 +7347,7 @@ const healthServer = http.createServer((req, res) => {
     }));
 
     res.writeHead(200, {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*'
     });
     return res.end(JSON.stringify({
@@ -7386,10 +7386,10 @@ const healthServer = http.createServer((req, res) => {
   let filePath = path.join(STATUS_DIR, 'index.html');
   let contentType = 'text/html; charset=utf-8';
 
-  if (url === '/style.css') {
+  if (url.endsWith('.css') || url.includes('style.css')) {
     filePath = path.join(STATUS_DIR, 'style.css');
     contentType = 'text/css; charset=utf-8';
-  } else if (url === '/app.js') {
+  } else if (url.endsWith('.js') || url.includes('app.js')) {
     filePath = path.join(STATUS_DIR, 'app.js');
     contentType = 'application/javascript; charset=utf-8';
   }
@@ -7403,7 +7403,11 @@ const healthServer = http.createServer((req, res) => {
         uptimeSeconds: Math.floor(process.uptime())
       }));
     }
-    res.writeHead(200, { 'Content-Type': contentType });
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache'
+    });
     res.end(content);
   });
 });
