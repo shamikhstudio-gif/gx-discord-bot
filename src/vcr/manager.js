@@ -1,7 +1,19 @@
 import { ChannelType, PermissionFlagsBits, EmbedBuilder, AttachmentBuilder, AuditLogEvent } from 'discord.js';
 import { spawn } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
-import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, SECRET_VCR_CHANNEL_ID, MUTE_COOLDOWN_MS, MUTE_DURATION_MS, VCR_BOT_IDS } from './config.js';
+import {
+  VCR_CONFIGS,
+  VCR_ROLE_NAME,
+  SECRET_VCR_CHANNEL_NAME,
+  SECRET_VCR_CHANNEL_ID,
+  MUTE_COOLDOWN_MS,
+  MUTE_DURATION_MS,
+  VCR_BOT_IDS,
+  TOP_EXEC_ROLE_IDS,
+  TOP_EXEC_ROLE_NAMES,
+  TOP_EXEC_USER_IDS,
+  TOP_EXEC_USERNAMES
+} from './config.js';
 import { VCRWorker } from './worker.js';
 
 export class VCRManager {
@@ -25,6 +37,28 @@ export class VCRManager {
         await this.loggerCallback(guild, embed);
       } catch {}
     }
+  }
+
+  /**
+   * 👑 Checks if a member or user is COO, CEO, or OWNER (100% Strictly Immune from any VCR actions).
+   * Note: MANAGERS role, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN, and members CAN be affected.
+   */
+  isVCRImmuneExecutive(member, user) {
+    const u = user || member?.user;
+    if (!u) return false;
+    const guild = member?.guild;
+    if (guild && guild.ownerId === u.id) return true;
+    if (TOP_EXEC_USER_IDS.includes(u.id)) return true;
+    const username = u.username?.toLowerCase() || '';
+    if (TOP_EXEC_USERNAMES.includes(username)) return true;
+    if (member && member.roles?.cache) {
+      if (member.roles.cache.some(r => TOP_EXEC_ROLE_IDS.includes(r.id))) return true;
+      if (member.roles.cache.some(r => {
+        const name = r.name.toLowerCase().trim();
+        return TOP_EXEC_ROLE_NAMES.some(tier => name === tier || name.includes(tier));
+      })) return true;
+    }
+    return false;
   }
 
   async init(guild) {
@@ -162,7 +196,7 @@ export class VCRManager {
         channelName: channel.name,
         guild,
         startTime: timestamp,
-        userAudioTracks: new Map(), // userId -> { userId, firstTimestamp, startOffsetMs, pcmChunks: [] }
+        userAudioTracks: new Map(),
         totalRecordedBytes: 0,
         membersPresence: new Map(),
         lastActivityTime: timestamp,
@@ -191,8 +225,14 @@ export class VCRManager {
 
   async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue) {
     if (!member || !member.voice?.channel) return;
-    const userId = member.id;
+    
+    // Strict COO, CEO, OWNER Immunity
+    if (this.isVCRImmuneExecutive(member)) {
+      console.log(`👑 [حصانة القيادة] العضو ${member.user.tag} من القيادة العليا (COO/CEO/OWNER) - محصن بنسبة 100% من أي إجراء لمسجلات VCR.`);
+      return;
+    }
 
+    const userId = member.id;
     const lastMute = this.userMuteCooldowns.get(userId) || 0;
     if (Date.now() - lastMute < MUTE_COOLDOWN_MS) return;
     this.userMuteCooldowns.set(userId, Date.now());
@@ -281,11 +321,6 @@ export class VCRManager {
     }
   }
 
-  /**
-   * 🎧 Multi-Speaker Synchronized Timeline Mixer:
-   * Mixes each speaker's audio track at their exact time offset with crystal-clear 128kbps Opus broadcast audio.
-   * Eliminates all chopping, speech distortion, dropped words, and robotic audio!
-   */
   async mixMultiTrackAudioToOgg(userTracksMap) {
     return new Promise((resolve) => {
       if (!userTracksMap || userTracksMap.size === 0) return resolve(null);
@@ -365,7 +400,6 @@ export class VCRManager {
       });
       proc.on('error', () => resolve(null));
 
-      // Feed each speaker track into its dedicated input pipe
       for (let i = 0; i < validTracks.length; i++) {
         const fullUserPcm = Buffer.concat(validTracks[i].pcmChunks);
         const pipeStream = proc.stdio[3 + i];
@@ -384,7 +418,6 @@ export class VCRManager {
     session.isFinalizing = true;
     this.activeSessions.delete(channelId);
 
-    // Cleanup worker active subscriptions for next session
     if (session.worker) {
       session.worker.cleanupSubscriptions();
     }
@@ -412,7 +445,6 @@ export class VCRManager {
         return `**${idx + 1}.** <@${m.id}> (` + m.tag + `)\n   • 📥 **الدخول:** ${joinStr} ➔ 📤 **الخروج:** ${leaveStr}\n   • 🗣️ **عدد مرات التحدث:** \`${m.totalSpokenCount}\` مرة`;
       }).join('\n\n') || 'لا توجد بيانات مسجلة';
 
-      // 🎧 Studio Synchronized Multi-Track Timeline Mix
       const oggBuffer = await this.mixMultiTrackAudioToOgg(session.userAudioTracks);
 
       const files = [];
@@ -449,7 +481,7 @@ export class VCRManager {
   }
 
   /**
-   * 🛡️ Voice State Update & Anti-Disconnect/Anti-Drag Guardian for VCR Bots
+   * 🛡️ Voice State Update: Anti-Disconnect, Anti-Drag, Anti-Server-Mute, Anti-Server-Deafen
    */
   async onVoiceStateUpdate(oldState, newState) {
     const guild = newState.guild || oldState.guild;
@@ -464,7 +496,27 @@ export class VCRManager {
       const defaultTargetCh = guild.channels.cache.get(worker.defaultChannelId) ||
                               guild.channels.cache.find(c => c.id === worker.assignedChannelId);
 
-      // 1. Anti-Disconnect Guardian
+      // 1. Anti-Server Mute (Auto Unmute VCR Bot)
+      if (newState.serverMute) {
+        console.warn(`🛡️ [حماية مسجلات VCR] تم رصد محاولة كتم إجباري للمسجل ${worker.name}. إلغاء الكتم فوراً...`);
+        try {
+          await newState.setMute(false, 'حصانة مسجلات VCR: ممنوع الكتم الإجباري');
+        } catch (e) {
+          console.error('خطأ في إلغاء كتم المسجل:', e.message);
+        }
+      }
+
+      // 2. Anti-Server Deafen (Auto Undeafen VCR Bot)
+      if (newState.serverDeaf) {
+        console.warn(`🛡️ [حماية مسجلات VCR] تم رصد محاولة تصميت إجباري للمسجل ${worker.name}. إلغاء التصميت فوراً...`);
+        try {
+          await newState.setDeaf(false, 'حصانة مسجلات VCR: ممنوع التصميت الإجباري');
+        } catch (e) {
+          console.error('خطأ في إلغاء تصميت المسجل:', e.message);
+        }
+      }
+
+      // 3. Anti-Disconnect Guardian
       if (oldState.channelId && !newState.channelId) {
         console.warn(`🛡️ [حماية مسجلات VCR] تم رصد محاولة فصل يدوي للمسجل ${worker.name} من #${oldState.channel?.name}. جارٍ إعادة الربط فوراً...`);
         
@@ -479,6 +531,11 @@ export class VCRManager {
             const auditLogs = await guild.fetchAuditLogs({ limit: 4, type: AuditLogEvent.MemberDisconnect }).catch(() => null);
             const entry = auditLogs?.entries.find(e => e.target?.id === member.id && (Date.now() - e.createdTimestamp) < 10000);
             const executor = entry?.executor;
+
+            // If the executor is COO, CEO, or OWNER, allow peaceful restationing without tamper alert
+            if (executor && this.isVCRImmuneExecutive(null, executor)) {
+              return;
+            }
 
             const logEmbed = new EmbedBuilder()
               .setColor(0xED4245)
@@ -498,7 +555,7 @@ export class VCRManager {
         return;
       }
 
-      // 2. Anti-Drag Guardian
+      // 4. Anti-Drag Guardian
       if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
         if (defaultTargetCh && newState.channelId !== defaultTargetCh.id) {
           console.warn(`🛡️ [حماية مسجلات VCR] تم رصد سحب غير مصرح به للمسجل ${worker.name} من #${oldState.channel?.name} إلى #${newState.channel?.name}. جارٍ الإرجاع...`);
@@ -512,6 +569,10 @@ export class VCRManager {
               const auditLogs = await guild.fetchAuditLogs({ limit: 4, type: AuditLogEvent.MemberMove }).catch(() => null);
               const entry = auditLogs?.entries.find(e => (Date.now() - e.createdTimestamp) < 10000);
               const executor = entry?.executor;
+
+              if (executor && this.isVCRImmuneExecutive(null, executor)) {
+                return;
+              }
 
               const logEmbed = new EmbedBuilder()
                 .setColor(0xFEE75C)
@@ -563,9 +624,6 @@ export class VCRManager {
     }
   }
 
-  /**
-   * 🔄 High-Frequency Watchdog (Stationing, Duplicates Guard, Health Check)
-   */
   async runWatchdog(guild) {
     if (!guild) return;
 
@@ -617,9 +675,11 @@ export class VCRManager {
         }
       }
 
-      // 2. Ensure every voice channel has its dedicated VCR bot stationed
+      // 2. Ensure every voice channel has its dedicated VCR bot stationed (skip if currently handshaking)
       for (let i = 0; i < this.workers.length; i++) {
         const worker = this.workers[i];
+        if (worker.isReconnecting) continue;
+
         const targetChannel = guild.channels.cache.get(worker.defaultChannelId) ||
                               voiceList.find(c => c.id === worker.defaultChannelId) ||
                               voiceList[i];
