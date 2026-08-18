@@ -1237,29 +1237,35 @@ async function sendVerificationRequestToExecutives(guild, member) {
   const requestsData = loadVerificationRequests();
   const targetId = member.id;
 
-  if (!requestsData[targetId] || requestsData[targetId].status !== 'pending') {
-    requestsData[targetId] = {
-      targetId,
-      userTag: member.user.tag,
-      status: 'pending',
-      messages: [],
-      handledBy: null,
-      handledByName: null,
-      createdAt: Date.now()
-    };
-  }
+  // Always reset to a fresh pending state on every join / quarantine / re-join
+  requestsData[targetId] = {
+    targetId,
+    userTag: member.user.tag,
+    status: 'pending',
+    messages: [],
+    handledBy: null,
+    handledByName: null,
+    createdAt: Date.now(),
+    joinCount: (requestsData[targetId]?.joinCount || 0) + 1
+  };
+
+  const isRejoin = requestsData[targetId].joinCount > 1;
 
   const embed = new EmbedBuilder()
-    .setColor(0xFEE75C)
-    .setAuthor({ name: '📩 طلب توثيق عضوية جديد | GX Security', iconURL: member.user.displayAvatarURL() })
-    .setTitle(`طلب ترقية وتوثيق: ${member.user.tag}`)
+    .setColor(isRejoin ? 0xED4245 : 0xFEE75C)
+    .setAuthor({ 
+      name: isRejoin ? '⚠️ إعادة انضمام عضو قيد التوثيق | GX Security' : '📩 طلب توثيق عضوية جديد | GX Security', 
+      iconURL: member.user.displayAvatarURL() 
+    })
+    .setTitle(`طلب ترقية وتوثيق: ${member.user.tag}${isRejoin ? ' (انضمام متكرر)' : ''}`)
     .setDescription(
       `👤 **العضو:** <@${member.id}> (\`${member.user.tag}\`)\n` +
       `🆔 **المعرف (ID):** \`${member.id}\`\n` +
       `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
-      `🔒 **الرتبة الحالية:** \`UNTRUSTED\` (مشاهدة وفويس فقط وممنوع من الكتابة)\n\n` +
+      `🔄 **مرات الانضمام:** \`${requestsData[targetId].joinCount}\` مرة\n` +
+      `🔒 **الرتبة الحالية:** \`UNTRUSTED\` (محظور من الكتابة ومقيد الصلاحيات لحين التوثيق)\n\n` +
       `⚡ **صلاحية الموافقة:** مخصصة لكم كرتبة **OWNER / CEO / COO**.\n` +
-      `👉 **أول مسؤول فقط يوافق على الطلب**، سيتم فوراً منح العضو رتبة **MEMBER** وتحديث الرسائل تلقائياً لدى باقي المسؤولين لتبين من قام بالقبول.`
+      `👉 **أول مسؤول فقط يوافق على الطلب**، سيتم فوراً منح العضو رتبة **MEMBER** وتحديث الرسائل تلقائياً لدى باقي المسؤولين.`
     )
     .setFooter({ text: `GX eSports Security Engine • المعرف: ${member.id}` })
     .setTimestamp();
@@ -1278,7 +1284,7 @@ async function sendVerificationRequestToExecutives(guild, member) {
   for (const [, execMember] of executives) {
     try {
       const dmMsg = await execMember.send({
-        content: `🔔 **طلب توثيق عضو جديد في سيرفر \`${guild.name}\` بحاجة لموافقتك (أول موافق فقط):**`,
+        content: `🔔 **طلب توثيق عضو ${isRejoin ? 'أعاد الانضمام' : 'جديد'} في سيرفر \`${guild.name}\` بحاجة لموافقتك (أول موافق فقط):**`,
         embeds: [embed],
         components: [row]
       }).catch(() => null);
@@ -1294,6 +1300,7 @@ async function sendVerificationRequestToExecutives(guild, member) {
   }
 
   saveVerificationRequests(requestsData);
+  console.log(`📩 [طلب توثيق] تم إرسال طلب التوثيق في الخاص للإدارة العليا بخصوص ${member.user.tag} (انضمام رقم ${requestsData[targetId].joinCount})`);
 }
 
 /**
