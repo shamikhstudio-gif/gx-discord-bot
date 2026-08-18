@@ -54,9 +54,13 @@ export const TOP_EXEC_ROLE_NAMES = ['owner', 'ceo', 'coo'];
 export const TOP_EXEC_USER_IDS = ['1152686277255237663', '1484535997893967980'];
 export const TOP_EXEC_USERNAMES = ['itszoki', 'ice0090'];
 
-// 🔊 Accurate Discord 16-bit PCM Scream & Ear-Rape Calibration
-// Normal talking: 800-2500 RMS. Screaming / Ear-rape: >= 7000 RMS or Peak >= 22000
-export const LOUD_SOUND_THRESHOLD = 7000;
-export const PEAK_SOUND_THRESHOLD = 22000;
+// 🔊 Advanced Acoustic Scream & Ear-Rape Calibration
+// Normal speech: 800-3500 RMS. Laughs/Coughs: momentary ~5000-8000 RMS.
+// Real Sustained Screams: RMS >= 11000 for 3+ consecutive frames (~60-100ms).
+// Instant Ear-Rape / Mic Blasts: RMS >= 16000 or Peak >= 29000.
+export const SUSTAINED_SCREAM_RMS_THRESHOLD = 11000;
+export const SUSTAINED_SCREAM_FRAMES_REQUIRED = 3;
+export const INSTANT_EAR_RAPE_RMS_THRESHOLD = 16000;
+export const INSTANT_EAR_RAPE_PEAK_THRESHOLD = 29000;
 export const MUTE_DURATION_MS = 30000; // Exactly 30 seconds fixed server mute
 export const MUTE_COOLDOWN_MS = 35000;
