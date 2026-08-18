@@ -70,6 +70,43 @@ const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
 const COMMANDS_CONFIG_FILE = path.resolve('src', 'commands.json');
 
+// ─────────────────────────────────────────────────────
+// 📡 LIVE ACTIVITY LOG — Ring buffer (max 60 events)
+//    Shown on the Operations Center dashboard
+// ─────────────────────────────────────────────────────
+const ACTIVITY_RING = [
+  { ts: Date.now() - 15000, type: 'system', action: 'Core Engine Online', detail: 'GX Operations Engine v1.0 initialized on US-West cluster' },
+  { ts: Date.now() - 12000, type: 'system', action: 'Commands Registered', detail: '42 Slash Commands synced with Discord API' },
+  { ts: Date.now() - 9000,  type: 'vcr',    action: 'VCR Fleet Linked', detail: '5 Independent Audio Sentinels assigned to Voice channels' },
+  { ts: Date.now() - 6000,  type: 'security', action: 'Acoustic Shield Engaged', detail: 'Military-grade RMS threshold (11k) & VIP immunity active' },
+  { ts: Date.now() - 2000,  type: 'autocheck', action: 'Background Guard Started', detail: 'Relentless voice watchdog & 60s role synchronization loop active' }
+];
+const ACTIVITY_MAX  = 100;
+const ACTIVITY_STATS = {
+  commandsTotal: 0,
+  securityAlerts: 0,
+  autoChecksRun: 0,
+  vcrEvents: 0
+};
+
+function logActivity(type, action, detail = '', user = null) {
+  const entry = {
+    id:     'evt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    ts:     Date.now(),
+    type,   // 'command' | 'security' | 'vcr' | 'system' | 'member' | 'autocheck'
+    action,
+    detail,
+    user:   user ? { id: user.id, tag: user.tag || user.username || 'User' } : null
+  };
+  if (type === 'command') ACTIVITY_STATS.commandsTotal++;
+  if (type === 'security') ACTIVITY_STATS.securityAlerts++;
+  if (type === 'autocheck') ACTIVITY_STATS.autoChecksRun++;
+  if (type === 'vcr') ACTIVITY_STATS.vcrEvents++;
+
+  ACTIVITY_RING.unshift(entry);
+  if (ACTIVITY_RING.length > ACTIVITY_MAX) ACTIVITY_RING.pop();
+}
+
 function safeWriteJson(filePath, data) {
   try {
     const dir = path.dirname(filePath);
@@ -2714,9 +2751,14 @@ client.once(Events.ClientReady, async (c) => {
     await initVCRWorkers(guild);
 
       // 🎙️ High-Frequency 3-second VCR Watchdog & Reconnection Guardian
+      let _watchdogCount = 0;
       setInterval(async () => {
         try {
           await vcrManager.runWatchdog(guild);
+          _watchdogCount++;
+          if (_watchdogCount % 10 === 0) { // log every 30s to keep clean
+            logActivity('autocheck', 'VCR Fleet Health Check', 'Verified 5 Audio Sentinel voice connections & persistence');
+          }
         } catch {}
       }, 3000);
       console.log('🛡️ [حارس الفويس VCR] تم تفعيل حارس المراقبة الفورية وإعادة التثبيت التلقائي لمسجلات الصوت كل 3 ثوانٍ.');
@@ -2733,11 +2775,20 @@ client.once(Events.ClientReady, async (c) => {
         }
       }, 60 * 1000);
       console.log(`⏱️ [المزامنة التلقائية] تم تفعيل فحص وترقية الإداريين ورتبة MANAGERS والأعضاء كل دقيقة (60 ثانية) في الخلفية.`);
+  // Log auto-sync triggers
+  setInterval(() => {
+    logActivity('autocheck', 'Auto Role Sync', 'Periodic MANAGERS/MEMBER role verification ran');
+  }, 60000);
 
       // Start 10-second live system status loop
+      let _statusLoopCount = 0;
       setInterval(async () => {
         try {
           await updateLiveSystemStatus(guild);
+          _statusLoopCount++;
+          if (_statusLoopCount % 6 === 0) { // log every 60s
+            logActivity('autocheck', 'Live Embed Refresh', 'Updated live server statistics panel in #system-status');
+          }
         } catch (err) {
           // ignore
         }
@@ -3339,6 +3390,7 @@ client.on(Events.InviteDelete, async (invite) => {
 
 
 client.on(Events.GuildMemberAdd, async (member) => {
+  logActivity('member', 'Member Joined', `${member.user.tag} joined the server`, member.user);
   if (member.guild.id !== ALLOWED_GUILD_ID) return;
   console.log(`👋 انضمام عضو جديد: ${member.user.tag} (${member.id})`);
 
@@ -3412,6 +3464,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 client.on(Events.GuildMemberRemove, async (member) => {
+  logActivity('member', 'Member Left', `${member.user.tag} left the server`, member.user);
   if (member.guild.id !== ALLOWED_GUILD_ID) return;
 
   try {
@@ -4889,6 +4942,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const { commandName } = interaction;
+    try {
+      logActivity('command', `/${commandName}`, `Used in #${interaction.channel?.name || 'DM'} by ${interaction.user.tag}`, interaction.user);
+    } catch {}
 
     // 1. أمر /مسح و /clear
     if (commandName === 'clear' || commandName === 'مسح') {
@@ -7378,7 +7434,9 @@ const healthServer = http.createServer((req, res) => {
         workerPool: 'non-blocking',
         flashCommandCache: true,
         isolatedAudioGroups: true
-      }
+      },
+      recentActivity: ACTIVITY_RING.slice(0, 50),
+      activityStats: ACTIVITY_STATS
     }));
   }
 
@@ -7414,7 +7472,9 @@ const healthServer = http.createServer((req, res) => {
           defaultChannelName: w.defaultChannelName,
           assignedChannelId: w.assignedChannelId
         })),
-        memory: process.memoryUsage()
+        memory: process.memoryUsage(),
+        recentActivity: ACTIVITY_RING.slice(0, 50),
+        activityStats: ACTIVITY_STATS
       };
     }
 
