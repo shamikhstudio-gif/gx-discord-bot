@@ -283,19 +283,27 @@ export class VCRManager {
     }
   }
 
-  async convertPcmToMp3(pcmPath, mp3Path) {
+    async convertPcmToMp3(pcmPath, mp3Path) {
     return new Promise((resolve) => {
       if (!fs.existsSync(pcmPath) || fs.statSync(pcmPath).size === 0) {
         return resolve(false);
       }
 
+      // Studio-Grade Vocal DSP Chain:
+      // 1. highpass: eliminates desk vibration & mic rumble (< 75Hz)
+      // 2. equalizer: enhances vocal presence & timbre clarity (3.2kHz +3dB)
+      // 3. loudnorm: EBU R128 dynamic speech normalization for balanced speaker levels
+      // 4. 320kbps 48kHz: Maximum MP3 Bitrate for crystal-clear, realistic voices
       const proc = spawn(ffmpegStatic, [
         '-y',
         '-f', 's16le',
         '-ar', '48000',
         '-ac', '2',
         '-i', pcmPath,
-        '-b:a', '128k',
+        '-af', 'highpass=f=75,equalizer=f=3200:width_type=h:width=1800:g=3,loudnorm=I=-16:TP=-1.5:LRA=11',
+        '-c:a', 'libmp3lame',
+        '-b:a', '320k',
+        '-ar', '48000',
         mp3Path
       ]);
 
