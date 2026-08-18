@@ -41,11 +41,8 @@ export class VCRManager {
     }
   }
 
-  
   /**
    * 🏆 Checks if a voice channel is located in the TOURNAMENTS & MATCHES category.
-   * Screams are NOT punished in tournament/match channels (cheering & competitive shouting allowed),
-   * but voice recording continues normally!
    */
   isTournamentOrMatchChannel(channel) {
     if (!channel) return false;
@@ -73,7 +70,7 @@ export class VCRManager {
       if (member.roles.cache.some(r => TOP_EXEC_ROLE_IDS.includes(r.id))) return true;
       if (member.roles.cache.some(r => {
         const name = r.name.toLowerCase().trim();
-        return TOP_EXEC_ROLE_NAMES.some(tier => name === tier || name.includes(tier));
+        return TOP_EXEC_ROLE_NAMES.some(tier => name === tier || name === `👑 ${tier}` || name.startsWith(`${tier} `) || name.endsWith(` ${tier}`));
       })) return true;
     }
     return false;
@@ -231,7 +228,6 @@ export class VCRManager {
     const u = guild.members.cache.get(userId);
     if (u?.user?.bot) return null;
     if (!session.membersPresence.has(userId)) {
-      const u = guild.members.cache.get(userId);
       session.membersPresence.set(userId, {
         id: userId,
         tag: u ? u.user.tag : userId,
@@ -244,10 +240,12 @@ export class VCRManager {
     return session.membersPresence.get(userId);
   }
 
-  async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue) {
+  /**
+   * 🚨 Full 30s Server Mute, DM Notification & Multi-Channel Incident Logging
+   */
+  async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue, detectionType = 'صراخ حاد / تفجير صوتي') {
     if (!member || !member.voice?.channel) return;
     if (this.isTournamentOrMatchChannel(channel)) {
-      // Bypassed in TOURNAMENTS & MATCHES category!
       return;
     }
     
@@ -261,14 +259,16 @@ export class VCRManager {
     if (Date.now() - lastMute < MUTE_COOLDOWN_MS) return;
     this.userMuteCooldowns.set(userId, Date.now());
 
-    console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صراخ حاد (${energyValue} RMS) في #${channel.name} من ${member.user.tag}. تطبيق ميوت 30 ثانية...`);
+    console.warn(`🚨 [رصد إزعاج صوتي] تم رصد ${detectionType} (${energyValue} RMS) في #${channel.name} من ${member.user.tag}. تطبيق كتم 30 ثانية...`);
 
     try {
       const mainGuild = this.mainClient.guilds.cache.get(guild.id) || await this.mainClient.guilds.fetch(guild.id).catch(() => null);
       const targetMember = mainGuild ? (await mainGuild.members.fetch(userId).catch(() => null)) : member;
 
+      // 1. Apply Server Mute for exactly 30 seconds
       if (targetMember && targetMember.voice?.channel && mainGuild.members.me?.permissions.has(PermissionFlagsBits.MuteMembers)) {
-        await targetMember.voice.setMute(true, 'رصد أصوات عالية / صراخ حاد في الفويس (كتم صوتي إجباري لمدة 30 ثانية)');
+        await targetMember.voice.setMute(true, `رصد إزعاج صوتي: ${detectionType} (كتم 30 ثانية)`);
+        console.log(`🔇 [كتم مركزي] تم كتم العضو ${targetMember.user.tag} لمدة 30 ثانية بنجاح.`);
 
         if (this.activeMuteTimers.has(userId)) {
           clearTimeout(this.activeMuteTimers.get(userId));
@@ -280,6 +280,22 @@ export class VCRManager {
             const freshMem = await mainGuild.members.fetch(userId).catch(() => null);
             if (freshMem && freshMem.voice?.serverMute) {
               await freshMem.voice.setMute(false, 'انتهاء مهلة الكتم الصوتي الـ 30 ثانية');
+              console.log(`🔊 [فك الكتم المركزي] تم فك الكتم تلقائياً عن ${freshMem.user.tag} بعد 30 ثانية.`);
+
+              // Send Unmute Notification in DM
+              const unmuteDMEmbed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setAuthor({ name: '🔊 انتهاء مدة الكتم الصوتي | GX Voice Defense', iconURL: guild.iconURL() })
+                .setTitle('✅ تم فك الكتم الصوتي عنك تلقائياً')
+                .setDescription(
+                  `مرحباً <@${member.id}>،\n\n` +
+                  `انتهت مهلة الـ **30 ثانية** وتم فك الكتم الصوتي عنك تلقائياً في السيرفر.\n` +
+                  `يمكنك الآن التحدث مجدداً، ونرجو منك الالتزام بالهدوء لتجنب الكتم التلقائي.`
+                )
+                .setFooter({ text: `GX eSports Voice Sentinel • الإصدار ${this.botVersion}` })
+                .setTimestamp();
+
+              await freshMem.send({ embeds: [unmuteDMEmbed] }).catch(() => {});
             }
           } catch (err) {}
         }, MUTE_DURATION_MS);
@@ -287,22 +303,52 @@ export class VCRManager {
         this.activeMuteTimers.set(userId, timer);
       }
 
+      // 2. Send Rich Security Warning in DM to the Violator
       const userDMEmbed = new EmbedBuilder()
         .setColor(0xED4245)
-        .setAuthor({ name: '⚠️ تنبيه أمني صوتي | GX VCR Defense', iconURL: guild.iconURL() })
-        .setTitle('🔇 تم تطبيق كتم صوتي مؤقت (Server Mute)')
+        .setAuthor({ name: '⚠️ إنذار أمني صوتي | GX VCR Acoustic Defense', iconURL: guild.iconURL() })
+        .setTitle('🔇 تم تطبيق كتم صوتي مؤقت (Server Mute - 30s)')
         .setDescription(
           `مرحباً <@${member.id}>،\n\n` +
-          `تم رصد **صوت صاخب جداً / صراخ حاد ومفاجئ** صادر من المايكروفون الخاص بك في الروم الصوتي <#${channel.id}>.\n\n` +
+          `تم رصد **${detectionType}** صادر من المايكروفون الخاص بك في الروم الصوتي <#${channel.id}>.\n\n` +
+          `📊 **مستوى الطاقة الصوتية المرصود:** \`${energyValue} RMS\`\n` +
           `🛑 **الإجراء المتخذ:** تم تطبيق كتم صوتي إجباري على مستوى السيرفر لمدة **30 ثانية فقط**.\n` +
-          `⏱️ **انتهاء الكتم:** سيتم فك الكتم عنك تلقائياً وبشكل فوري بعد انتهاء الـ 30 ثانية.\n\n` +
+          `⏱️ **انتهاء الكتم:** سيتم فك الكتم عنك تلقائياً وبشكل فوري بعد انتهاء الـ 30 ثانية حتى لو انتقلت لروم آخر.\n\n` +
           `🙏 يرجى ضبط حساسية المايكروفون والالتزام بالهدوء لراحة جميع الأعضاء المتواجدين.`
         )
         .setFooter({ text: `GX eSports Voice Sentinel • الإصدار ${this.botVersion}` })
         .setTimestamp();
 
       await member.send({ embeds: [userDMEmbed] }).catch(() => {});
-    } catch (err) {}
+
+      // 3. Post Prominent Incident Alert to Admin Log Channel (#log)
+      const adminAlertEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🚨 إنذار رصد إزعاج صوتي | GX VCR Sentinel', iconURL: member.user.displayAvatarURL() })
+        .setTitle(`⚠️ رصد ${detectionType} وكتم المستخدم 30 ثانية`)
+        .setDescription(
+          `تم رصد ارتفاع حاد ومفاجئ في مستوى الصوت في أحد الرومات الصوتية وتم اتخاذ الإجراء التلقائي فوراً.\n\n` +
+          `👤 **العضو المخالف:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+          `🔊 **الروم الصوتي:** <#${channel.id}> (\`#${channel.name}\`)\n` +
+          `📁 **الفئة / Category:** \`${channel.parent?.name || 'عام'}\`\n` +
+          `📊 **شدة الصوت المرصودة:** \`${energyValue} RMS\` (${detectionType})\n` +
+          `⏱️ **الإجراء التلقائي:** تم كتم العضو صوتياً (Server Mute) لمدة \`30 ثانية\` وتم إرسال تنبيه في الخاص له.\n` +
+          `📅 **التوقيت:** <t:${Math.floor(Date.now() / 1000)}:T>`
+        )
+        .setFooter({ text: `GX eSports Management Alert • الإصدار ${this.botVersion}` })
+        .setTimestamp();
+
+      await this.logToAdmin(guild, adminAlertEmbed);
+
+      // 4. Archive Incident in Secret VCR Logs Channel
+      const vcrLogChannel = await this.findOrCreateVCRLogChannel(guild);
+      if (vcrLogChannel) {
+        await vcrLogChannel.send({ embeds: [adminAlertEmbed] }).catch(() => {});
+      }
+
+    } catch (err) {
+      console.error('خطأ في معالجة مخالفة الصوت الصاخب:', err.message);
+    }
   }
 
   async mixMultiTrackAudioToOgg(userTracksMap) {
@@ -467,7 +513,6 @@ export class VCRManager {
     const member = newState.member || oldState.member;
     if (!guild || !member) return;
 
-    // A. If the updated member is one of our 5 VCR Bots
     if (VCR_BOT_IDS.has(member.id)) {
       const worker = this.workers.find(w => w.id === member.id);
       if (!worker || worker.isInternalSwitching) return;
@@ -514,7 +559,7 @@ export class VCRManager {
       }
     }
 
-    // B. Human Member Voice Session Tracking
+    // Human Member Voice Session Tracking
     const oldCh = oldState.channel;
     const newCh = newState.channel;
 
@@ -547,7 +592,6 @@ export class VCRManager {
   async runWatchdog(guild) {
     if (!guild) return;
 
-    // Run watchdog only every 10 seconds to avoid spamming Discord
     const now = Date.now();
     if (now - this.lastWatchdogRun < 10000) return;
     this.lastWatchdogRun = now;
@@ -561,7 +605,6 @@ export class VCRManager {
       const voiceList = [...voiceChannels.values()];
       if (voiceList.length === 0) return;
 
-      // Ensure each VCR bot is connected ONLY if actually disconnected
       for (let i = 0; i < this.workers.length; i++) {
         const worker = this.workers[i];
         if (worker.isInternalSwitching) continue;
@@ -579,7 +622,6 @@ export class VCRManager {
                             worker.connection.state.status !== VoiceConnectionStatus.Destroyed &&
                             worker.connection.state.status !== VoiceConnectionStatus.Disconnected;
 
-        // ONLY rejoin if completely missing from voice
         if (!currentVoiceId || !isConnected) {
           if (Date.now() - worker.lastJoinAttempt > 5000) {
             await worker.joinChannel(targetChannel, guild, true);
