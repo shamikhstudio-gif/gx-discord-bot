@@ -13,6 +13,7 @@ export const VCR_CONFIGS = [
 ];
 
 export const VCR_ROLE_NAME = '🎙️ GX VCR';
+export const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
 export const SECRET_VCR_CHANNEL_NAME = '📁・سجلات-التسجيلات-الصوتية';
 export const SECRET_VCR_CHANNEL_ID = '1539266769695547454';
 export const ALLOWED_GUILD_ID = '1537461174222725120';
