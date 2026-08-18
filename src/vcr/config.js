@@ -42,6 +42,17 @@ export const SECRET_VCR_CHANNEL_NAME = '📁・سجلات-التسجيلات-ا�
 export const SECRET_VCR_CHANNEL_ID = '1539266769695547454';
 export const ALLOWED_GUILD_ID = '1537461174222725120';
 
+// 👑 Top Leadership Roles (COO, CEO, OWNER) - 100% Strictly Immune from any VCR actions
+export const TOP_EXEC_ROLE_IDS = [
+  '1538485406922838066', // OWNER
+  '1538485672795570196', // CEO
+  '1538544110913454160'  // COO
+];
+
+export const TOP_EXEC_ROLE_NAMES = ['owner', 'ceo', 'coo'];
+export const TOP_EXEC_USER_IDS = ['1152686277255237663', '1484535997893967980'];
+export const TOP_EXEC_USERNAMES = ['itszoki', 'ice0090'];
+
 // Raised threshold: Only extreme screams / loud screeching / ear-rape (> 25000 RMS on 16-bit PCM)
 export const LOUD_SOUND_THRESHOLD = 25000;
 export const MUTE_DURATION_MS = 30000; // Exactly 30 seconds fixed server mute
