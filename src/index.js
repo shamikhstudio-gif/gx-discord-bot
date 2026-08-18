@@ -2538,8 +2538,8 @@ async function runAutonomousVCRWatchdog(guild) {
   return vcrManager.runWatchdog(guild);
 }
 
-async function initVCRWorkers() {
-  return vcrManager.init();
+async function initVCRWorkers(guild) {
+  return vcrManager.init(guild);
 }
 
 // ----------------------------------------------------
@@ -2585,7 +2585,7 @@ client.once(Events.ClientReady, async (c) => {
       await welcomeExistingMembersSequentially(guild);
     await findOrCreateVCRRole(guild);
     await autoAssignVCRRoles(guild);
-    await initVCRWorkers();
+    await initVCRWorkers(guild);
       await checkAndResetBiweeklyInfractions(guild);
       sendSecurityDMToExistingMembers(guild);
 
