@@ -5196,14 +5196,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 11. أمر /فتح
     else if (commandName === 'فتح') {
       try {
+        const memberRole = findAutoRole(interaction.guild);
+        const untrustedRole = await findOrCreateUntrustedRole(interaction.guild);
+
         await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
           SendMessages: null
         });
 
+        if (memberRole) {
+          await interaction.channel.permissionOverwrites.edit(memberRole, {
+            ViewChannel: true,
+            SendMessages: true,
+            ReadMessageHistory: true
+          });
+        }
+
+        if (untrustedRole) {
+          await interaction.channel.permissionOverwrites.edit(untrustedRole, {
+            ViewChannel: true,
+            SendMessages: false,
+            ReadMessageHistory: true
+          });
+        }
+
         const embed = new EmbedBuilder()
           .setColor(0x57F287)
           .setTitle('🔓 تم فتح القناة')
-          .setDescription(`تم فتح القناة <#${interaction.channelId}> للجميع بواسطة <@${interaction.user.id}>.`)
+          .setDescription(`تم فتح القناة <#${interaction.channelId}> وإتاحة الكتابة للأعضاء بواسطة <@${interaction.user.id}>.`)
           .setFooter({ text: `GX eSports • الإصدار ${BOT_VERSION}` });
 
         await interaction.reply({ embeds: [embed] });
@@ -5211,7 +5230,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const logEmbed = new EmbedBuilder()
           .setColor(0x57F287)
           .setAuthor({ name: '🔓 فتح قناة', iconURL: interaction.user.displayAvatarURL() })
-          .setDescription(`قام المشرف <@${interaction.user.id}> بفتح القناة <#${interaction.channelId}>.`)
+          .setDescription(`قام المشرف <@${interaction.user.id}> بفتح القناة <#${interaction.channelId}> ومزامنة صلاحيات الكتابة.`)
           .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
           .setTimestamp();
         await sendToLogChannel(interaction.guild, logEmbed);
@@ -5244,24 +5263,91 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // 13. أمر /فتح_الكل
     else if (commandName === 'فتح_الكل') {
+      const startTime = Date.now();
       await interaction.deferReply();
       let unlockedCount = 0;
 
-      const textChannels = interaction.guild.channels.cache.filter((c) => c.type === ChannelType.GuildText);
+      const memberRole = findAutoRole(interaction.guild);
+      const untrustedRole = await findOrCreateUntrustedRole(interaction.guild);
+      const everyoneRole = interaction.guild.roles.everyone;
+
+      const systemChannelIds = new Set([
+        WELCOME_CHANNEL_ID,
+        LEAVE_CHANNEL_ID,
+        SECRET_VCR_CHANNEL_ID
+      ]);
+
+      const channels = await interaction.guild.channels.fetch().catch(() => interaction.guild.channels.cache);
+      const textChannels = channels.filter(c => c && c.type === ChannelType.GuildText && !systemChannelIds.has(c.id));
+
       for (const [, ch] of textChannels) {
+        // Skip log, status, ticket and secret archive channels by name
+        if (ch.name.includes('log') || ch.name.includes('status') || ch.name.includes('سجلات') || ch.name.includes('welcome') || ch.name.includes('تذاكر') || ch.name.includes('ticket')) {
+          continue;
+        }
+
         try {
-          await ch.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: null });
+          await ch.permissionOverwrites.edit(everyoneRole, { SendMessages: null });
+          if (memberRole) {
+            await ch.permissionOverwrites.edit(memberRole, { 
+              ViewChannel: true, 
+              SendMessages: true, 
+              ReadMessageHistory: true 
+            });
+          }
+          if (untrustedRole) {
+            await ch.permissionOverwrites.edit(untrustedRole, { 
+              ViewChannel: true, 
+              SendMessages: false, 
+              ReadMessageHistory: true 
+            });
+          }
           unlockedCount++;
         } catch {}
       }
 
+      // 🔒 Complete Server Permissions & Roles Auto-Sync
+      const permSyncResult = await syncAllPermissionsAndOverwrites(interaction.guild);
+      const roleSyncResult = await syncAllMembersRole(interaction.guild, false);
+
+      const durationMs = Date.now() - startTime;
+
       const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('🔓 تم فتح جميع قنوات السيرفر')
-        .setDescription(`تم فتح **${unlockedCount}** قناة نصية وإتاحة الكتابة للأعضاء بواسطة <@${interaction.user.id}>.`)
-        .setFooter({ text: `GX eSports Moderation • الإصدار ${BOT_VERSION}` });
+        .setAuthor({ name: '🔓 فتح شامل ومزامنة الصلاحيات | GX Security', iconURL: interaction.guild.iconURL() })
+        .setTitle('✅ تم فتح جميع القنوات وإعادة مزامنة الصلاحيات بنجاح')
+        .setDescription(
+          `تم فتح **${unlockedCount}** قناة نصية وإتاحة الكتابة لجميع الأعضاء الموثقين برتبة <@&${memberRole?.id || ''}>، مع مزامنة وحماية كافة تصاريح القنوات خلال **${durationMs}ms**:`
+        )
+        .addFields(
+          {
+            name: '🔓 القنوات المفتوحة',
+            value: `\`${unlockedCount} قناة نصية جاهزة للكتابة\` ✅`,
+            inline: true
+          },
+          {
+            name: '🔒 مزامنة الصلاحيات (Permissions)',
+            value: permSyncResult.success ? `\`تمت مزامنة وتأمين ${permSyncResult.syncedChannels} قناة\` 🔒` : '`جاهزة ومؤمنة` 🟢',
+            inline: true
+          },
+          {
+            name: '👥 رتب الأعضاء المزامنة',
+            value: `\`تم فحص ${roleSyncResult.total} عضو وتحديث صلاحياتهم\` 👑`,
+            inline: true
+          }
+        )
+        .setFooter({ text: `GX eSports Moderation • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
+      const logEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setAuthor({ name: '🔓 فتح شامل ومزامنة القنوات', iconURL: interaction.user.displayAvatarURL() })
+        .setDescription(`قام المشرف <@${interaction.user.id}> بفتح جميع قنوات السيرفر وتفعيل مزامنة الصلاحيات التلقائية لجميع الأعضاء.`)
+        .setFooter({ text: `GX eSports System • الإصدار ${BOT_VERSION}` })
+        .setTimestamp();
+      await sendToLogChannel(interaction.guild, logEmbed);
     }
 
     // 14. أمر /تباطؤ
