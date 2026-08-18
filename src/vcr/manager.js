@@ -11,7 +11,7 @@ export class VCRManager {
     this.userMuteCooldowns = new Map(); // userId -> timestamp
   }
 
-  async init() {
+  async init(guild) {
     console.log('🔄 جارٍ تشغيل وربط أسطول مسجلات الصوت (5 مسجلات GX VCR)...');
     for (const cfg of VCR_CONFIGS) {
       const worker = new VCRWorker(cfg, this);
@@ -19,11 +19,18 @@ export class VCRManager {
       this.workers.push(worker);
     }
     console.log(`✅ اكتمل تشغيل ${this.workers.length} مسجلات صوتية بنجاح!`);
+
+    if (guild) {
+      await this.autoAssignVCRRoles(guild);
+      await this.findOrCreateVCRLogChannel(guild);
+      console.log('🎙️ [تثبيت تلقائي] جارٍ إدخال المسجلات الخمسة في الرومات الصوتية الآن...');
+      await this.deployStationary(guild);
+    }
   }
 
   async findOrCreateVCRLogChannel(guild) {
     if (!guild) return null;
-    let ch = guild.channels.cache.find(c => c.name === SECRET_VCR_CHANNEL_NAME || c.name.includes('سجلات-التسجيلات'));
+    let ch = guild.channels.cache.find(c => c && (c.name === SECRET_VCR_CHANNEL_NAME || c.name.includes('سجلات-التسجيلات')));
     if (!ch) {
       try {
         const botMember = guild.members.me;
