@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
 import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus, entersState } from '@discordjs/voice';
 import { Readable } from 'stream';
 import prism from 'prism-media';
-import { LOUD_SOUND_THRESHOLD } from './config.js';
+import { LOUD_SOUND_THRESHOLD, VCR_BOT_IDS } from './config.js';
 
 /**
  * Standard WebRTC Timed Silence Stream (1 Opus frame every 20ms = 50 packets/sec).
@@ -225,6 +225,14 @@ export class VCRWorker {
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', async (userId) => {
+      // 🚫 STRICT BOT EXCLUSION: Never record GX Main Bot, VCR bots, or ANY bot!
+      if (userId === this.manager.mainClient?.user?.id || VCR_BOT_IDS.has(userId)) {
+        return;
+      }
+      const speakerMember = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+      if (!speakerMember || speakerMember.user?.bot) {
+        return;
+      }
       const session = this.manager.getOrCreateSession(channel, guild, this);
       if (!session || session.isFinalizing) return;
 
