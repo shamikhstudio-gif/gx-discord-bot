@@ -1,6 +1,13 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
-import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType } from '@discordjs/voice';
+import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus } from '@discordjs/voice';
+import { Readable } from 'stream';
 import { LOUD_SOUND_THRESHOLD } from './config.js';
+
+class SilenceStream extends Readable {
+  _read() {
+    this.push(Buffer.from([0xF8, 0xFF, 0xFE]));
+  }
+}
 
 export class VCRWorker {
   constructor(config, manager) {
@@ -10,6 +17,7 @@ export class VCRWorker {
     this.manager = manager;
     this.client = null;
     this.connection = null;
+    this.player = null;
     this.assignedChannelId = null;
     this.isReady = false;
   }
@@ -41,6 +49,21 @@ export class VCRWorker {
     });
   }
 
+  createKeepAlivePlayer() {
+    const player = createAudioPlayer();
+    const playSilence = () => {
+      try {
+        const resource = createAudioResource(new SilenceStream(), { inputType: StreamType.Opus });
+        player.play(resource);
+      } catch {}
+    };
+
+    playSilence();
+    player.on('error', () => {});
+    player.on(AudioPlayerStatus.Idle, playSilence);
+    return player;
+  }
+
   async joinChannel(channel, guild) {
     let vGuild = this.client.guilds.cache.get(guild.id);
     if (!vGuild) {
@@ -52,7 +75,7 @@ export class VCRWorker {
     }
 
     try {
-      console.log(`🎙️ [تثبيت VCR] انضمام ${this.name} للروم: #${channel.name} (${channel.id})...`);
+      console.log(`🎙️ [تثبيت VCR دائم] انضمام ${this.name} للروم: #${channel.name} (${channel.id})...`);
       if (this.connection) {
         try { this.connection.destroy(); } catch {}
       }
@@ -62,8 +85,11 @@ export class VCRWorker {
         guildId: guild.id,
         adapterCreator: vGuild.voiceAdapterCreator,
         selfDeaf: false,
-        selfMute: true
+        selfMute: false
       });
+
+      this.player = this.createKeepAlivePlayer();
+      this.connection.subscribe(this.player);
 
       this.connection.on('error', (err) => {
         console.warn(`⚠️ [اتصال صوت ${this.name}]`, err.message);
