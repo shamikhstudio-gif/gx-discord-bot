@@ -2897,12 +2897,15 @@ async function deployStationaryVCRBots(guild) {
     const vClient = worker.client;
     const vGuild = vClient.guilds.cache.get(guild.id);
     if (!vGuild) {
-      console.warn(`⚠️ [VCR انضمام] البوت ${worker.name} غير متصل بسيرفر ${guild.id}`);
       continue;
     }
 
     try {
       console.log(`🎙️ [تثبيت فوري VCR] انضمام ${worker.name} للروم الصوتي: #${targetChannel.name} (${targetChannel.id})...`);
+      if (worker.connection) {
+        try { worker.connection.destroy(); } catch {}
+      }
+
       worker.connection = joinVoiceChannel({
         channelId: targetChannel.id,
         guildId: guild.id,
@@ -2910,9 +2913,15 @@ async function deployStationaryVCRBots(guild) {
         selfDeaf: false,
         selfMute: true
       });
+
+      worker.connection.on('error', (err) => {
+        console.warn(`⚠️ [اتصال صوت ${worker.name}]`, err.message);
+      });
+
       worker.assignedChannelId = targetChannel.id;
       attachRecordingListener(worker, worker.connection, targetChannel, guild);
       joinedCount++;
+      await new Promise(r => setTimeout(r, 600));
     } catch (err) {
       console.error(`❌ خطأ في تثبيت ${worker.name}:`, err.message);
     }
