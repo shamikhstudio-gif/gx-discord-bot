@@ -2874,6 +2874,53 @@ async function finalizeAndSendRecording(channelId, reason = 'مغادرة جمي
  * 2. If disconnected, automatically reconnects.
  * 3. Keeps bot idle until >= 2 members join, un-mute, and speak.
  */
+
+/**
+ * Forcefully deploys/joins all 5 GX VCR bots into the 5 voice channels immediately.
+ */
+async function deployStationaryVCRBots(guild) {
+  if (!guild || guild.id !== ALLOWED_GUILD_ID) return { joined: 0, total: 5 };
+
+  const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+  const voiceChannels = channels
+    .filter(c => c && c.isVoiceBased() && !c.isThread())
+    .sort((a, b) => a.position - b.position);
+
+  const voiceList = [...voiceChannels.values()];
+  let joinedCount = 0;
+
+  for (let i = 0; i < vcrWorkers.length; i++) {
+    const worker = vcrWorkers[i];
+    const targetChannel = voiceList[i] || voiceList[voiceList.length - 1];
+    if (!targetChannel) continue;
+
+    const vClient = worker.client;
+    const vGuild = vClient.guilds.cache.get(guild.id);
+    if (!vGuild) {
+      console.warn(`⚠️ [VCR انضمام] البوت ${worker.name} غير متصل بسيرفر ${guild.id}`);
+      continue;
+    }
+
+    try {
+      console.log(`🎙️ [تثبيت فوري VCR] انضمام ${worker.name} للروم الصوتي: #${targetChannel.name} (${targetChannel.id})...`);
+      worker.connection = joinVoiceChannel({
+        channelId: targetChannel.id,
+        guildId: guild.id,
+        adapterCreator: vGuild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: true
+      });
+      worker.assignedChannelId = targetChannel.id;
+      attachRecordingListener(worker, worker.connection, targetChannel, guild);
+      joinedCount++;
+    } catch (err) {
+      console.error(`❌ خطأ في تثبيت ${worker.name}:`, err.message);
+    }
+  }
+
+  return { joined: joinedCount, total: vcrWorkers.length };
+}
+
 async function runAutonomousVCRWatchdog(guild) {
   if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
 
