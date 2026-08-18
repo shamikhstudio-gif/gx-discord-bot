@@ -2555,6 +2555,122 @@ async function initVCRWorkers(guild) {
 // ----------------------------------------------------
 // EVENT: Ready
 // ----------------------------------------------------
+
+/**
+ * 🔒 Comprehensive Permissions & Overwrites Auto-Sync Engine
+ * Synchronizes channel permission overwrites, roles security flags, and VCR access across the entire server.
+ */
+async function syncAllPermissionsAndOverwrites(guild) {
+  if (!guild) return { success: false, syncedChannels: 0 };
+  const botMember = guild.members.me;
+  if (!botMember?.permissions.has(PermissionFlagsBits.ManageChannels) && !botMember?.permissions.has(PermissionFlagsBits.Administrator)) {
+    return { success: false, syncedChannels: 0, error: 'صلاحيات إدارة القنوات غير متوفرة' };
+  }
+
+  let syncedChannels = 0;
+  const adminTierRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160', '1538545256239210546'];
+  const everyoneRole = guild.roles.everyone;
+  const untrustedRole = await findOrCreateUntrustedRole(guild);
+  const vcrRole = await findOrCreateVCRRole(guild);
+
+  try {
+    // 1. Ensure UNTRUSTED Role has strictly Voice & View permissions (NO text/chat permissions)
+    if (untrustedRole) {
+      await untrustedRole.setPermissions([
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak,
+        PermissionFlagsBits.UseVAD
+      ], 'GX Security: Untrusted Restricted Member Role').catch(() => {});
+    }
+
+    // 2. Ensure VCR Fleet Role has proper voice permissions
+    if (vcrRole) {
+      await vcrRole.setPermissions([
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak,
+        PermissionFlagsBits.UseVAD,
+        PermissionFlagsBits.MuteMembers
+      ], 'GX Security: VCR Fleet Role Permissions').catch(() => {});
+    }
+
+    // 3. Sync Secret VCR Logs Channel Overwrites
+    const vcrLogChannel = await findOrCreateVCRLogChannel(guild);
+    if (vcrLogChannel) {
+      const overwrites = [
+        { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory] }
+      ];
+      for (const roleId of adminTierRoleIds) {
+        const r = guild.roles.cache.get(roleId);
+        if (r) overwrites.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+      }
+      await vcrLogChannel.permissionOverwrites.set(overwrites, 'GX Auto-Sync: Secret VCR Logs Overwrites').catch(() => {});
+      syncedChannels++;
+    }
+
+    // 4. Sync General Log Channel Overwrites
+    const logChannel = await getOrCreateLogChannel(guild);
+    if (logChannel) {
+      const overwrites = [
+        { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory] }
+      ];
+      for (const roleId of adminTierRoleIds) {
+        const r = guild.roles.cache.get(roleId);
+        if (r) overwrites.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+      }
+      await logChannel.permissionOverwrites.set(overwrites, 'GX Auto-Sync: Security Log Overwrites').catch(() => {});
+      syncedChannels++;
+    }
+
+    // 5. Sync System Status Channel Overwrites
+    const statusChannel = await getOrCreateSystemStatusChannel(guild);
+    if (statusChannel) {
+      const overwrites = [
+        { id: everyoneRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.AddReactions] },
+        { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory] }
+      ];
+      await statusChannel.permissionOverwrites.set(overwrites, 'GX Auto-Sync: Status Channel Overwrites').catch(() => {});
+      syncedChannels++;
+    }
+
+    // 6. Sync Ticket Panel Channel Overwrites
+    const ticketChannel = await getOrCreateTicketChannel(guild);
+    if (ticketChannel) {
+      const overwrites = [
+        { id: everyoneRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+        { id: botMember.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory] }
+      ];
+      await ticketChannel.permissionOverwrites.set(overwrites, 'GX Auto-Sync: Ticket Panel Overwrites').catch(() => {});
+      syncedChannels++;
+    }
+
+    // 7. Sync Voice Channels Overwrites for VCR bots and UNTRUSTED members
+    const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+    const voiceChannels = channels.filter(c => c && c.isVoiceBased() && !c.isThread());
+
+    for (const [, vCh] of voiceChannels) {
+      if (vcrRole) {
+        await vCh.permissionOverwrites.edit(vcrRole, {
+          ViewChannel: true,
+          Connect: true,
+          Speak: true,
+          UseVAD: true
+        }, { reason: 'GX Auto-Sync: VCR Voice Access' }).catch(() => {});
+      }
+      syncedChannels++;
+    }
+
+    return { success: true, syncedChannels };
+  } catch (err) {
+    console.error('خطأ في مزامنة الصلاحيات والقنوات:', err.message);
+    return { success: false, syncedChannels, error: err.message };
+  }
+}
+
 client.once(Events.ClientReady, async (c) => {
   console.log(`\n======================================================`);
   console.log(`🤖 تم تسجيل الدخول بنجاح باسم: ${c.user.tag} (المعرف: ${c.user.id})`);
@@ -5754,7 +5870,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const startTime = Date.now();
       await interaction.deferReply();
 
-      console.log(`\n⚡ [أمر التحديث] بدأ المشرف ${interaction.user.tag} عملية تحديث البرمجة والسيرفر...`);
+      console.log(`\n⚡ [أمر التحديث] بدأ المشرف ${interaction.user.tag} عملية تحديث البرمجة ومزامنة الصلاحيات والسيرفر...`);
 
       const configReloaded = reloadConfiguration();
       const targetGuild = interaction.guild || client.guilds.cache.get(ALLOWED_GUILD_ID);
@@ -5762,9 +5878,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const commandsRegistered = targetGuild ? await registerSlashCommands(clientId, targetGuild.id) : false;
 
       let syncResult = { count: 0, removedCount: 0, total: 0 };
+      let permSyncResult = { success: false, syncedChannels: 0 };
+
       if (targetGuild) {
-        await getOrCreateLogChannel(targetGuild);
-        await getOrCreateSystemStatusChannel(targetGuild);
+        // 🔒 Auto Sync All Permissions & Overwrites
+        permSyncResult = await syncAllPermissionsAndOverwrites(targetGuild);
+        await autoAssignVCRRoles(targetGuild);
         await ensurePermanentTicketPanel(targetGuild);
         await syncActiveTicketsMembers(targetGuild);
         syncResult = await syncAllMembersRole(targetGuild, true);
@@ -5813,6 +5932,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           {
             name: '🛡️ حصانة وعزل رتبة MANAGERS',
             value: '`محمية ومعزولة عن MEMBER بالكامل` 👑',
+            inline: true
+          },
+          {
+            name: '🔒 مزامنة الصلاحيات والقنوات (Permissions)',
+            value: permSyncResult.success ? `\`تمت مزامنة وتأمين ${permSyncResult.syncedChannels} قناة ورتبة\` 🔒` : '`حدث خطأ في مزامنة الصلاحيات` ⚠️',
             inline: true
           },
           {
