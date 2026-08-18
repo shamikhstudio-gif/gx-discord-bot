@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
-import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus } from '@discordjs/voice';
+import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus, entersState } from '@discordjs/voice';
 import { Readable } from 'stream';
 import prism from 'prism-media';
 import { LOUD_SOUND_THRESHOLD } from './config.js';
@@ -15,12 +15,15 @@ export class VCRWorker {
     this.id = config.id;
     this.name = config.name;
     this.token = config.token;
+    this.defaultChannelId = config.defaultChannelId;
+    this.defaultChannelName = config.defaultChannelName;
     this.manager = manager;
     this.client = null;
     this.connection = null;
     this.player = null;
-    this.assignedChannelId = null;
+    this.assignedChannelId = config.defaultChannelId;
     this.isReady = false;
+    this.isReconnecting = false;
   }
 
   async init() {
@@ -65,7 +68,9 @@ export class VCRWorker {
     return player;
   }
 
-  async joinChannel(channel, guild) {
+  async joinChannel(channel, guild, isAutoRestored = false) {
+    if (!channel || !guild) return false;
+
     let vGuild = this.client.guilds.cache.get(guild.id);
     if (!vGuild) {
       vGuild = await this.client.guilds.fetch(guild.id).catch(() => null);
@@ -76,7 +81,6 @@ export class VCRWorker {
     }
 
     try {
-      console.log(`🎙️ [تثبيت VCR دائم] انضمام ${this.name} للروم: #${channel.name} (${channel.id})...`);
       if (this.connection) {
         try { this.connection.destroy(); } catch {}
       }
@@ -93,12 +97,33 @@ export class VCRWorker {
       this.player = this.createKeepAlivePlayer();
       this.connection.subscribe(this.player);
 
+      this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        try {
+          await Promise.race([
+            entersState(this.connection, VoiceConnectionStatus.Signalling, 3000),
+            entersState(this.connection, VoiceConnectionStatus.Connecting, 3000)
+          ]);
+        } catch {
+          console.warn(`⚡ [إعادة اتصال فوري] انقطع اتصال ${this.name} من #${channel.name}. جارٍ إعادة الربط التلقائي...`);
+          setTimeout(() => {
+            this.joinChannel(channel, guild, true).catch(() => {});
+          }, 1000);
+        }
+      });
+
       this.connection.on('error', (err) => {
         console.warn(`⚠️ [اتصال صوت ${this.name}]`, err.message);
       });
 
       this.assignedChannelId = channel.id;
       this.attachReceiver(this.connection, channel, guild);
+
+      if (isAutoRestored) {
+        console.log(`🛡️ [حارس الاستقرار] تمت إعادة تثبيت ${this.name} في الروم المخصص: #${channel.name} بنجاح.`);
+      } else {
+        console.log(`🎙️ [تثبيت VCR دائم] انضمام ${this.name} للروم: #${channel.name} (${channel.id})...`);
+      }
+
       return true;
     } catch (err) {
       console.error(`❌ خطأ في تثبيت ${this.name}:`, err.message);
