@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 
 export const VCR_CONFIGS = [
