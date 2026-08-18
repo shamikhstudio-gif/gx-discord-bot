@@ -15,33 +15,44 @@ export class VCRWorker {
   }
 
   async init() {
-    this.client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates
-      ]
-    });
+    return new Promise((resolve) => {
+      this.client = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildVoiceStates
+        ]
+      });
 
-    this.client.once(Events.ClientReady, (c) => {
-      this.isReady = true;
-      console.log(`🎙️ [مسجل متصل] تم تسجيل الدخول بنجاح للمسجل: ${c.user.tag} (ID: ${c.user.id})`);
-      c.user.setActivity('🎙️ GX VCR Autonomous Sentinel', { type: ActivityType.Custom });
-    });
+      this.client.once(Events.ClientReady, (c) => {
+        this.isReady = true;
+        console.log(`🎙️ [مسجل متصل] تم تسجيل الدخول بنجاح للمسجل: ${c.user.tag} (ID: ${c.user.id})`);
+        c.user.setActivity('🎙️ GX VCR Autonomous Sentinel', { type: ActivityType.Custom });
+        resolve(true);
+      });
 
-    this.client.on(Events.Error, (err) => {
-      console.warn(`⚠️ [تحذير مسجل ${this.name}]`, err.message);
-    });
+      this.client.on(Events.Error, (err) => {
+        console.warn(`⚠️ [تحذير مسجل ${this.name}]`, err.message);
+      });
 
-    await this.client.login(this.token).catch((err) => {
-      console.error(`❌ فشل تسجيل دخول ${this.name}:`, err.message);
+      this.client.login(this.token).catch((err) => {
+        console.error(`❌ فشل تسجيل دخول ${this.name}:`, err.message);
+        resolve(false);
+      });
     });
   }
 
   async joinChannel(channel, guild) {
-    const vGuild = this.client.guilds.cache.get(guild.id);
-    if (!vGuild) return false;
+    let vGuild = this.client.guilds.cache.get(guild.id);
+    if (!vGuild) {
+      vGuild = await this.client.guilds.fetch(guild.id).catch(() => null);
+    }
+    if (!vGuild) {
+      console.warn(`⚠️ [VCR انضمام] البوت ${this.name} لم يتمكن من الوصول لسيرفر ${guild.id}`);
+      return false;
+    }
 
     try {
+      console.log(`🎙️ [تثبيت VCR] انضمام ${this.name} للروم: #${channel.name} (${channel.id})...`);
       if (this.connection) {
         try { this.connection.destroy(); } catch {}
       }
