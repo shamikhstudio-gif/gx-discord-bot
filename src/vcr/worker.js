@@ -23,7 +23,7 @@ export class VCRWorker {
     this.player = null;
     this.assignedChannelId = config.defaultChannelId;
     this.isReady = false;
-    this.isReconnecting = false;
+    this.activeUserSubscriptions = new Map(); // userId -> { opusStream, opusDecoder }
   }
 
   async init() {
@@ -68,6 +68,16 @@ export class VCRWorker {
     return player;
   }
 
+  cleanupSubscriptions() {
+    for (const [userId, sub] of this.activeUserSubscriptions) {
+      try {
+        if (sub.opusDecoder) sub.opusDecoder.destroy();
+        if (sub.opusStream) sub.opusStream.destroy();
+      } catch {}
+    }
+    this.activeUserSubscriptions.clear();
+  }
+
   async joinChannel(channel, guild, isAutoRestored = false) {
     if (!channel || !guild) return false;
 
@@ -81,6 +91,8 @@ export class VCRWorker {
     }
 
     try {
+      this.cleanupSubscriptions();
+
       if (this.connection) {
         try { this.connection.destroy(); } catch {}
       }
@@ -91,7 +103,7 @@ export class VCRWorker {
         adapterCreator: vGuild.voiceAdapterCreator,
         selfDeaf: false,
         selfMute: false,
-        group: this.id // Multi-bot per guild isolated voice connection group
+        group: this.id // Multi-bot isolated voice group
       });
 
       this.player = this.createKeepAlivePlayer();
@@ -104,7 +116,7 @@ export class VCRWorker {
             entersState(this.connection, VoiceConnectionStatus.Connecting, 3000)
           ]);
         } catch {
-          console.warn(`⚡ [إعادة اتصال فوري] انقطع اتصال ${this.name} من #${channel.name}. جارٍ إعادة الربط التلقائي...`);
+          console.warn(`⚡ [إعادة اتصال فوري] انقطع اتصال ${this.name} من #${channel.name}. جارٍ إعادة الربط...`);
           setTimeout(() => {
             this.joinChannel(channel, guild, true).catch(() => {});
           }, 1000);
@@ -154,46 +166,67 @@ export class VCRWorker {
       const presence = this.manager.trackMemberPresence(session, userId, guild);
       if (presence) presence.totalSpokenCount++;
 
-      const opusStream = receiver.subscribe(userId, {
-        end: {
-          behavior: EndBehaviorType.AfterSilence,
-          duration: 1000
+      // Persistent subscription: Only create if not already active to prevent audio chopping
+      if (!this.activeUserSubscriptions.has(userId)) {
+        try {
+          const opusStream = receiver.subscribe(userId, {
+            end: {
+              behavior: EndBehaviorType.Manual // Continuous persistent stream without 1s silence tears
+            }
+          });
+
+          // Pure uncorrupted 48kHz Stereo 16-bit PCM decoder
+          const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
+          const pcmStream = opusStream.pipe(opusDecoder);
+
+          this.activeUserSubscriptions.set(userId, { opusStream, opusDecoder });
+
+          pcmStream.on('data', (pcmChunk) => {
+            if (!pcmChunk || pcmChunk.length === 0) return;
+
+            // 1. Store in multi-track audio session with timeline synchronization
+            if (session.userAudioTracks && !session.isFinalizing) {
+              if (!session.userAudioTracks.has(userId)) {
+                session.userAudioTracks.set(userId, {
+                  userId,
+                  firstTimestamp: Date.now(),
+                  startOffsetMs: Math.max(0, Date.now() - session.startTime),
+                  pcmChunks: []
+                });
+              }
+              const track = session.userAudioTracks.get(userId);
+              track.pcmChunks.push(pcmChunk);
+              session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
+            }
+
+            // 2. Exact 16-bit PCM RMS Loudness / Scream Detection
+            let sumSquares = 0;
+            const sampleCount = pcmChunk.length / 2;
+            for (let i = 0; i < pcmChunk.length; i += 2) {
+              const sample = pcmChunk.readInt16LE(i);
+              sumSquares += sample * sample;
+            }
+            const rms = Math.sqrt(sumSquares / sampleCount);
+
+            // Scream / Ear-Rape Trigger (> 25,000 RMS)
+            if (rms > LOUD_SOUND_THRESHOLD) {
+              const violatingMember = guild.members.cache.get(userId);
+              if (violatingMember) {
+                this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, Math.round(rms));
+              }
+            }
+          });
+
+          opusStream.on('error', () => {
+            this.activeUserSubscriptions.delete(userId);
+          });
+          opusDecoder.on('error', () => {
+            this.activeUserSubscriptions.delete(userId);
+          });
+        } catch (err) {
+          console.warn(`⚠️ Error subscribing to voice of ${userId}:`, err.message);
         }
-      });
-
-      // Decode compressed Opus stream to 16-bit 48kHz Stereo PCM
-      const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-      const pcmStream = opusStream.pipe(opusDecoder);
-
-      pcmStream.on('data', (pcmChunk) => {
-        if (!pcmChunk || pcmChunk.length === 0) return;
-
-        // 1. Buffer in Memory (Zero Disk Waste)
-        if (session.pcmChunks && !session.isFinalizing) {
-          session.pcmChunks.push(pcmChunk);
-          session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
-        }
-
-        // 2. Exact 16-bit PCM RMS Loudness / Scream Detection
-        let sumSquares = 0;
-        const sampleCount = pcmChunk.length / 2;
-        for (let i = 0; i < pcmChunk.length; i += 2) {
-          const sample = pcmChunk.readInt16LE(i);
-          sumSquares += sample * sample;
-        }
-        const rms = Math.sqrt(sumSquares / sampleCount);
-
-        // Scream / Ear-Rape Trigger (> 25,000 RMS)
-        if (rms > LOUD_SOUND_THRESHOLD) {
-          const violatingMember = guild.members.cache.get(userId);
-          if (violatingMember) {
-            this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, Math.round(rms));
-          }
-        }
-      });
-
-      opusStream.on('error', () => {});
-      opusDecoder.on('error', () => {});
+      }
     });
   }
 }
