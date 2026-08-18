@@ -41,6 +41,7 @@ export const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
 export const SECRET_VCR_CHANNEL_NAME = '📁・سجلات-التسجيلات-الصوتية';
 export const SECRET_VCR_CHANNEL_ID = '1539266769695547454';
 export const ALLOWED_GUILD_ID = '1537461174222725120';
+export const TOURNAMENT_CATEGORY_ID = '1538979258863587328';
 
 // 👑 Top Leadership Roles (COO, CEO, OWNER) - 100% Strictly Immune from any VCR actions
 export const TOP_EXEC_ROLE_IDS = [
@@ -53,7 +54,9 @@ export const TOP_EXEC_ROLE_NAMES = ['owner', 'ceo', 'coo'];
 export const TOP_EXEC_USER_IDS = ['1152686277255237663', '1484535997893967980'];
 export const TOP_EXEC_USERNAMES = ['itszoki', 'ice0090'];
 
-// Raised threshold: Only extreme screams / loud screeching / ear-rape (> 25000 RMS on 16-bit PCM)
-export const LOUD_SOUND_THRESHOLD = 25000;
+// 🔊 Accurate Discord 16-bit PCM Scream & Ear-Rape Calibration
+// Normal talking: 800-2500 RMS. Screaming / Ear-rape: >= 7000 RMS or Peak >= 22000
+export const LOUD_SOUND_THRESHOLD = 7000;
+export const PEAK_SOUND_THRESHOLD = 22000;
 export const MUTE_DURATION_MS = 30000; // Exactly 30 seconds fixed server mute
 export const MUTE_COOLDOWN_MS = 35000;
