@@ -29,7 +29,6 @@ const pingHistory  = new RingBuffer(30);
 const memHistory   = new RingBuffer(30);
 const pingChart    = new RingBuffer(60);
 const memChart     = new RingBuffer(60);
-const uptimeChart  = new RingBuffer(60);
 
 let prevPing = null;
 let prevMem  = null;
@@ -38,6 +37,11 @@ let frameCount = 0;
 /* ─── Uptime counter running client-side (increments every second) ─── */
 let lastKnownUptimeSec = 0;
 let lastUptimeReceivedAt = 0;
+
+/* ─── Activity Log State & Filter ─── */
+let currentActivities = [];
+let activeFilter = 'all';
+let searchQuery  = '';
 
 /* ══════════════════════════════════════════════════════
    INIT
@@ -49,6 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
   buildVcrGrid();
   startClock();
   initNavHighlight();
+  initActivityControls();
+
   $('apiUrlDisplay').textContent = API_STATUS;
 
   $('copyApiBtn').addEventListener('click', () => {
@@ -66,7 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('clearLog').addEventListener('click', () => { $('eventLog').innerHTML = ''; });
 
-  initCharts();
   connectSSE();
 
   /* Client-side uptime ticker — increments every second between server pushes */
@@ -77,6 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setEl('valUptime', fmtUptime(live));
     setEl('cloudUptimeLabel', fmtUptime(live));
   }, 1000);
+
+  /* Relative time ticker for activity items */
+  setInterval(renderActivityFeed, 3000);
 });
 
 /* ══════════════════════════════════════════════════════
@@ -84,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
    ══════════════════════════════════════════════════════ */
 let sseSource = null;
 let reconnectTimer = null;
-let sseConnected = false;
 
 function connectSSE() {
   if (sseSource) { sseSource.close(); sseSource = null; }
@@ -96,7 +103,6 @@ function connectSSE() {
   sseSource = new EventSource(API_STREAM);
 
   sseSource.onopen = () => {
-    sseConnected = true;
     setPillState('online', 'Live Stream Active');
     addLog('✅ Real-time stream connected — updates every 500ms', 'ok');
   };
@@ -111,7 +117,6 @@ function connectSSE() {
   };
 
   sseSource.onerror = () => {
-    sseConnected = false;
     sseSource.close();
     sseSource = null;
     setPillState('warning', 'Reconnecting…');
@@ -141,7 +146,7 @@ function processData(d) {
 
   /* ── Ping ── */
   const ping = d.ping || 0;
-  setEl('valPing',      ping);
+  setEl('valPing',        ping);
   setEl('mainPingLabel',  ping + ' ms');
   setEl('discordWsPing',  ping + ' ms');
   setEl('chartPingVal',   ping + ' ms');
@@ -161,7 +166,7 @@ function processData(d) {
   pingHistory.push(ping);
   pingChart.push(ping);
 
-  /* ── Uptime (server value + client interpolation) ── */
+  /* ── Uptime ── */
   lastKnownUptimeSec   = d.uptimeSeconds || 0;
   lastUptimeReceivedAt = Date.now();
   setEl('valUptime', fmtUptime(lastKnownUptimeSec));
@@ -170,12 +175,11 @@ function processData(d) {
   const uptimePct = Math.min((lastKnownUptimeSec / 3600) * 100, 100);
   setBarWidth('cloudUptimeBar', uptimePct);
   updateGauge(lastKnownUptimeSec);
-  uptimeChart.push(lastKnownUptimeSec % 3600); // oscillating wave for chart
 
   /* ── Memory ── */
   if (d.memory) {
     const heapMB = Math.round(d.memory.heapUsed / 1024 / 1024);
-    setEl('valMemory',   heapMB);
+    setEl('valMemory',    heapMB);
     setEl('mainMemLabel', heapMB + ' MB');
     setEl('chartMemVal',  heapMB + ' MB');
 
@@ -232,10 +236,24 @@ function processData(d) {
     vcrSummary.className   = 'section-badge ' + (vcrOnline === 5 ? 'green' : 'amber');
   }
 
+  /* ── Activity Stats ── */
+  if (d.activityStats) {
+    setEl('statCmdTotal',   d.activityStats.commandsTotal  || 0);
+    setEl('statSecAlerts',  d.activityStats.securityAlerts || 0);
+    setEl('statAutoChecks', d.activityStats.autoChecksRun  || 0);
+    setEl('statVcrEvents',  d.activityStats.vcrEvents      || 0);
+  }
+
+  /* ── Recent Activity Feed ── */
+  if (d.recentActivity && Array.isArray(d.recentActivity)) {
+    currentActivities = d.recentActivity;
+    renderActivityFeed();
+  }
+
   /* ── Servers summary ── */
   setEl('serversSummary', '3 Nodes Online');
 
-  /* ── API Sample (update every 10 frames to avoid flicker) ── */
+  /* ── API Sample (update every 10 frames) ── */
   if (frameCount % 10 === 0) {
     const sampleEl = $('apiSample');
     if (sampleEl) {
@@ -243,26 +261,132 @@ function processData(d) {
         status: d.status,
         ping:   d.ping,
         uptimeSeconds: d.uptimeSeconds,
-        vcrOnline: vcrOnline + '/5'
+        vcrOnline: vcrOnline + '/5',
+        recentEvents: (d.recentActivity || []).length
       }, null, 2);
     }
   }
 
-  /* ── Draw sparklines (every frame — smooth) ── */
+  /* ── Draw sparklines ── */
   drawSparkline('sparkPing',    pingHistory.data,  '#00c8ff');
   drawSparkline('sparkMem',     memHistory.data,   '#8b5cf6');
   drawSparkline('sparkUptime',  [1, 1, 1, 1],      '#22c55e');
   drawSparkline('sparkMembers', [1, 1, 1, 1],      '#00c8ff');
   drawSparkline('sparkVcr',     [1, 1, 1, 1],      '#22c55e');
 
-  /* ── Draw full charts (every frame) ── */
+  /* ── Draw full charts ── */
   drawFullChart($('chartPing'), pingChart.data, '#00c8ff');
   drawFullChart($('chartMem'),  memChart.data,  '#8b5cf6');
+}
 
-  /* ── Log every 10 frames to avoid spam ── */
-  if (frameCount % 10 === 0) {
-    addLog(`Ping: ${ping}ms  RAM: ${prevMem}MB  VCR: ${vcrOnline}/5`, ping < 80 ? 'ok' : 'info');
+/* ══════════════════════════════════════════════════════
+   ACTIVITY FEED CONTROLS & RENDERING
+   ══════════════════════════════════════════════════════ */
+function initActivityControls() {
+  const tabs = document.querySelectorAll('.act-filter-btn');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = btn.dataset.filter || 'all';
+      renderActivityFeed();
+    });
+  });
+
+  const searchInput = document.getElementById('activitySearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchQuery = (e.target.value || '').trim().toLowerCase();
+      renderActivityFeed();
+    });
   }
+}
+
+function getActivityIcon(type) {
+  switch (type) {
+    case 'command':   return '⚡';
+    case 'security':  return '🛡️';
+    case 'autocheck': return '⏱️';
+    case 'vcr':       return '🎙️';
+    case 'system':    return '🤖';
+    case 'member':    return '👤';
+    default:          return '📡';
+  }
+}
+
+function renderActivityFeed() {
+  const listEl = document.getElementById('activityFeedList');
+  if (!listEl) return;
+
+  let filtered = currentActivities;
+
+  // 1. Filter by category tab
+  if (activeFilter !== 'all') {
+    filtered = filtered.filter(a => a.type === activeFilter);
+  }
+
+  // 2. Filter by search query
+  if (searchQuery) {
+    filtered = filtered.filter(a => {
+      const matchAction = a.action?.toLowerCase().includes(searchQuery);
+      const matchDetail = a.detail?.toLowerCase().includes(searchQuery);
+      const matchUser   = a.user?.tag?.toLowerCase().includes(searchQuery);
+      return matchAction || matchDetail || matchUser;
+    });
+  }
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `
+      <div class="act-empty-box">
+        <p>No activity logs match the current filter</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(item => {
+    const icon = getActivityIcon(item.type);
+    const timeAgo = formatTimeAgo(item.ts);
+    const userTag = item.user ? item.user.tag : null;
+
+    return `
+      <div class="act-item type-${item.type || 'system'}">
+        <div class="act-left">
+          <div class="act-icon">${icon}</div>
+          <div class="act-body">
+            <div class="act-header-row">
+              <span class="act-title">${escapeHtml(item.action || 'System Event')}</span>
+              <span class="act-type-tag tag-${item.type || 'system'}">${item.type || 'system'}</span>
+            </div>
+            <div class="act-detail">${escapeHtml(item.detail || '')}</div>
+          </div>
+        </div>
+        <div class="act-right">
+          ${userTag ? `<span class="act-user-pill">👤 ${escapeHtml(userTag)}</span>` : ''}
+          <span class="act-time-ago">${timeAgo}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function formatTimeAgo(ts) {
+  if (!ts) return 'just now';
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 5) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  return `${diffHr}h ago`;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /* ══════════════════════════════════════════════════════
@@ -292,8 +416,8 @@ function initNavHighlight() {
         if (link) link.classList.add('active');
       }
     });
-  }, { threshold: 0.4 });
-  ['overview','servers','vcr','analytics','security'].forEach(id => {
+  }, { threshold: 0.3 });
+  ['overview','servers','vcr','activity','analytics','security'].forEach(id => {
     const el = document.getElementById(id);
     if (el) observer.observe(el);
   });
@@ -340,8 +464,6 @@ function updateGauge(uptimeSec) {
 /* ══════════════════════════════════════════════════════
    CHARTS
    ══════════════════════════════════════════════════════ */
-function initCharts() { /* nothing to pre-init — drawn on first data */ }
-
 function drawSparkline(canvasId, data, color) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || data.length < 2) return;
