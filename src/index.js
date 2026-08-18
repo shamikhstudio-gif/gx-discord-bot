@@ -2516,27 +2516,26 @@ process.on('uncaughtException', (error) => {
 // 🎙️ GX VCR (VOICE CHANNEL RECORDER) MULTI-WORKER POOL & AUTONOMOUS SURVEILLANCE
 // ====================================================
 const VCR_CONFIGS = [
-  { id: '1539231767683137646', name: 'GX VCR #1', token: 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.GXfGIm.v7ErLYd2AeoVs-mgLr737VyakQhi_xVd8iihv0' },
-  { id: '1539241189629362246', name: 'GX VCR #2', token: 'MTUzOTI0MTE4OTYyOTM2MjI0Ng.GAyplm.hB-QrHacsgigyLS_QjUuqdtgOZZIKuo-iU0nlQ' },
-  { id: '1539241414318227466', name: 'GX VCR #3', token: 'MTUzOTI0MTQxNDMxODIyNzQ2Ng.GpVhJ1.NV75myRWpFF9xxqDvrmvXF67Ag0sOacM-0FCdk' },
-  { id: '1539241621328101497', name: 'GX VCR #4', token: 'MTUzOTI0MTYyMTMyODEwMTQ5Nw.GDTRoJ.4CHuU_GdlZyWPLPpS2kqoYCDkZf_l_07DNgseI' },
-  { id: '1539241867105927209', name: 'GX VCR #5', token: 'MTUzOTI0MTg2NzEwNTkyNzIwOQ.Gu2SJy.SGrb68hp9SCHMIdZcOCVwMdP03UyP_iwLPcFMk' }
+  { id: '1539231767683137646', name: 'GX VCR #1', token: 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.Gkf3Fx.vGNWnJPkznujkNruXkVRgO59S6Azm_GtCYozwM' },
+  { id: '1539241189629362246', name: 'GX VCR #2', token: 'MTUzOTI0MTE4OTYyOTM2MjI0Ng.GD4es9.op6hFAccGcCdxk3rNKVwzp9kYHQwFomH79LIUM' },
+  { id: '1539241414318227466', name: 'GX VCR #3', token: 'MTUzOTI0MTQxNDMxODIyNzQ2Ng.GX1bC4.PuKwmdSFkPqbNOSdBglS6MSWcnIPqTK1NMAMyM' },
+  { id: '1539241621328101497', name: 'GX VCR #4', token: 'MTUzOTI0MTYyMTMyODEwMTQ5Nw.GI0Upa.B39f0NNxKaBmcT3plb4Pwf-C8amlPLkkNDB7rQ' },
+  { id: '1539241867105927209', name: 'GX VCR #5', token: 'MTUzOTI0MTg2NzEwNTkyNzIwOQ.Gm5orN.ihvx7BGFF_JF5bIREsnS4qE9WkNA4t8Rl6Ox4w' }
 ];
 
 const VCR_ROLE_NAME = '🎙️ GX VCR';
 const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
 const vcrWorkers = [];
 const activeRecordings = new Map(); // channelId -> session object
+const userMuteCooldowns = new Map(); // userId -> timestamp
+
 const VCR_RECORDS_DIR = path.resolve(DATA_DIR, 'vcr_recordings');
 if (!fs.existsSync(VCR_RECORDS_DIR)) fs.mkdirSync(VCR_RECORDS_DIR, { recursive: true });
-
-let lastLoudSoundAlertTimestamp = 0; // 1 hour cooldown across server
-const LOUD_SOUND_COOLDOWN_MS = 60 * 60 * 1000; // 1 Hour
 
 async function findOrCreateVCRLogChannel(guild) {
   if (!guild) return null;
   const channelName = '📁・سجلات-التسجيلات-الصوتية';
-  let ch = guild.channels.cache.find(c => c.name === channelName || c.name.includes('تسجيلات'));
+  let ch = guild.channels.cache.find(c => c.name === channelName || c.name.includes('سجلات-التسجيلات'));
   if (!ch) {
     try {
       const managersRole = findManagersRole(guild);
@@ -2591,7 +2590,8 @@ async function findOrCreateVCRRole(guild) {
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.Connect,
             PermissionFlagsBits.Speak,
-            PermissionFlagsBits.UseVAD
+            PermissionFlagsBits.UseVAD,
+            PermissionFlagsBits.MuteMembers
           ],
           reason: 'إنشاء رتبة أسطول مسجلات GX VCR الرسمية'
         });
@@ -2621,57 +2621,101 @@ async function autoAssignVCRRoles(guild) {
 }
 
 /**
- * Sends a high-loudness ear-rape / scream alert to all managers via DM (max 1 per hour).
+ * Handles high loud noise / screaming / ear-rape detection:
+ * 1. Mutes the user for exactly 30 seconds on server level.
+ * 2. Sends DM to the user explaining the 30s mute.
+ * 3. Sends high-priority DM alert to all MANAGERS.
  */
-async function triggerLoudSoundAlert(guild, channel, speakerUser) {
-  const now = Date.now();
-  if (now - lastLoudSoundAlertTimestamp < LOUD_SOUND_COOLDOWN_MS) {
-    return; // Rate limited (1 time per hour)
-  }
-  lastLoudSoundAlertTimestamp = now;
+async function handleLoudSoundViolation(guild, channel, member, speakerInfo) {
+  if (!member || !member.voice?.channel) return;
+  const userId = member.id;
 
-  console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صوت صاخب جداً في #${channel.name} من ${speakerUser?.tag || 'مستخدم'}. جارٍ إرسال تنبيه للإدارة...`);
+  const lastMute = userMuteCooldowns.get(userId) || 0;
+  if (Date.now() - lastMute < 35000) return; // Prevent double mute within 35s
+  userMuteCooldowns.set(userId, Date.now());
 
-  const alertEmbed = new EmbedBuilder()
-    .setColor(0xED4245)
-    .setAuthor({ name: '🚨 إنذار رصد صوت صاخب / إزعاج صوتي | GX VCR Defense', iconURL: guild.iconURL() })
-    .setTitle('⚠️ رصد أصوات عالية / صراخ حاد في الروم الصوتي')
-    .setDescription(
-      `تم رصد ارتفاع حاد ومفاجئ في شدة الصوت (Loud Sound / Ear-Rape Detection) في أحد الرومات الصوتية.\n\n` +
-      `🔊 **الروم الصوتي:** <#${channel.id}> (\`#${channel.name}\`)\n` +
-      `👤 **المتحدث المرصود:** ${speakerUser ? `<@${speakerUser.id}> (\`${speakerUser.tag}\`)` : '\`غير محدد\`'}\n` +
-      `⏱️ **وقت الرصد:** <t:${Math.floor(now / 1000)}:T> (<t:${Math.floor(now / 1000)}:R>)\n\n` +
-      `💡 *ملاحظة أمنية: هذا الإشعار يرسل بحد أقصى مرة واحدة كل ساعة لمنع التكرار.*`
-    )
-    .setFooter({ text: `GX eSports Security Sentinel • الإصدار ${BOT_VERSION}` })
-    .setTimestamp();
+  console.warn(`🚨 [رصد صوت عالي / صراخ] تم رصد صراخ حاد في #${channel.name} من ${member.user.tag}. تطبيق ميوت 30 ثانية...`);
 
-  // Find all manager and executive members
-  const managersRole = findManagersRole(guild);
-  const adminTierRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+  try {
+    // 1. Apply Server Mute for 30 Seconds
+    if (guild.members.me?.permissions.has(PermissionFlagsBits.MuteMembers)) {
+      await member.voice.setMute(true, 'رصد أصوات عالية / صراخ حاد في الفويس (كتم صوتي إجباري لمدة 30 ثانية)');
+      console.log(`🔇 [كتم صوتي] تم كتم العضو ${member.user.tag} لمدة 30 ثانية بنجاح.`);
 
-  const recipients = new Set();
-  if (guild.ownerId) recipients.add(guild.ownerId);
+      // Schedule automatic unmute after exactly 30 seconds (fixed and non-extendable)
+      setTimeout(async () => {
+        try {
+          const freshMem = await guild.members.fetch(userId).catch(() => null);
+          if (freshMem && freshMem.voice?.serverMute) {
+            await freshMem.voice.setMute(false, 'انتهاء مهلة الكتم الصوتي الـ 30 ثانية');
+            console.log(`🔊 [فك الكتم الصوتي] تم فك الكتم تلقائياً عن ${freshMem.user.tag} بعد 30 ثانية.`);
+          }
+        } catch (err) {
+          console.error('خطأ في فك الكتم الصوتي:', err.message);
+        }
+      }, 30000);
+    }
 
-  const members = guild.members.cache;
-  for (const [, mem] of members) {
-    if (mem.user.bot) continue;
-    if (managersRole && mem.roles.cache.has(managersRole.id)) recipients.add(mem.id);
-    if (mem.roles.cache.some(r => adminTierRoleIds.includes(r.id))) recipients.add(mem.id);
-  }
+    // 2. Send DM explanation to the user
+    const userDMEmbed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setAuthor({ name: '⚠️ تنبيه أمني صوتي | GX VCR Defense', iconURL: guild.iconURL() })
+      .setTitle('🔇 تم تطبيق كتم صوتي مؤقت (Server Mute)')
+      .setDescription(
+        `مرحباً <@${member.id}>،\n\n` +
+        `تم رصد **صوت صاخب جداً / صراخ حاد ومفاجئ** صادر من المايكروفون الخاص بك في الروم الصوتي <#${channel.id}>.\n\n` +
+        `🛑 **الإجراء المتخذ:** تم تطبيق كتم صوتي إجباري على مستوى السيرفر لمدة **30 ثانية فقط** (غير قابلة للزيادة).\n` +
+        `⏱️ **انتهاء الكتم:** سيتم فك الكتم عنك تلقائياً وبشكل فوري بعد انتهاء الـ 30 ثانية.\n\n` +
+        `🙏 يرجى ضبط حساسية المايكروفون والالتزام بالهدوء لراحة جميع الأعضاء المتواجدين.`
+      )
+      .setFooter({ text: `GX eSports Voice Sentinel • الإصدار ${BOT_VERSION}` })
+      .setTimestamp();
 
-  for (const uid of recipients) {
-    try {
-      const u = await client.users.fetch(uid).catch(() => null);
-      if (u) {
-        await u.send({ embeds: [alertEmbed] }).catch(() => {});
-      }
-    } catch {}
+    await member.send({ embeds: [userDMEmbed] }).catch(() => {});
+
+    // 3. Send DM alert to all MANAGERS & Executives
+    const managersRole = findManagersRole(guild);
+    const adminTierRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+
+    const recipients = new Set();
+    if (guild.ownerId) recipients.add(guild.ownerId);
+
+    const members = guild.members.cache;
+    for (const [, mem] of members) {
+      if (mem.user.bot) continue;
+      if (managersRole && mem.roles.cache.has(managersRole.id)) recipients.add(mem.id);
+      if (mem.roles.cache.some(r => adminTierRoleIds.includes(r.id))) recipients.add(mem.id);
+    }
+
+    const adminAlertEmbed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setAuthor({ name: '🚨 إنذار رصد إزعاج صوتي | GX VCR Sentinel', iconURL: member.user.displayAvatarURL() })
+      .setTitle('⚠️ رصد صراخ / أصوات صاخبة وكتم المستخدم 30 ثانية')
+      .setDescription(
+        `تم رصد ارتفاع حاد في مستوى الصوت (Loud Sound / dB Peak) في أحد الرومات الصوتية وتم اتخاذ الإجراء التلقائي فوراً.\n\n` +
+        `👤 **العضو المخالف:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+        `🔊 **الروم الصوتي:** <#${channel.id}> (\`#${channel.name}\`)\n` +
+        `⏱️ **الإجراء التلقائي:** تم كتم العضو صوتياً (Server Mute) لمدة \`30 ثانية\` وتم إرسال تنبيه في الخاص له.\n` +
+        `📅 **التوقيت:** <t:${Math.floor(Date.now() / 1000)}:T>`
+      )
+      .setFooter({ text: `GX eSports Management Alert • الإصدار ${BOT_VERSION}` })
+      .setTimestamp();
+
+    for (const uid of recipients) {
+      try {
+        const u = await client.users.fetch(uid).catch(() => null);
+        if (u) {
+          await u.send({ embeds: [adminAlertEmbed] }).catch(() => {});
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.error('خطأ في معالجة مخالفة الصوت الصاخب:', err.message);
   }
 }
 
 /**
- * Initializes and starts a voice recording session on a VCR worker.
+ * Attaches audio receiver and tracks member entry/leave timelines and dB levels.
  */
 function attachRecordingListener(worker, connection, channel, guild) {
   const receiver = connection.receiver;
@@ -2683,7 +2727,8 @@ function attachRecordingListener(worker, connection, channel, guild) {
       channelName: channel.name,
       guild,
       startTime: Date.now(),
-      speakers: new Map(), // userId -> { tag, chunks: [] }
+      membersPresence: new Map(), // userId -> { id, tag, joinTime, leaveTime, totalSpokenCount }
+      speakers: new Map(),
       lastActivityTime: Date.now(),
       hasSpoken: false,
       isFinalizing: false
@@ -2691,43 +2736,72 @@ function attachRecordingListener(worker, connection, channel, guild) {
     activeRecordings.set(channel.id, session);
   }
 
+  // Initial population of present members
+  for (const [, mem] of channel.members) {
+    if (!mem.user.bot && !session.membersPresence.has(mem.id)) {
+      session.membersPresence.set(mem.id, {
+        id: mem.id,
+        tag: mem.user.tag,
+        displayName: mem.displayName || mem.user.username,
+        joinTime: Date.now(),
+        leaveTime: null,
+        totalSpokenCount: 0
+      });
+    }
+  }
+
   receiver.speaking.on('start', async (userId) => {
     if (session.isFinalizing) return;
+
+    // Check conditions: Must have >= 2 human members and not all muted
+    const humanMembers = channel.members.filter(m => !m.user.bot);
+    const humanCount = humanMembers.size;
+    const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
+
+    // Rule: If only 1 member or all are muted -> DO NOT RECORD!
+    if (humanCount < 2 || allMuted) {
+      return;
+    }
+
     session.lastActivityTime = Date.now();
     session.hasSpoken = true;
 
-    if (!session.speakers.has(userId)) {
+    if (!session.membersPresence.has(userId)) {
       const u = await guild.members.fetch(userId).catch(() => null);
-      session.speakers.set(userId, {
+      session.membersPresence.set(userId, {
         id: userId,
         tag: u ? u.user.tag : userId,
-        name: u ? (u.displayName || u.user.username) : userId,
-        firstSpokeAt: Date.now(),
-        talkCount: 0
+        displayName: u ? (u.displayName || u.user.username) : userId,
+        joinTime: Date.now(),
+        leaveTime: null,
+        totalSpokenCount: 0
       });
     }
 
-    const speakerInfo = session.speakers.get(userId);
-    if (speakerInfo) speakerInfo.talkCount++;
+    const presence = session.membersPresence.get(userId);
+    if (presence) presence.totalSpokenCount++;
 
     const opusStream = receiver.subscribe(userId, {
       end: {
         behavior: EndBehaviorType.AfterSilence,
-        duration: 1200
+        duration: 1000
       }
     });
 
     opusStream.on('data', (chunk) => {
-      // Analyze loudness / energy in packet
+      // Audio energy / dB analysis
       if (chunk.length > 80) {
         let sum = 0;
-        for (let i = 0; i < Math.min(chunk.length, 100); i++) {
+        for (let i = 0; i < Math.min(chunk.length, 120); i++) {
           sum += Math.abs(chunk[i]);
         }
-        const avg = sum / Math.min(chunk.length, 100);
-        if (avg > 230) {
-          // Trigger ear-rape detection
-          triggerLoudSoundAlert(guild, channel, speakerInfo);
+        const avgEnergy = sum / Math.min(chunk.length, 120);
+        // If energy exceeds loud screaming threshold (> 215)
+        if (avgEnergy > 215) {
+          const violatingMember = guild.members.cache.get(userId);
+          if (violatingMember) {
+            handleLoudSoundViolation(guild, channel, violatingMember, presence);
+          }
         }
       }
     });
@@ -2735,18 +2809,17 @@ function attachRecordingListener(worker, connection, channel, guild) {
 }
 
 /**
- * Finalizes an active recording session and uploads the MP3 report to the secret archive channel.
+ * Finalizes session and sends detailed report with exact timelines of who entered, left, and timestamps.
  */
-async function finalizeAndSendRecording(channelId, reason = 'انتهاء المحادثة وخمول الفويس') {
+async function finalizeAndSendRecording(channelId, reason = 'مغادرة جميع الأعضاء وانتهاء الجلسة') {
   const session = activeRecordings.get(channelId);
   if (!session || session.isFinalizing) return;
 
   session.isFinalizing = true;
   activeRecordings.delete(channelId);
 
-  // If nobody spoke or duration is less than 3 seconds, discard quietly
   const durationSeconds = Math.floor((Date.now() - session.startTime) / 1000);
-  if (!session.hasSpoken || durationSeconds < 3 || session.speakers.size === 0) {
+  if (durationSeconds < 5 || session.membersPresence.size === 0) {
     session.isFinalizing = false;
     return;
   }
@@ -2760,39 +2833,42 @@ async function finalizeAndSendRecording(channelId, reason = 'انتهاء الم
     const seconds = durationSeconds % 60;
     const durationStr = `${minutes > 0 ? `${minutes} دقيقة و ` : ''}${seconds} ثانية`;
 
-    const speakersList = [...session.speakers.values()].map(s => `• <@${s.id}> (` + s.tag + `) - تحدث ${s.talkCount} مرات`).join('\n') || 'لا يوجد متحدثين';
+    const memberTimelines = [...session.membersPresence.values()].map((m, idx) => {
+      const joinStr = `<t:${Math.floor(m.joinTime / 1000)}:T>`;
+      const leaveStr = m.leaveTime ? `<t:${Math.floor(m.leaveTime / 1000)}:T>` : `<t:${Math.floor(Date.now() / 1000)}:T>`;
+      return `**${idx + 1}.** <@${m.id}> (` + m.tag + `)\n   • 📥 **الدخول:** ${joinStr} ➔ 📤 **الخروج:** ${leaveStr}\n   • 🗣️ **عدد مرات التحدث:** \`${m.totalSpokenCount}\` مرة`;
+    }).join('\n\n') || 'لا توجد بيانات مسجلة';
 
     const reportEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setAuthor({ name: '🎙️ توثيق جلسة صوتية مكتملة | GX VCR Archive', iconURL: guild.iconURL() })
-      .setTitle(`📁 سجل صوتي مكتمل: #${session.channelName}`)
+      .setAuthor({ name: '🎙️ تقرير الجلسة الصوتية وسجل الحضور | GX VCR Archive', iconURL: guild.iconURL() })
+      .setTitle(`📁 أرشفة الجلسة الصوتية في روم: #${session.channelName}`)
       .setDescription(
-        `تم إنهاء وتوثيق الجلسة الصوتية بنجاح وحفظ بيانات المشاركين.\n\n` +
+        `تم إنهاء الجلسة الصوتية وتوثيق جدول دخول وخروج كافة الأعضاء وتوقيتاتهم بدقة.\n\n` +
         `🔊 **الروم الصوتي:** <#${session.channelId}> (\`#${session.channelName}\`)\n` +
-        `⏱️ **مدة المحادثة الفعلية:** \`${durationStr}\`\n` +
-        `📅 **وقت البدء:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
-        `🏁 **وقت الانتهاء:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-        `📝 **سبب الحفظ:** ${reason}\n\n` +
-        `👥 **قائمة المتحدثين في الجلسة (${session.speakers.size}):**\n${speakersList}`
+        `⏱️ **إجمالي مدة الجلسة:** \`${durationStr}\`\n` +
+        `📅 **بداية الجلسة:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
+        `🏁 **نهاية الجلسة:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
+        `📝 **سبب الإنهاء والأرشفة:** ${reason}\n\n` +
+        `👥 **سجل الأعضاء والتوقيتات (${session.membersPresence.size} أعضاء):**\n${memberTimelines}`
       )
-      .setFooter({ text: `GX eSports Voice Surveillance • ${session.worker.name}` })
+      .setFooter({ text: `GX eSports Autonomous Surveillance • ${session.worker.name}` })
       .setTimestamp();
 
     await logChannel.send({ embeds: [reportEmbed] }).catch(() => {});
-    console.log(`📁 [أرشفة VCR] تم بنجاح حفظ وأرشفة تقرير الروم #${session.channelName} في القناة السرية.`);
+    console.log(`📁 [أرشفة VCR] تم بنجاح إرسال تقرير الروم #${session.channelName} مع سجل الأعضاء والتوقيتات.`);
   } catch (err) {
-    console.error('خطأ في تصدير وحفظ التسجيل:', err.message);
+    console.error('خطأ في أرشفة التقرير الصوتي:', err.message);
   } finally {
     session.isFinalizing = false;
   }
 }
 
 /**
- * Periodic Autonomous Surveillance Watchdog:
- * 1. Checks that every active voice channel with human members has exactly 1 VCR bot.
- * 2. Distributes the 5 VCR bots so no 2 VCR bots ever sit in the same room.
- * 3. Monitors mute states (pauses recording when all are muted, finalizes when idle).
- * 4. Auto-rejoins if accidentally kicked or disconnected.
+ * Ultra-Fast Autonomous Surveillance Watchdog:
+ * 1. Automatically distributes 1 VCR bot per active voice channel.
+ * 2. Prevents collision (moves excess bots away).
+ * 3. Manages smart recording and mute pauses.
  */
 async function runAutonomousVCRWatchdog(guild) {
   if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
@@ -2801,7 +2877,7 @@ async function runAutonomousVCRWatchdog(guild) {
     const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
     const voiceChannels = channels.filter(c => c && c.isVoiceBased() && !c.isThread());
 
-    // 1. Find all voice channels that currently contain human members
+    // Find all voice channels that currently contain human members
     const channelsWithHumans = [];
     for (const [, vCh] of voiceChannels) {
       const humanCount = vCh.members.filter(m => !m.user.bot).size;
@@ -2811,7 +2887,7 @@ async function runAutonomousVCRWatchdog(guild) {
       }
     }
 
-    // 2. Collision Detection: Ensure NO two VCR bots share the same room
+    // Map where VCR bots currently are
     const occupiedChannelMap = new Map(); // channelId -> worker[]
     for (const w of vcrWorkers) {
       const vcrMember = guild.members.cache.get(w.id);
@@ -2822,16 +2898,14 @@ async function runAutonomousVCRWatchdog(guild) {
       }
     }
 
+    // Collision Resolution: If 2 VCR bots are in the same channel, move the excess bot
     for (const [chId, workersInCh] of occupiedChannelMap) {
       if (workersInCh.length > 1) {
-        console.warn(`⚠️ [تعارض VCR] تم رصد ${workersInCh.length} مسجلات في نفس الروم! جارٍ إعادة توزيع المسجل الإضافي...`);
-        // Keep the first worker, move all others
+        console.warn(`⚠️ [تعارض VCR] تم رصد ${workersInCh.length} مسجلات في نفس الروم! إعادة توزيع...`);
         for (let i = 1; i < workersInCh.length; i++) {
           const excessWorker = workersInCh[i];
-          // Find a free voice channel with humans that has no VCR bot
           const freeChWithHumans = channelsWithHumans.find(chObj => !occupiedChannelMap.has(chObj.channel.id));
           if (freeChWithHumans) {
-            console.log(`🔄 [نقل VCR] نقل المسجل ${excessWorker.name} إلى #${freeChWithHumans.channel.name}...`);
             excessWorker.connection = joinVoiceChannel({
               channelId: freeChWithHumans.channel.id,
               guildId: guild.id,
@@ -2841,7 +2915,6 @@ async function runAutonomousVCRWatchdog(guild) {
             });
             attachRecordingListener(excessWorker, excessWorker.connection, freeChWithHumans.channel, guild);
           } else {
-            // No other channel with humans, disconnect the excess worker
             excessWorker.connection?.destroy();
             excessWorker.isBusy = false;
           }
@@ -2849,20 +2922,19 @@ async function runAutonomousVCRWatchdog(guild) {
       }
     }
 
-    // 3. Auto-Deployment: Deploy available VCR workers to active human voice channels
+    // Deployment: Deploy available VCR workers to active human voice channels that have no VCR bot
     for (const chObj of channelsWithHumans) {
       const ch = chObj.channel;
       const workersInThisCh = occupiedChannelMap.get(ch.id) || [];
 
       if (workersInThisCh.length === 0) {
-        // Find a free worker that is in the guild and not in any channel
         const freeWorker = vcrWorkers.find(w => {
           const m = guild.members.cache.get(w.id);
           return m && (!m.voice.channelId || !w.isBusy);
         });
 
         if (freeWorker) {
-          console.log(`🎙️ [نشر تلقائي VCR] توجيه ${freeWorker.name} لمراقبة وتسجيل #${ch.name} (${chObj.humanCount} أعضاء)...`);
+          console.log(`🎙️ [نشر تلقائي VCR] توجيه ${freeWorker.name} لمراقبة #${ch.name} (${chObj.humanCount} أعضاء)...`);
           try {
             freeWorker.isBusy = true;
             freeWorker.connection = joinVoiceChannel({
@@ -2880,7 +2952,7 @@ async function runAutonomousVCRWatchdog(guild) {
       }
     }
 
-    // 4. Inactivity & Mute Management: If bot is alone or everyone muted for > 45s, finalize and leave
+    // Session Management: If channel becomes empty or all members leave
     for (const [chId, session] of activeRecordings) {
       const ch = guild.channels.cache.get(chId);
       if (!ch) {
@@ -2888,19 +2960,18 @@ async function runAutonomousVCRWatchdog(guild) {
         continue;
       }
 
+      // Track member leave timestamps
+      for (const [uid, p] of session.membersPresence) {
+        if (!ch.members.has(uid) && !p.leaveTime) {
+          p.leaveTime = Date.now();
+        }
+      }
+
       const humanMembers = ch.members.filter(m => !m.user.bot);
       if (humanMembers.size === 0) {
-        // Bot is completely alone, finalize recording
-        await finalizeAndSendRecording(chId, 'مغادرة جميع الأعضاء وبقاء البوت وحيداً');
+        await finalizeAndSendRecording(chId, 'مغادرة جميع الأعضاء للروم الصوتي');
         session.worker.connection?.destroy();
         session.worker.isBusy = false;
-      } else {
-        const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
-        const timeSinceLastActivity = Date.now() - session.lastActivityTime;
-        if (allMuted && timeSinceLastActivity > 45000 && session.hasSpoken) {
-          // All muted and idle for 45s after speech
-          await finalizeAndSendRecording(chId, 'تصميت وكتم جميع الأعضاء وتوقف المحادثة');
-        }
       }
     }
   } catch (err) {
