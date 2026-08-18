@@ -38,8 +38,9 @@ dotenv.config();
 let BOT_VERSION = '1.0';
 let TOKEN = process.env.DISCORD_TOKEN;
 let ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID?.trim();
-let AUTO_ROLE_NAME = process.env.AUTO_ROLE_NAME?.trim() || 'MEMBER';
-let AUTO_ROLE_ID = process.env.AUTO_ROLE_ID?.trim();
+let AUTO_ROLE_NAME = 'UNTRUSTED';
+let VERIFIED_MEMBER_ROLE_NAME = 'MEMBER';
+let VERIFIED_MEMBER_ROLE_ID = process.env.AUTO_ROLE_ID?.trim() || '1538486805211389982';
 let WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID?.trim() || '1538560876339265667';
 let LEAVE_CHANNEL_ID = process.env.LEAVE_CHANNEL_ID?.trim() || '1538561457912946788';
 
@@ -1491,14 +1492,27 @@ function disconnectVoice() {
   currentVoiceOwner = null;
 }
 
-function findAutoRole(guild) {
+function findVerifiedMemberRole(guild) {
   if (!guild) return null;
-  if (AUTO_ROLE_ID) {
-    const roleById = guild.roles.cache.get(AUTO_ROLE_ID);
+  if (VERIFIED_MEMBER_ROLE_ID) {
+    const roleById = guild.roles.cache.get(VERIFIED_MEMBER_ROLE_ID);
     if (roleById) return roleById;
   }
   return guild.roles.cache.find(
-    (r) => r.name.toLowerCase() === AUTO_ROLE_NAME.toLowerCase()
+    (r) => r.name.toLowerCase() === 'member'
+  ) || null;
+}
+
+function findAutoRole(guild) {
+  return findVerifiedMemberRole(guild);
+}
+
+function findGeneralChannel(guild) {
+  if (!guild) return null;
+  return (
+    guild.channels.cache.find((c) => c.isTextBased() && (c.name.includes('عام') || c.name.includes('general') || c.name.includes('chat') || c.name.includes('الدردشة') || c.name.includes('شات') || c.name.includes('main'))) ||
+    guild.channels.cache.find((c) => c.isTextBased() && c.id !== EVENT_CHANNEL_ID && !c.name.includes('log') && !c.name.includes('status') && !c.name.includes('ticket')) ||
+    null
   );
 }
 
@@ -2417,7 +2431,8 @@ client.once(Events.ClientReady, async (c) => {
   console.log(`🤖 تم تسجيل الدخول بنجاح باسم: ${c.user.tag} (المعرف: ${c.user.id})`);
   console.log(`📦 إصدار البوت: ${BOT_VERSION}`);
   console.log(`🛡️  معرف السيرفر المعتمد: ${ALLOWED_GUILD_ID || '[غير محدد]'}`);
-  console.log(`👑 رتبة العضو التلقائية: "${AUTO_ROLE_NAME}"`);
+  console.log(`🔒 الرتبة التلقائية الافتراضية للوافدين: "UNTRUSTED" (تحتاج توثيق القيادة)`);
+  console.log(`👑 رتبة العضو الموثق (بعد الموافقة): "${VERIFIED_MEMBER_ROLE_NAME}" (${VERIFIED_MEMBER_ROLE_ID})`);
   console.log(`🎉 روم الترحيب: ${WELCOME_CHANNEL_ID}`);
   console.log(`📤 روم المغادرة: ${LEAVE_CHANNEL_ID}`);
   console.log(`📊 روم حالة النظام الحية: system-status`);
@@ -3040,14 +3055,14 @@ client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
 client.on(Events.MessageCreate, async (message) => {
   if (!message.guild || message.guild.id !== ALLOWED_GUILD_ID || message.author.bot) return;
 
-  // 1. Military Emergency Lockdown Enforcement:
+  // 1. Military Emergency Lockdown Enforcement (Exclusively OWNER / CEO / COO):
   if (isEmergencyActive()) {
-    const isImmune = isManagerMember(message.member) || isVerificationApprover(message.member, message.author);
-    if (!isImmune) {
+    const isExecutive = isVerificationApprover(message.member, message.author);
+    if (!isExecutive) {
       try {
         await message.delete().catch(() => {});
         const alertMsg = await message.channel.send({
-          content: `🚨 <@${message.author.id}> **السيرفر خاضع لحالة الطوارئ العسكرية والدفاع الشامل حالياً. تم قفل المحادثات لحماية الخادم.**`
+          content: `🚨 <@${message.author.id}> **السيرفر خاضع لحالة الطوارئ العسكرية والدفاع الشامل حالياً. جميع الصلاحيات الإدارية والعامة مجمدة والحديث مقتصر حصرياً على (OWNER / CEO / COO) فقط.**`
         }).catch(() => null);
         if (alertMsg) {
           setTimeout(() => alertMsg.delete().catch(() => {}), 4000);
@@ -4296,6 +4311,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (!interaction.isChatInputCommand()) return;
+
+    // Strict Emergency Lockdown command shield (non-executives blocked from running commands during emergency)
+    if (isEmergencyActive()) {
+      const isExecutive = isVerificationApprover(interaction.member, interaction.user);
+      if (!isExecutive && interaction.commandName !== 'طوارئ_حالة' && interaction.commandName !== 'طوارئ_إلغاء') {
+        return interaction.reply({
+          content: '🚨 **عذراً، السيرفر في وضع الطوارئ العسكرية والدفاع الشامل حالياً. جميع العمليات والأوامر مجمدة ومحصورة حصرياً برتب (OWNER / CEO / COO) فقط.**',
+          ephemeral: true
+        });
+      }
+    }
 
     const { commandName } = interaction;
 
@@ -6027,7 +6053,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const lockedChannels = [];
       const guild = interaction.guild;
-      const memberRole = findAutoRole(guild);
+      const memberRole = findVerifiedMemberRole(guild);
+      const managersRole = findManagersRole(guild);
       const everyoneRole = guild.roles.everyone;
 
       const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
@@ -6054,6 +6081,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 AddReactions: false
               }).catch(() => {});
             }
+
+            if (managersRole) {
+              await ch.permissionOverwrites.edit(managersRole, {
+                SendMessages: false,
+                SendMessagesInThreads: false,
+                CreatePublicThreads: false,
+                CreatePrivateThreads: false,
+                AddReactions: false
+              }).catch(() => {});
+            }
+
             lockedChannels.push(ch.id);
           } else if (ch.isVoiceBased()) {
             await ch.permissionOverwrites.edit(everyoneRole, {
@@ -6067,6 +6105,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 UseVAD: false
               }).catch(() => {});
             }
+
+            if (managersRole) {
+              await ch.permissionOverwrites.edit(managersRole, {
+                Speak: false,
+                UseVAD: false
+              }).catch(() => {});
+            }
+
             lockedChannels.push(ch.id);
           }
         } catch {}
@@ -6084,30 +6130,63 @@ client.on(Events.InteractionCreate, async (interaction) => {
       };
       saveEmergencyState(emergencyData);
 
-      const alertEmbed = new EmbedBuilder()
+      // Audit Log Embed
+      const alertLogEmbed = new EmbedBuilder()
         .setColor(0xED4245)
         .setAuthor({ name: '🚨 بروتوكول الدفاع العسكري والطوارئ القصوى | GX Security', iconURL: guild.iconURL() })
         .setTitle('⚠️ إغلاق شامل وحظر العمليات في السيرفر (EMERGENCY LOCKDOWN)')
         .setDescription(
           `تم تفعيل **بروتوكول الطوارئ العسكري والدفاع الشامل** لحماية السيرفر فوراً بأمر من القيادة العليا.\n\n` +
-          `🔒 **القنوات المغلقة:** تم تعطيل الكتابة في جميع الشاتات وتجميد المايكات في الرومات الصوتية.\n` +
-          `👮‍♂️ **المسؤول المفعّل:** <@${executor.id}> (\`${executor.tag}\`)\n` +
+          `🔒 **القنوات المغلقة:** تم تعطيل الكتابة في جميع الشاتات وتجميد المايكات في الرومات الصوتية (شاملاً المشرفين).\n` +
+          `👑 **القيادة المفوضة:** الحصانة والحديث محصوران حصرياً برتب **(OWNER / CEO / COO)** فقط.\n` +
+          `👮‍♂️ **المسؤول المفعّل:** <@${executor.id}> (` + executor.tag + `)\n` +
           `📝 **سبب الطوارئ:** ${reason}\n` +
-          `⏱️ **المدة:** ${durationMinutes > 0 ? `\`${durationMinutes}\` دقيقة (رفع تلقائي)` : 'غير محددة (رفع يدوي)'}\n\n` +
-          `⚡ **ملاحظة:** رتب الإدارة العليا (OWNER / CEO / COO / MANAGERS) تملك حصانة وتستطيع التنسيق بحرية.`
+          `⏱️ **المدة:** ${durationMinutes > 0 ? `\`${durationMinutes}\` دقيقة (رفع تلقائي)` : 'غير محددة (رفع يدوي)'}`
         )
         .setFooter({ text: `GX eSports Cyber Defense Protocol • الإصدار ${BOT_VERSION}` })
         .setTimestamp();
 
-      await sendToLogChannel(guild, alertEmbed);
+      await sendToLogChannel(guild, alertLogEmbed);
 
-      const generalChannel = guild.channels.cache.find((c) => c.name.includes('عام') || c.name.includes('general') || c.name.includes('chat'));
+      // Massive Public General Chat Announcement Embed
+      const generalChannel = findGeneralChannel(guild);
       if (generalChannel && generalChannel.isTextBased()) {
-        await generalChannel.send({ embeds: [alertEmbed] }).catch(() => {});
+        const publicEmergencyEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setThumbnail(guild.iconURL({ dynamic: true }))
+          .setAuthor({ name: '🚨🚨 بروتوكول الدفاع العسكري والطوارئ القصوى | GX eSports DEFENSE 🚨🚨', iconURL: guild.iconURL() })
+          .setTitle('⚠️ إغلاق وحظر شامل لكافة القنوات والعمليات بالسيرفر بأمر القيادة العليا ⚠️')
+          .setDescription(
+            `# 🚨 حالة الطوارئ القصوى مُفعّلة حالياً بالخادم 🚨\n\n` +
+            `> ### ⚠️ **تنبيه أمني عاجل لجميع أعضاء ومشرفي GX eSports:**\n` +
+            `> تم وضع السيرفر بالكامل تحت **بروتوكول الدفاع العسكري وتجميد العمليات** لحماية الخادم.\n\n` +
+            `---\n` +
+            `### 🔒 تفاصيل القيود الأمنية المفروضة:\n` +
+            `* 🔇 **تجميد كافة الشاتات:** تم قفل المحادثات ومنع إرسال الرسائل والتفاعل في جميع القنوات.\n` +
+            `* 🚫 **كتم الرومات الصوتية:** تم إيقاف التحدث و Voice Activity في جميع الفويسات.\n` +
+            `* ⛔ **تجميد الصلاحيات الإدارية للمشرفين:** تم تعطيل كافة العمليات الإدارية لجميع المشرفين مؤقتاً.\n\n` +
+            `---\n` +
+            `### 👑 القيادة والتصريح الأمني:\n` +
+            `⚡ **الحديث والتحكم محصوران حصرياً بالقيادة العليا فقط:**\n` +
+            `👉 <@&1538485406922838066> **(OWNER)** • <@&1538485672795570196> **(CEO)** • <@&1538544110913454160> **(COO)**\n\n` +
+            `---\n` +
+            `* 👮‍♂️ **المسؤول المنفّذ:** <@${executor.id}> (` + executor.tag + `)\n` +
+            `* 📝 **سبب التفعيل:** ` + reason + `\n` +
+            `* ⏱️ **المدة:** ${durationMinutes > 0 ? `\`${durationMinutes}\` دقيقة (رفع تلقائي)` : '\`حتى إشعار آخر من القيادة العليا\`'}\n\n` +
+            `🙏 **يرجى من جميع الأعضاء والمشرفين الالتزام التام بالهدوء والانتظار حتى انتهاء الإجراءات الأمنية وتأمين السيرفر بالكامل.**`
+          )
+          .setImage('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80')
+          .setFooter({ text: `GX eSports Military Security Protocol • الإصدار ${BOT_VERSION}`, iconURL: guild.iconURL() })
+          .setTimestamp();
+
+        await generalChannel.send({
+          content: '📢 @everyone **تنبيه عاجل: تم تفعيل بروتوكول الطوارئ العسكري والدفاع الشامل للسيرفر!**',
+          embeds: [publicEmergencyEmbed]
+        }).catch(() => {});
       }
 
       return interaction.editReply({
-        content: `🚨 **تم بنجاح تفعيل بروتوكول الطوارئ العسكري والدفاع الشامل!**\nتم قفل وتأمين \`${lockedChannels.length}\` قناة وروم صوتي بالكامل.`
+        content: `🚨 **تم بنجاح تفعيل بروتوكول الطوارئ العسكري والدفاع الشامل!**\nتم قفل وتأمين \`${lockedChannels.length}\` قناة وروم صوتي بالكامل، ونشر البيان العام في الشات الرئيسي.`
       });
     }
 
@@ -6132,7 +6211,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const reason = interaction.options.getString('السبب') || 'انتهاء الإجراءات الأمنية واستقرار السيرفر بالكامل.';
       const guild = interaction.guild;
-      const memberRole = findAutoRole(guild);
+      const memberRole = findVerifiedMemberRole(guild);
+      const managersRole = findManagersRole(guild);
       const everyoneRole = guild.roles.everyone;
       const executor = interaction.user;
 
@@ -6162,6 +6242,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 AddReactions: null
               }).catch(() => {});
             }
+
+            if (managersRole) {
+              await ch.permissionOverwrites.edit(managersRole, {
+                SendMessages: null,
+                SendMessagesInThreads: null,
+                CreatePublicThreads: null,
+                CreatePrivateThreads: null,
+                AddReactions: null
+              }).catch(() => {});
+            }
+
             unlockedCount++;
           } else if (ch.isVoiceBased()) {
             await ch.permissionOverwrites.edit(everyoneRole, {
@@ -6175,6 +6266,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 UseVAD: null
               }).catch(() => {});
             }
+
+            if (managersRole) {
+              await ch.permissionOverwrites.edit(managersRole, {
+                Speak: null,
+                UseVAD: null
+              }).catch(() => {});
+            }
+
             unlockedCount++;
           }
         } catch {}
@@ -6184,23 +6283,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const recoveryEmbed = new EmbedBuilder()
         .setColor(0x57F287)
+        .setThumbnail(guild.iconURL({ dynamic: true }))
         .setAuthor({ name: '🛡️ رفع حالة الطوارئ واستعادة العمليات | GX Security', iconURL: guild.iconURL() })
         .setTitle('✅ تم تأمين السيرفر وإنهاء حالة الطوارئ بنجاح')
         .setDescription(
-          `تم رسمياً **رفع بروتوكول الدفاع العسكري** واستعادة فتح جميع القنوات والرومات الصوتية للأعضاء.\n\n` +
+          `# 🟢 تم إنهاء حالة الطوارئ واستعادة كامل العمليات 🟢\n\n` +
+          `تم رسمياً **رفع بروتوكول الدفاع العسكري** واستعادة فتح جميع القنوات والرومات الصوتية والصلاحيات للأعضاء والمشرفين.\n\n` +
           `🔓 **القنوات المستعادة:** \`${unlockedCount}\` قناة وروم صوتي.\n` +
-          `👮‍♂️ **تم الرفع بواسطة:** <@${executor.id}> (\`${executor.tag}\`)\n` +
+          `👮‍♂️ **تم الرفع بواسطة:** <@${executor.id}> (` + executor.tag + `)\n` +
           `📝 **سبب الرفع:** ${reason}\n\n` +
-          `شكراً لتعاونكم وصبركم أثناء الفترة الأمنية! 🎮🔥`
+          `🎮 نتمنى لكم وقتاً ممتعاً وشكراً لصبركم والتزامكم أثناء الفترة الأمنية!`
         )
-        .setFooter({ text: `GX eSports Defense System • الإصدار ${BOT_VERSION}` })
+        .setFooter({ text: `GX eSports Defense System • الإصدار ${BOT_VERSION}`, iconURL: guild.iconURL() })
         .setTimestamp();
 
       await sendToLogChannel(guild, recoveryEmbed);
 
-      const generalChannel = guild.channels.cache.find((c) => c.name.includes('عام') || c.name.includes('general') || c.name.includes('chat'));
+      const generalChannel = findGeneralChannel(guild);
       if (generalChannel && generalChannel.isTextBased()) {
-        await generalChannel.send({ embeds: [recoveryEmbed] }).catch(() => {});
+        await generalChannel.send({
+          content: '🎉 @everyone **تم رفع حالة الطوارئ بنجاح وعودة جميع القنوات والشاتات للعمل الطبيعي!**',
+          embeds: [recoveryEmbed]
+        }).catch(() => {});
       }
 
       return interaction.editReply({
