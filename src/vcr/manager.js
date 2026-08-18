@@ -1,17 +1,31 @@
-import { ChannelType, PermissionFlagsBits, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, EmbedBuilder, AttachmentBuilder, AuditLogEvent } from 'discord.js';
 import { spawn } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
-import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, SECRET_VCR_CHANNEL_ID, MUTE_COOLDOWN_MS, MUTE_DURATION_MS } from './config.js';
+import { VCR_CONFIGS, VCR_ROLE_NAME, SECRET_VCR_CHANNEL_NAME, SECRET_VCR_CHANNEL_ID, MUTE_COOLDOWN_MS, MUTE_DURATION_MS, VCR_BOT_IDS } from './config.js';
 import { VCRWorker } from './worker.js';
 
 export class VCRManager {
-  constructor(mainClient, mainBotVersion = '1.0') {
+  constructor(mainClient, mainBotVersion = '1.0', loggerCallback = null) {
     this.mainClient = mainClient;
     this.botVersion = mainBotVersion;
+    this.loggerCallback = loggerCallback;
     this.workers = [];
     this.activeSessions = new Map(); // channelId -> session
     this.userMuteCooldowns = new Map(); // userId -> timestamp
     this.activeMuteTimers = new Map(); // userId -> NodeJS.Timeout
+    this.lastWatchdogLogTime = 0;
+  }
+
+  setLogger(loggerCallback) {
+    this.loggerCallback = loggerCallback;
+  }
+
+  async logToAdmin(guild, embed) {
+    if (this.loggerCallback && guild) {
+      try {
+        await this.loggerCallback(guild, embed);
+      } catch {}
+    }
   }
 
   async init(guild) {
@@ -126,7 +140,8 @@ export class VCRManager {
 
     for (let i = 0; i < this.workers.length; i++) {
       const worker = this.workers[i];
-      const targetChannel = voiceList[i] || voiceList[voiceList.length - 1];
+      // Target its designated defaultChannelId if found, else fallback to index
+      const targetChannel = voiceList.find(c => c.id === worker.defaultChannelId) || voiceList[i] || voiceList[voiceList.length - 1];
       if (!targetChannel) continue;
 
       const success = await worker.joinChannel(targetChannel, guild);
@@ -266,11 +281,6 @@ export class VCRManager {
     }
   }
 
-  /**
-   * 100% In-Memory OGG Opus Conversion:
-   * Uses highpass, vocal clarity equalizer, dynamic loudnorm and encodes to Discord-native OGG Opus.
-   * Zero disk I/O / 0 bytes created on hard drive.
-   */
   async convertPcmBufferToOgg(pcmBuffer) {
     return new Promise((resolve) => {
       if (!pcmBuffer || pcmBuffer.length === 0) return resolve(null);
@@ -376,7 +386,94 @@ export class VCRManager {
     }
   }
 
+  /**
+   * 🛡️ Voice State Update & Anti-Disconnect/Anti-Drag Guardian for VCR Bots
+   */
   async onVoiceStateUpdate(oldState, newState) {
+    const guild = newState.guild || oldState.guild;
+    const member = newState.member || oldState.member;
+    if (!guild || !member) return;
+
+    // A. If the updated member is one of our 5 VCR Bots
+    if (VCR_BOT_IDS.has(member.id)) {
+      const worker = this.workers.find(w => w.id === member.id);
+      if (!worker) return;
+
+      const defaultTargetCh = guild.channels.cache.get(worker.defaultChannelId) ||
+                              guild.channels.cache.find(c => c.id === worker.assignedChannelId);
+
+      // 1. Anti-Disconnect Guardian (Someone kicked/disconnected the VCR Bot)
+      if (oldState.channelId && !newState.channelId) {
+        console.warn(`🛡️ [حماية مسجلات VCR] تم رصد محاولة فصل يدوي للمسجل ${worker.name} من #${oldState.channel?.name}. جارٍ إعادة الربط فوراً...`);
+        
+        // Restore bot within 800ms
+        setTimeout(async () => {
+          if (defaultTargetCh) {
+            await worker.joinChannel(defaultTargetCh, guild, true);
+          }
+        }, 800);
+
+        // Fetch audit log executor and send security alert to #log
+        setTimeout(async () => {
+          try {
+            const auditLogs = await guild.fetchAuditLogs({ limit: 4, type: AuditLogEvent.MemberDisconnect }).catch(() => null);
+            const entry = auditLogs?.entries.find(e => e.target?.id === member.id && (Date.now() - e.createdTimestamp) < 10000);
+            const executor = entry?.executor;
+
+            const logEmbed = new EmbedBuilder()
+              .setColor(0xED4245)
+              .setAuthor({ name: '🛡️ تصدي لمحاولة فصل مسجل صوتي | VCR Guardian', iconURL: member.user.displayAvatarURL() })
+              .setTitle(`⛔ تم منع فصل المسجل الصوتي: ${worker.name}`)
+              .setDescription(
+                `تم رصد محاولة لفصل البوت المسجل <@${member.id}> من الروم الصوتي <#${oldState.channelId}>.\n\n` +
+                `🔒 **إجراء النظام:** قام نظام الحماية بإعادة البوت فوراً إلى رومه المخصص <#${worker.defaultChannelId}> واستئناف المراقبة.\n` +
+                `👮‍♂️ **المسؤول عن الفصل:** ${executor ? `<@${executor.id}> (` + executor.tag + `)` : 'غير محدد (ربما انقطاع شبكي أو أمر خادم)'}`
+              )
+              .setFooter({ text: `GX eSports Security Sentinel • الإصدار ${this.botVersion}` })
+              .setTimestamp();
+
+            await this.logToAdmin(guild, logEmbed);
+          } catch {}
+        }, 1500);
+        return;
+      }
+
+      // 2. Anti-Drag Guardian (Someone dragged/moved the VCR Bot to another room)
+      if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+        if (defaultTargetCh && newState.channelId !== defaultTargetCh.id) {
+          console.warn(`🛡️ [حماية مسجلات VCR] تم رصد سحب غير مصرح به للمسجل ${worker.name} من #${oldState.channel?.name} إلى #${newState.channel?.name}. جارٍ الإرجاع...`);
+
+          setTimeout(async () => {
+            await worker.joinChannel(defaultTargetCh, guild, true);
+          }, 800);
+
+          setTimeout(async () => {
+            try {
+              const auditLogs = await guild.fetchAuditLogs({ limit: 4, type: AuditLogEvent.MemberMove }).catch(() => null);
+              const entry = auditLogs?.entries.find(e => (Date.now() - e.createdTimestamp) < 10000);
+              const executor = entry?.executor;
+
+              const logEmbed = new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setAuthor({ name: '🛡️ تصدي لسحب مسجل صوتي | VCR Guardian', iconURL: member.user.displayAvatarURL() })
+                .setTitle(`🔄 تم إرجاع المسجل ${worker.name} إلى رومه الرسمي`)
+                .setDescription(
+                  `تم رصد سحب البوت المسجل <@${member.id}> إلى <#${newState.channelId}>.\n\n` +
+                  `🔒 **إجراء النظام:** تم إعادة البوت تلقائياً إلى رومه المعتمد <#${defaultTargetCh.id}>.\n` +
+                  `👮‍♂️ **المنفذ:** ${executor ? `<@${executor.id}> (` + executor.tag + `)` : 'غير محدد'}`
+                )
+                .setFooter({ text: `GX eSports Security Sentinel • الإصدار ${this.botVersion}` })
+                .setTimestamp();
+
+              await this.logToAdmin(guild, logEmbed);
+            } catch {}
+          }, 1500);
+          return;
+        }
+      }
+    }
+
+    // B. Human Member Voice Session Tracking
     const oldCh = oldState.channel;
     const newCh = newState.channel;
 
@@ -406,7 +503,10 @@ export class VCRManager {
     }
   }
 
-    async runWatchdog(guild) {
+  /**
+   * 🔄 High-Frequency Watchdog (Stationing, Duplicates Guard, Health Check)
+   */
+  async runWatchdog(guild) {
     if (!guild) return;
 
     try {
@@ -420,7 +520,6 @@ export class VCRManager {
 
       // 1. Inspect for duplicate bots in the same channel (Prevent 2 VCR bots in one room)
       const channelToWorkers = new Map(); // channelId -> Array of worker
-      const assignedWorkerIds = new Set();
 
       for (let i = 0; i < this.workers.length; i++) {
         const worker = this.workers[i];
@@ -437,14 +536,23 @@ export class VCRManager {
       for (const [chId, workersInCh] of channelToWorkers) {
         if (workersInCh.length > 1) {
           console.warn(`⚠️ [رصد تكرار] تم رصد ${workersInCh.length} مسجلات في نفس الروم الصوتي (${chId}). جارٍ إعادة التوزيع فوراً...`);
-          // Find empty voice channels that have 0 VCR bots
           for (let j = 1; j < workersInCh.length; j++) {
             const extraWorker = workersInCh[j];
-            const emptyCh = voiceList.find(c => !channelToWorkers.has(c.id) || channelToWorkers.get(c.id).length === 0);
+            const emptyCh = voiceList.find(c => !channelToWorkers.has(c.id) || channelToWorkers.get(c.id).length === 0) ||
+                            guild.channels.cache.get(extraWorker.defaultChannelId);
             if (emptyCh) {
-              console.log(`🔄 [نقل مسجل] نقل ${extraWorker.name} إلى الروم الفارغ: #${emptyCh.name} (${emptyCh.id})`);
-              await extraWorker.joinChannel(emptyCh, guild);
+              console.log(`🔄 [نقل مسجل] نقل ${extraWorker.name} إلى الروم المعتمد: #${emptyCh.name} (${emptyCh.id})`);
+              await extraWorker.joinChannel(emptyCh, guild, true);
               channelToWorkers.set(emptyCh.id, [extraWorker]);
+
+              const fixEmbed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setAuthor({ name: '🔄 موازنة وتوزيع مسجلات الصوت | VCR Sentinel', iconURL: guild.iconURL() })
+                .setTitle('✅ تم فك التكرار وتوزيع المسجلات بدقة')
+                .setDescription(`تم رصد مسجلين في <#${chId}> وتم نقل البوت **${extraWorker.name}** فوراً إلى رومه المعتمد <#${emptyCh.id}>.`)
+                .setFooter({ text: `GX eSports System • الإصدار ${this.botVersion}` })
+                .setTimestamp();
+              await this.logToAdmin(guild, fixEmbed);
             }
           }
         }
@@ -453,16 +561,18 @@ export class VCRManager {
       // 2. Ensure every voice channel has its dedicated VCR bot stationed
       for (let i = 0; i < this.workers.length; i++) {
         const worker = this.workers[i];
-        const targetChannel = voiceList[i] || voiceList[voiceList.length - 1];
+        const targetChannel = guild.channels.cache.get(worker.defaultChannelId) ||
+                              voiceList.find(c => c.id === worker.defaultChannelId) ||
+                              voiceList[i];
         if (!targetChannel) continue;
 
         const vGuild = worker.client.guilds.cache.get(guild.id);
         if (!vGuild) continue;
 
         const currentVoiceId = vGuild.members.me?.voice?.channelId;
-        if (!currentVoiceId || !worker.connection) {
+        if (!currentVoiceId || !worker.connection || currentVoiceId !== targetChannel.id) {
           try {
-            await worker.joinChannel(targetChannel, guild);
+            await worker.joinChannel(targetChannel, guild, true);
           } catch {}
         }
       }
