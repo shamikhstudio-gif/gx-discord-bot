@@ -1401,8 +1401,8 @@ function playLoopAudio(connection) {
     }
 
     const candidateAudioPaths = [
-      path.resolve(__dirname, 'fainted_over_slowed.mp3'),
-      path.resolve('assets', 'audio', 'fainted_over_slowed.mp3'),
+      path.resolve(__dirname, 'default_track.mp3'),
+      path.resolve('assets', 'audio', 'default_track.mp3'),
       path.resolve('assets', 'audio', 'loop_track.mp3')
     ];
     const audioPath = candidateAudioPaths.find((p) => fs.existsSync(p));
@@ -1413,9 +1413,9 @@ function playLoopAudio(connection) {
       }
       currentVoicePlayer.play(currentAudioResource);
       connection.subscribe(currentVoicePlayer);
-      console.log(`🎶 [البث الصوتي] تشغيل مقطع الصوت الافتراضي "Fainted Over Slowed" بمستوى صوت منخفض (${Math.round(currentVolumeLevel * 100)}%) بنظام التكرار المستمر.`);
+      console.log(`🎶 [البث الصوتي] تشغيل مقطع الصوت الافتراضي بمستوى صوت منخفض (${Math.round(currentVolumeLevel * 100)}%) بنظام التكرار المستمر (Loop).`);
     } else {
-      console.warn('⚠️ [تنبيه] لم يتم العثور على ملف الصوت في المسارات المحددة.');
+      console.warn('⚠️ [تنبيه] لم يتم العثور على ملف الصوت الافتراضي.');
     }
   } catch (err) {
     console.error('❌ خطأ في تشغيل البث الصوتي:', err.message);
