@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
 import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, entersState } from '@discordjs/voice';
 import prism from 'prism-media';
-import { LOUD_SOUND_THRESHOLD, VCR_BOT_IDS } from './config.js';
+import { LOUD_SOUND_THRESHOLD, PEAK_SOUND_THRESHOLD, VCR_BOT_IDS } from './config.js';
 
 export class VCRWorker {
   constructor(config, manager) {
