@@ -18,9 +18,9 @@ export const SECRET_VCR_CHANNEL_NAME = '📁・سجلات-التسجيلات-ا�
 export const SECRET_VCR_CHANNEL_ID = '1539266769695547454';
 export const ALLOWED_GUILD_ID = '1537461174222725120';
 
-// PCM RMS Energy Threshold for Loud Noise / Ear-Rape / Screaming (> 16000 RMS on 16-bit PCM)
-export const LOUD_SOUND_THRESHOLD = 16000;
-export const MUTE_DURATION_MS = 30000; // 30 seconds fixed server mute
+// Raised threshold: Only extreme screaming / loud screeching / ear-rape (> 25000 RMS on 16-bit PCM max 32767)
+export const LOUD_SOUND_THRESHOLD = 25000;
+export const MUTE_DURATION_MS = 30000; // Exactly 30 seconds fixed server mute
 export const MUTE_COOLDOWN_MS = 35000;
 
 export const VCR_RECORDS_DIR = path.resolve(__dirname, '../../data/vcr_recordings');
