@@ -34,7 +34,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import http from 'http';
-import { VCRManager } from './vcr/index.js';
+import { VCRManager, VCR_BOT_IDS, VCR_ROLE_NAME } from './vcr/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
