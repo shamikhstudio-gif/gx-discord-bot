@@ -2551,7 +2551,6 @@ async function findOrCreateVCRLogChannel(guild) {
         overwrites.push({ id: managersRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
       }
 
-      // Add executive roles
       for (const roleId of ['1538485406922838066', '1538485672795570196', '1538544110913454160']) {
         const r = guild.roles.cache.get(roleId);
         if (r) {
@@ -2611,11 +2610,13 @@ async function autoAssignVCRRoles(guild) {
 
   for (const vcr of VCR_CONFIGS) {
     const member = await guild.members.fetch(vcr.id).catch(() => null);
-    if (member && !member.roles.cache.has(vcrRole.id)) {
-      try {
-        await member.roles.add(vcrRole);
-        console.log(`🎙️ [رتبة VCR] تم منح رتبة "${VCR_ROLE_NAME}" للبوت ${vcr.name} تلقائياً.`);
-      } catch {}
+    if (member) {
+      if (!member.roles.cache.has(vcrRole.id)) {
+        try {
+          await member.roles.add(vcrRole);
+          console.log(`🎙️ [رتبة VCR] تم منح رتبة "${VCR_ROLE_NAME}" للبوت ${vcr.name} تلقائياً.`);
+        } catch {}
+      }
     }
   }
 }
@@ -2718,7 +2719,9 @@ async function handleLoudSoundViolation(guild, channel, member, speakerInfo) {
  * Attaches audio receiver and tracks member entry/leave timelines and dB levels.
  */
 function attachRecordingListener(worker, connection, channel, guild) {
+  if (!connection || !connection.receiver) return;
   const receiver = connection.receiver;
+
   let session = activeRecordings.get(channel.id);
   if (!session) {
     session = {
@@ -2736,7 +2739,7 @@ function attachRecordingListener(worker, connection, channel, guild) {
     activeRecordings.set(channel.id, session);
   }
 
-  // Initial population of present members
+  // Populate present members
   for (const [, mem] of channel.members) {
     if (!mem.user.bot && !session.membersPresence.has(mem.id)) {
       session.membersPresence.set(mem.id, {
@@ -2758,7 +2761,7 @@ function attachRecordingListener(worker, connection, channel, guild) {
     const humanCount = humanMembers.size;
     const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
 
-    // Rule: If only 1 member or all are muted -> DO NOT RECORD!
+    // Rule: If only 1 member or all are muted -> DO NOT RECORD! Stay Idle.
     if (humanCount < 2 || allMuted) {
       return;
     }
@@ -2810,6 +2813,7 @@ function attachRecordingListener(worker, connection, channel, guild) {
 
 /**
  * Finalizes session and sends detailed report with exact timelines of who entered, left, and timestamps.
+ * The bot remains stationed in the room on standby.
  */
 async function finalizeAndSendRecording(channelId, reason = 'مغادرة جميع الأعضاء وانتهاء الجلسة') {
   const session = activeRecordings.get(channelId);
@@ -2819,7 +2823,7 @@ async function finalizeAndSendRecording(channelId, reason = 'مغادرة جمي
   activeRecordings.delete(channelId);
 
   const durationSeconds = Math.floor((Date.now() - session.startTime) / 1000);
-  if (durationSeconds < 5 || session.membersPresence.size === 0) {
+  if (durationSeconds < 5 || session.membersPresence.size === 0 || !session.hasSpoken) {
     session.isFinalizing = false;
     return;
   }
@@ -2865,113 +2869,85 @@ async function finalizeAndSendRecording(channelId, reason = 'مغادرة جمي
 }
 
 /**
- * Ultra-Fast Autonomous Surveillance Watchdog:
- * 1. Automatically distributes 1 VCR bot per active voice channel.
- * 2. Prevents collision (moves excess bots away).
- * 3. Manages smart recording and mute pauses.
+ * 24/7 Stationary Voice Sentinel Watchdog (Runs constantly):
+ * 1. Ensures every voice channel has 1 dedicated GX VCR bot stationed in standby.
+ * 2. If disconnected, automatically reconnects.
+ * 3. Keeps bot idle until >= 2 members join, un-mute, and speak.
  */
 async function runAutonomousVCRWatchdog(guild) {
   if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
 
   try {
     const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
-    const voiceChannels = channels.filter(c => c && c.isVoiceBased() && !c.isThread());
+    const voiceChannels = channels
+      .filter(c => c && c.isVoiceBased() && !c.isThread())
+      .sort((a, b) => a.position - b.position);
 
-    // Find all voice channels that currently contain human members
-    const channelsWithHumans = [];
-    for (const [, vCh] of voiceChannels) {
-      const humanCount = vCh.members.filter(m => !m.user.bot).size;
-      const allMuted = vCh.members.filter(m => !m.user.bot).every(m => m.voice.selfMute || m.voice.serverMute);
-      if (humanCount > 0) {
-        channelsWithHumans.push({ channel: vCh, humanCount, allMuted });
+    const voiceList = [...voiceChannels.values()];
+
+    // 1. Station each VCR Worker in its assigned Voice Channel 24/7
+    for (let i = 0; i < vcrWorkers.length; i++) {
+      const worker = vcrWorkers[i];
+      const targetChannel = voiceList[i] || voiceList[voiceList.length - 1];
+      if (!targetChannel) continue;
+
+      const vClient = worker.client;
+      const vGuild = vClient.guilds.cache.get(guild.id);
+      if (!vGuild) continue;
+
+      const vMember = vGuild.members.me;
+      const currentVoiceId = vMember?.voice?.channelId;
+
+      // Reconnect / Join if not in target channel
+      if (!currentVoiceId || currentVoiceId !== targetChannel.id || !worker.connection) {
+        try {
+          console.log(`🎙️ [تثبيت VCR دائم] انضمام ${worker.name} للروم الصوتي: #${targetChannel.name} كـ خامل في وضع الاستعداد...`);
+          worker.connection = joinVoiceChannel({
+            channelId: targetChannel.id,
+            guildId: guild.id,
+            adapterCreator: vGuild.voiceAdapterCreator,
+            selfDeaf: false,
+            selfMute: true
+          });
+          worker.assignedChannelId = targetChannel.id;
+          attachRecordingListener(worker, worker.connection, targetChannel, guild);
+        } catch (err) {
+          // Connection retry guard
+        }
       }
     }
 
-    // Map where VCR bots currently are
-    const occupiedChannelMap = new Map(); // channelId -> worker[]
-    for (const w of vcrWorkers) {
-      const vcrMember = guild.members.cache.get(w.id);
-      const chId = vcrMember?.voice?.channelId;
-      if (chId) {
-        if (!occupiedChannelMap.has(chId)) occupiedChannelMap.set(chId, []);
-        occupiedChannelMap.get(chId).push(w);
-      }
-    }
+    // 2. Track Member Timelines & Session Lifecycle
+    for (const vCh of voiceList) {
+      const humanMembers = vCh.members.filter(m => !m.user.bot);
+      const session = activeRecordings.get(vCh.id);
 
-    // Collision Resolution: If 2 VCR bots are in the same channel, move the excess bot
-    for (const [chId, workersInCh] of occupiedChannelMap) {
-      if (workersInCh.length > 1) {
-        console.warn(`⚠️ [تعارض VCR] تم رصد ${workersInCh.length} مسجلات في نفس الروم! إعادة توزيع...`);
-        for (let i = 1; i < workersInCh.length; i++) {
-          const excessWorker = workersInCh[i];
-          const freeChWithHumans = channelsWithHumans.find(chObj => !occupiedChannelMap.has(chObj.channel.id));
-          if (freeChWithHumans) {
-            excessWorker.connection = joinVoiceChannel({
-              channelId: freeChWithHumans.channel.id,
-              guildId: guild.id,
-              adapterCreator: excessWorker.client.guilds.cache.get(guild.id).voiceAdapterCreator,
-              selfDeaf: false,
-              selfMute: true
+      if (session) {
+        // Track joins
+        for (const [, mem] of humanMembers) {
+          if (!session.membersPresence.has(mem.id)) {
+            session.membersPresence.set(mem.id, {
+              id: mem.id,
+              tag: mem.user.tag,
+              displayName: mem.displayName || mem.user.username,
+              joinTime: Date.now(),
+              leaveTime: null,
+              totalSpokenCount: 0
             });
-            attachRecordingListener(excessWorker, excessWorker.connection, freeChWithHumans.channel, guild);
-          } else {
-            excessWorker.connection?.destroy();
-            excessWorker.isBusy = false;
           }
         }
-      }
-    }
 
-    // Deployment: Deploy available VCR workers to active human voice channels that have no VCR bot
-    for (const chObj of channelsWithHumans) {
-      const ch = chObj.channel;
-      const workersInThisCh = occupiedChannelMap.get(ch.id) || [];
-
-      if (workersInThisCh.length === 0) {
-        const freeWorker = vcrWorkers.find(w => {
-          const m = guild.members.cache.get(w.id);
-          return m && (!m.voice.channelId || !w.isBusy);
-        });
-
-        if (freeWorker) {
-          console.log(`🎙️ [نشر تلقائي VCR] توجيه ${freeWorker.name} لمراقبة #${ch.name} (${chObj.humanCount} أعضاء)...`);
-          try {
-            freeWorker.isBusy = true;
-            freeWorker.connection = joinVoiceChannel({
-              channelId: ch.id,
-              guildId: guild.id,
-              adapterCreator: freeWorker.client.guilds.cache.get(guild.id).voiceAdapterCreator,
-              selfDeaf: false,
-              selfMute: true
-            });
-            attachRecordingListener(freeWorker, freeWorker.connection, ch, guild);
-          } catch (err) {
-            console.error(`خطأ في انضمام ${freeWorker.name}:`, err.message);
+        // Track leaves
+        for (const [uid, p] of session.membersPresence) {
+          if (!humanMembers.has(uid) && !p.leaveTime) {
+            p.leaveTime = Date.now();
           }
         }
-      }
-    }
 
-    // Session Management: If channel becomes empty or all members leave
-    for (const [chId, session] of activeRecordings) {
-      const ch = guild.channels.cache.get(chId);
-      if (!ch) {
-        await finalizeAndSendRecording(chId, 'تم حذف أو إغلاق الروم');
-        continue;
-      }
-
-      // Track member leave timestamps
-      for (const [uid, p] of session.membersPresence) {
-        if (!ch.members.has(uid) && !p.leaveTime) {
-          p.leaveTime = Date.now();
+        // If everyone left after speech occurred -> finalize session report, but KEEP BOT IN ROOM
+        if (humanMembers.size === 0 && session.hasSpoken) {
+          await finalizeAndSendRecording(vCh.id, 'مغادرة جميع الأعضاء للروم الصوتي');
         }
-      }
-
-      const humanMembers = ch.members.filter(m => !m.user.bot);
-      if (humanMembers.size === 0) {
-        await finalizeAndSendRecording(chId, 'مغادرة جميع الأعضاء للروم الصوتي');
-        session.worker.connection?.destroy();
-        session.worker.isBusy = false;
       }
     }
   } catch (err) {
@@ -2992,7 +2968,7 @@ async function initVCRWorkers() {
 
       vClient.once(Events.ClientReady, (c) => {
         console.log(`🎙️ [مسجل متصل] تم تسجيل الدخول بنجاح للمسجل: ${c.user.tag} (ID: ${c.user.id})`);
-        c.user.setActivity('🎙️ GX VCR Autonomous Sentinel', { type: ActivityType.Custom });
+        c.user.setActivity('🎙️ GX VCR Standby Guard', { type: ActivityType.Custom });
       });
 
       vClient.on(Events.Error, (err) => {
@@ -3008,7 +2984,7 @@ async function initVCRWorkers() {
         name: cfg.name,
         client: vClient,
         isBusy: false,
-        activeChannelId: null,
+        assignedChannelId: null,
         connection: null
       });
     } catch (err) {
