@@ -2741,6 +2741,27 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   const botMember = newState.guild.members.me;
   const botVoiceChannelId = botMember?.voice?.channelId;
 
+  // 🛡️ GX ECOSYSTEM IMMUNITY: All GX Bots (Main Bot & GX VCRs) Cannot be Server Muted or Server Deafened
+  if (member.id === client.user.id || VCR_BOT_IDS.has(member.id)) {
+    if (newState.serverMute) {
+      try {
+        await newState.setMute(false, 'حصانة أمنية: منظومة GX محصنة ضد الكتم الإجباري');
+        console.warn(`🛡️ [حماية الفويس] تم إلغاء كتم ${member.user.tag} فوراً.`);
+      } catch (err) {
+        console.error('خطأ في إلغاء كتم البوت:', err.message);
+      }
+    }
+
+    if (newState.serverDeaf) {
+      try {
+        await newState.setDeaf(false, 'حصانة أمنية: منظومة GX محصنة ضد التصميت الإجباري');
+        console.warn(`🛡️ [حماية الفويس] تم إلغاء تصميت ${member.user.tag} فوراً.`);
+      } catch (err) {
+        console.error('خطأ في إلغاء تصميت البوت:', err.message);
+      }
+    }
+  }
+
   // 1. Anti-Drag & Anti-Disconnect Protection for Bot
   if (member.id === client.user.id) {
     // A. Anti-Drag (Moved manually to another room without authorization)
