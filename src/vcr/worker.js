@@ -1,7 +1,13 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
 import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, entersState } from '@discordjs/voice';
 import prism from 'prism-media';
-import { LOUD_SOUND_THRESHOLD, PEAK_SOUND_THRESHOLD, VCR_BOT_IDS } from './config.js';
+import {
+  SUSTAINED_SCREAM_RMS_THRESHOLD,
+  SUSTAINED_SCREAM_FRAMES_REQUIRED,
+  INSTANT_EAR_RAPE_RMS_THRESHOLD,
+  INSTANT_EAR_RAPE_PEAK_THRESHOLD,
+  VCR_BOT_IDS
+} from './config.js';
 
 export class VCRWorker {
   constructor(config, manager) {
@@ -18,6 +24,7 @@ export class VCRWorker {
     this.isInternalSwitching = false;
     this.lastJoinAttempt = 0;
     this.activeUserSubscriptions = new Map(); // userId -> { opusStream, opusDecoder }
+    this.userLoudFrameCounters = new Map(); // userId -> consecutive frame count
   }
 
   async init() {
@@ -69,12 +76,12 @@ export class VCRWorker {
       } catch {}
     }
     this.activeUserSubscriptions.clear();
+    this.userLoudFrameCounters.clear();
   }
 
   async joinChannel(channel, guild, isAutoRestored = false) {
     if (!channel || !guild || !this.client) return false;
 
-    // Throttle reconnection attempts to prevent infinite loop storms
     const now = Date.now();
     if (now - this.lastJoinAttempt < 3000) {
       return false;
@@ -96,7 +103,6 @@ export class VCRWorker {
                                currentVoiceId === channel.id;
 
     if (isAlreadyConnected) {
-      // Already fully connected and stable in target channel! Do nothing!
       return true;
     }
 
@@ -110,7 +116,7 @@ export class VCRWorker {
         adapterCreator: vGuild.voiceAdapterCreator,
         selfDeaf: false,
         selfMute: false,
-        group: this.id // Multi-bot isolated voice group
+        group: this.id
       });
 
       this.connection.on(VoiceConnectionStatus.Ready, () => {
@@ -209,6 +215,7 @@ export class VCRWorker {
           pcmStream.on('data', (pcmChunk) => {
             if (!pcmChunk || pcmChunk.length === 0) return;
 
+            // 1. Multi-Track Audio Session Storage (Always Records 100% in all categories!)
             if (session.userAudioTracks && !session.isFinalizing) {
               if (!session.userAudioTracks.has(userId)) {
                 session.userAudioTracks.set(userId, {
@@ -223,30 +230,57 @@ export class VCRWorker {
               session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
             }
 
+            // 2. Tournament & Matches Exemption Check
+            if (this.manager.isTournamentOrMatchChannel(channel)) {
+              return;
+            }
+
+            // 3. Exact 16-bit PCM RMS & Peak Audio Analysis
             let sumSquares = 0;
+            let peakSample = 0;
             const sampleCount = pcmChunk.length / 2;
             for (let i = 0; i < pcmChunk.length; i += 2) {
-              const sample = pcmChunk.readInt16LE(i);
+              const sample = Math.abs(pcmChunk.readInt16LE(i));
               sumSquares += sample * sample;
+              if (sample > peakSample) peakSample = sample;
             }
             const rms = Math.sqrt(sumSquares / sampleCount);
 
-            if (rms > LOUD_SOUND_THRESHOLD) {
+            // Sustained Scream Detection Counter (Requires 3 consecutive frames of RMS >= 11000)
+            let loudCount = this.userLoudFrameCounters.get(userId) || 0;
+            if (rms >= SUSTAINED_SCREAM_RMS_THRESHOLD) {
+              loudCount++;
+            } else {
+              loudCount = 0;
+            }
+            this.userLoudFrameCounters.set(userId, loudCount);
+
+            const isSustainedScream = loudCount >= SUSTAINED_SCREAM_FRAMES_REQUIRED;
+            const isInstantEarRape = rms >= INSTANT_EAR_RAPE_RMS_THRESHOLD || peakSample >= INSTANT_EAR_RAPE_PEAK_THRESHOLD;
+
+            if (isSustainedScream || isInstantEarRape) {
+              this.userLoudFrameCounters.set(userId, 0); // Reset counter
+
               const violatingMember = guild.members.cache.get(userId);
               if (violatingMember) {
+                // Immunity Check: OWNER, CEO, COO are 100% immune! MANAGERS and other staff CAN be affected!
                 if (this.manager.isVCRImmuneExecutive(violatingMember)) {
                   return;
                 }
-                this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, Math.round(rms));
+                const energyReport = Math.round(Math.max(rms, peakSample / 2));
+                const detectionType = isInstantEarRape ? 'تفجير صوتي مفاجئ (Ear-Rape / Distortion)' : 'صراخ حاد ومستمر (Sustained Scream)';
+                this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, energyReport, detectionType);
               }
             }
           });
 
           opusStream.on('error', () => {
             this.activeUserSubscriptions.delete(userId);
+            this.userLoudFrameCounters.delete(userId);
           });
           opusDecoder.on('error', () => {
             this.activeUserSubscriptions.delete(userId);
+            this.userLoudFrameCounters.delete(userId);
           });
         } catch (err) {
           console.warn(`⚠️ Error subscribing to voice of ${userId}:`, err.message);
