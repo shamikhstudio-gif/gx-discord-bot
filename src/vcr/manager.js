@@ -41,6 +41,26 @@ export class VCRManager {
     }
   }
 
+  
+  /**
+   * 🏆 Checks if a voice channel is located in the TOURNAMENTS & MATCHES category.
+   * Screams are NOT punished in tournament/match channels (cheering & competitive shouting allowed),
+   * but voice recording continues normally!
+   */
+  isTournamentOrMatchChannel(channel) {
+    if (!channel) return false;
+    if (channel.parentId === '1538979258863587328') return true;
+    const parentName = (channel.parent?.name || '').toLowerCase();
+    if (parentName.includes('tournament') || parentName.includes('match') || parentName.includes('بطول') || parentName.includes('مبار')) {
+      return true;
+    }
+    const channelName = (channel.name || '').toLowerCase();
+    if (channelName.includes('tournament') || channelName.includes('match') || channelName.includes('بطول') || channelName.includes('مبار')) {
+      return true;
+    }
+    return false;
+  }
+
   isVCRImmuneExecutive(member, user) {
     const u = user || member?.user || { id: member?.id };
     if (!u || !u.id) return false;
@@ -226,6 +246,10 @@ export class VCRManager {
 
   async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue) {
     if (!member || !member.voice?.channel) return;
+    if (this.isTournamentOrMatchChannel(channel)) {
+      // Bypassed in TOURNAMENTS & MATCHES category!
+      return;
+    }
     
     // Strict COO, CEO, OWNER Immunity
     if (this.isVCRImmuneExecutive(member)) {
