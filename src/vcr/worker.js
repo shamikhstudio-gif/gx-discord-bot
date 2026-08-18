@@ -53,7 +53,8 @@ export class VCRWorker {
     this.player = null;
     this.assignedChannelId = config.defaultChannelId;
     this.isReady = false;
-    this.isReconnecting = false;
+    this.isInternalSwitching = false;
+    this.lastJoinAttempt = 0;
     this.activeUserSubscriptions = new Map(); // userId -> { opusStream, opusDecoder }
   }
 
@@ -124,7 +125,14 @@ export class VCRWorker {
   }
 
   async joinChannel(channel, guild, isAutoRestored = false) {
-    if (!channel || !guild) return false;
+    if (!channel || !guild || !this.client) return false;
+
+    // Throttle reconnection attempts to prevent infinite loop storms
+    const now = Date.now();
+    if (now - this.lastJoinAttempt < 3000) {
+      return false;
+    }
+    this.lastJoinAttempt = now;
 
     let vGuild = this.client.guilds.cache.get(guild.id);
     if (!vGuild) {
@@ -135,18 +143,19 @@ export class VCRWorker {
       return false;
     }
 
-    try {
-      this.cleanupSubscriptions();
+    const currentVoiceId = vGuild.members.me?.voice?.channelId;
+    const isAlreadyConnected = this.connection && 
+                               this.connection.state.status === VoiceConnectionStatus.Ready &&
+                               currentVoiceId === channel.id;
 
-      // Cleanly destroy any existing voice connection before joining
-      if (this.connection) {
-        try {
-          if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
-            this.connection.destroy();
-          }
-        } catch {}
-        this.connection = null;
-      }
+    if (isAlreadyConnected) {
+      // Already fully connected and stable in target channel! Do nothing!
+      return true;
+    }
+
+    try {
+      this.isInternalSwitching = true;
+      this.cleanupSubscriptions();
 
       this.connection = joinVoiceChannel({
         channelId: channel.id,
@@ -157,31 +166,28 @@ export class VCRWorker {
         group: this.id // Multi-bot isolated voice group
       });
 
-      this.player = this.createKeepAlivePlayer();
+      if (!this.player) {
+        this.player = this.createKeepAlivePlayer();
+      }
       this.connection.subscribe(this.player);
 
+      this.connection.on(VoiceConnectionStatus.Ready, () => {
+        this.isInternalSwitching = false;
+      });
+
       this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        if (this.isInternalSwitching) return;
         try {
           await Promise.race([
-            entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
-            entersState(this.connection, VoiceConnectionStatus.Connecting, 5000)
+            entersState(this.connection, VoiceConnectionStatus.Signalling, 4000),
+            entersState(this.connection, VoiceConnectionStatus.Connecting, 4000)
           ]);
         } catch {
-          console.warn(`⚡ [إعادة اتصال فوري] انقطع اتصال ${this.name} من #${channel.name}. جارٍ إعادة الربط النظيف...`);
-          try {
-            if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
-              this.connection.destroy();
-            }
-          } catch {}
-          this.connection = null;
-
-          if (!this.isReconnecting) {
-            this.isReconnecting = true;
-            setTimeout(async () => {
-              this.isReconnecting = false;
-              await this.joinChannel(channel, guild, true).catch(() => {});
-            }, 800);
-          }
+          if (this.isInternalSwitching) return;
+          console.warn(`⚡ [إعادة اتصال VCR] انقطع اتصال ${this.name} من #${channel.name}. إعادة الربط خلال ثانيتين...`);
+          setTimeout(async () => {
+            await this.joinChannel(channel, guild, true).catch(() => {});
+          }, 2000);
         }
       });
 
@@ -202,8 +208,13 @@ export class VCRWorker {
         console.log(`🎙️ [تثبيت VCR دائم] انضمام ${this.name} للروم: #${channel.name} (${channel.id})...`);
       }
 
+      setTimeout(() => {
+        this.isInternalSwitching = false;
+      }, 2000);
+
       return true;
     } catch (err) {
+      this.isInternalSwitching = false;
       console.error(`❌ خطأ في تثبيت ${this.name}:`, err.message);
       return false;
     }
@@ -221,7 +232,6 @@ export class VCRWorker {
       const humanCount = humanMembers.size;
       const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
 
-      // Rule: Do NOT record if only 1 member or if all members are muted
       if (humanCount < 2 || allMuted) {
         return;
       }
@@ -232,16 +242,14 @@ export class VCRWorker {
       const presence = this.manager.trackMemberPresence(session, userId, guild);
       if (presence) presence.totalSpokenCount++;
 
-      // Persistent subscription: Only create if not already active to prevent audio chopping
       if (!this.activeUserSubscriptions.has(userId)) {
         try {
           const opusStream = receiver.subscribe(userId, {
             end: {
-              behavior: EndBehaviorType.Manual // Continuous persistent stream without 1s silence tears
+              behavior: EndBehaviorType.Manual
             }
           });
 
-          // Pure uncorrupted 48kHz Stereo 16-bit PCM decoder
           const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
           const pcmStream = opusStream.pipe(opusDecoder);
 
@@ -250,7 +258,6 @@ export class VCRWorker {
           pcmStream.on('data', (pcmChunk) => {
             if (!pcmChunk || pcmChunk.length === 0) return;
 
-            // 1. Store in multi-track audio session with timeline synchronization
             if (session.userAudioTracks && !session.isFinalizing) {
               if (!session.userAudioTracks.has(userId)) {
                 session.userAudioTracks.set(userId, {
@@ -265,7 +272,6 @@ export class VCRWorker {
               session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
             }
 
-            // 2. Exact 16-bit PCM RMS Loudness / Scream Detection
             let sumSquares = 0;
             const sampleCount = pcmChunk.length / 2;
             for (let i = 0; i < pcmChunk.length; i += 2) {
@@ -274,13 +280,10 @@ export class VCRWorker {
             }
             const rms = Math.sqrt(sumSquares / sampleCount);
 
-            // Scream / Ear-Rape Trigger (> 25,000 RMS)
             if (rms > LOUD_SOUND_THRESHOLD) {
               const violatingMember = guild.members.cache.get(userId);
               if (violatingMember) {
-                // Strict check: Is member COO, CEO, or OWNER?
                 if (this.manager.isVCRImmuneExecutive(violatingMember)) {
-                  // Completely immune!
                   return;
                 }
                 this.manager.handleLoudSoundViolation(guild, channel, violatingMember, presence, Math.round(rms));
