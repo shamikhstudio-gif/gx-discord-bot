@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="GX eSports — Live Bot Operations Center. Real-time telemetry, VCR fleet status, acoustic defense analytics.">
+  <meta name="description" content="GX eSports — Live Bot Operations Center. Real-time telemetry, VCR fleet status, acoustic defense analytics, and live activity stream.">
   <title>GX eSports · Operations Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,8 +26,9 @@
         <li><a href="#overview" class="nav-link active" data-section="overview">Overview</a></li>
         <li><a href="#servers"  class="nav-link" data-section="servers">Servers</a></li>
         <li><a href="#vcr"     class="nav-link" data-section="vcr">VCR Fleet</a></li>
-        <li><a href="#security" class="nav-link" data-section="security">Security</a></li>
+        <li><a href="#activity" class="nav-link" data-section="activity">Activity &amp; Logs</a></li>
         <li><a href="#analytics" class="nav-link" data-section="analytics">Analytics</a></li>
+        <li><a href="#security" class="nav-link" data-section="security">Security</a></li>
       </ul>
       <div class="nav-right">
         <div class="overall-pill" id="overallPill">
@@ -54,12 +55,12 @@
       <div class="hero-top">
         <div class="hero-label">
           <span class="label-dot pulse-green"></span>
-          Live Monitoring · Auto-refresh every 4s
+          Live Stream · Ultra-low Latency SSE (500ms)
         </div>
         <div class="hero-meta" id="lastUpdated">Last updated: --</div>
       </div>
       <h1 class="hero-title">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔 <br><span class="hero-accent">Bot Operations Center</span></h1>
-      <p class="hero-desc">Real-time telemetry for GX Main Bot, 5 VCR Audio Sentinels, acoustic security engine, and load balancer — all in one dashboard.</p>
+      <p class="hero-desc">Real-time telemetry for GX Main Bot, 5 VCR Audio Sentinels, acoustic security engine, live commands activity, and auto-checks.</p>
 
       <!-- KPI Strip -->
       <div class="kpi-strip">
@@ -273,8 +274,82 @@
     </div>
   </section>
 
+  <!-- ═══════════════════════════════════════════ ACTIVITY & BACKEND LOGS ═══ -->
+  <section class="section" id="activity">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">Real-Time Backend Operations</div>
+          <h2 class="section-title">Latest Actions &amp; System Logs</h2>
+        </div>
+        <div class="activity-live-badge">
+          <span class="pulse-green"></span>
+          <span>Live Event Stream</span>
+        </div>
+      </div>
+
+      <!-- Activity Counter Strip -->
+      <div class="activity-stats-strip">
+        <div class="act-stat-box">
+          <div class="act-stat-icon cyan">⚡</div>
+          <div class="act-stat-info">
+            <span class="act-stat-num" id="statCmdTotal">0</span>
+            <span class="act-stat-lbl">Commands Executed</span>
+          </div>
+        </div>
+        <div class="act-stat-box">
+          <div class="act-stat-icon amber">🛡️</div>
+          <div class="act-stat-info">
+            <span class="act-stat-num" id="statSecAlerts">0</span>
+            <span class="act-stat-lbl">Security Actions</span>
+          </div>
+        </div>
+        <div class="act-stat-box">
+          <div class="act-stat-icon green">⏱️</div>
+          <div class="act-stat-info">
+            <span class="act-stat-num" id="statAutoChecks">0</span>
+            <span class="act-stat-lbl">Auto-Checks Run</span>
+          </div>
+        </div>
+        <div class="act-stat-box">
+          <div class="act-stat-icon purple">🎙️</div>
+          <div class="act-stat-info">
+            <span class="act-stat-num" id="statVcrEvents">0</span>
+            <span class="act-stat-lbl">VCR Operations</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feed Controls (Filter Tabs + Search) -->
+      <div class="activity-controls">
+        <div class="activity-filters" id="activityFilterTabs">
+          <button class="act-filter-btn active" data-filter="all">All Events</button>
+          <button class="act-filter-btn" data-filter="command">Commands (/)</button>
+          <button class="act-filter-btn" data-filter="security">Security &amp; Shield</button>
+          <button class="act-filter-btn" data-filter="autocheck">Auto-Checks &amp; Guards</button>
+          <button class="act-filter-btn" data-filter="vcr">VCR Fleet</button>
+          <button class="act-filter-btn" data-filter="system">Core System</button>
+        </div>
+        <div class="activity-search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="activitySearchInput" class="activity-search" placeholder="Search commands, users, logs…">
+        </div>
+      </div>
+
+      <!-- Activity Feed Stream -->
+      <div class="activity-feed-container">
+        <div class="activity-feed" id="activityFeedList">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════════════════════════════════════════ ANALYTICS ═══ -->
-  <section class="section" id="analytics">
+  <section class="section section-dark" id="analytics">
     <div class="container">
       <div class="section-head">
         <div>
@@ -344,7 +419,7 @@
   </section>
 
   <!-- ═══════════════════════════════════════════ SECURITY ═══ -->
-  <section class="section section-dark" id="security">
+  <section class="section" id="security">
     <div class="container">
       <div class="section-head">
         <div>
