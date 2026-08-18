@@ -1396,17 +1396,22 @@ function playLoopAudio(connection) {
       });
     }
 
-    const audioPath = path.resolve('assets', 'audio', 'loop_track.mp3');
-    if (fs.existsSync(audioPath)) {
+    const candidateAudioPaths = [
+      path.resolve(__dirname, 'fainted_over_slowed.mp3'),
+      path.resolve('assets', 'audio', 'fainted_over_slowed.mp3'),
+      path.resolve('assets', 'audio', 'loop_track.mp3')
+    ];
+    const audioPath = candidateAudioPaths.find((p) => fs.existsSync(p));
+    if (audioPath) {
       currentAudioResource = createAudioResource(audioPath, { inlineVolume: true });
       if (currentAudioResource.volume) {
         currentAudioResource.volume.setVolume(currentVolumeLevel);
       }
       currentVoicePlayer.play(currentAudioResource);
       connection.subscribe(currentVoicePlayer);
-      console.log(`🎶 [البث الصوتي] تشغيل مقطع الصوت الهادئ بمستوى صوت منخفض (${Math.round(currentVolumeLevel * 100)}%) بنظام التكرار المستمر.`);
+      console.log(`🎶 [البث الصوتي] تشغيل مقطع الصوت الافتراضي "Fainted Over Slowed" بمستوى صوت منخفض (${Math.round(currentVolumeLevel * 100)}%) بنظام التكرار المستمر.`);
     } else {
-      console.warn('⚠️ [تنبيه] ملف الصوت loop_track.mp3 غير موجود في مجلد assets/audio/');
+      console.warn('⚠️ [تنبيه] لم يتم العثور على ملف الصوت في المسارات المحددة.');
     }
   } catch (err) {
     console.error('❌ خطأ في تشغيل البث الصوتي:', err.message);
