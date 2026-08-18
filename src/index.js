@@ -2526,7 +2526,7 @@ process.on('uncaughtException', (error) => {
 // ====================================================
 // 🎙️ GX VCR AUTONOMOUS CLUSTER MANAGER (MODULAR BRIDGE)
 // ====================================================
-const vcrManager = new VCRManager(client, BOT_VERSION);
+const vcrManager = new VCRManager(client, BOT_VERSION, sendToLogChannel);
 
 async function findOrCreateVCRLogChannel(guild) {
   return vcrManager.findOrCreateVCRLogChannel(guild);
@@ -2596,6 +2596,14 @@ client.once(Events.ClientReady, async (c) => {
     await findOrCreateVCRRole(guild);
     await autoAssignVCRRoles(guild);
     await initVCRWorkers(guild);
+
+      // 🎙️ High-Frequency 3-second VCR Watchdog & Reconnection Guardian
+      setInterval(async () => {
+        try {
+          await vcrManager.runWatchdog(guild);
+        } catch {}
+      }, 3000);
+      console.log('🛡️ [حارس الفويس VCR] تم تفعيل حارس المراقبة الفورية وإعادة التثبيت التلقائي لمسجلات الصوت كل 3 ثوانٍ.');
       await checkAndResetBiweeklyInfractions(guild);
       sendSecurityDMToExistingMembers(guild);
 
