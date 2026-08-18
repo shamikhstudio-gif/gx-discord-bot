@@ -85,7 +85,8 @@ export class VCRWorker {
         guildId: guild.id,
         adapterCreator: vGuild.voiceAdapterCreator,
         selfDeaf: false,
-        selfMute: false
+        selfMute: false,
+        group: this.id // Multi-bot per guild isolated voice connection group!
       });
 
       this.player = this.createKeepAlivePlayer();
