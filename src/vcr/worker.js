@@ -1,44 +1,7 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
-import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus, entersState } from '@discordjs/voice';
-import { Readable } from 'stream';
+import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, entersState } from '@discordjs/voice';
 import prism from 'prism-media';
 import { LOUD_SOUND_THRESHOLD, VCR_BOT_IDS } from './config.js';
-
-/**
- * Standard WebRTC Timed Silence Stream (1 Opus frame every 20ms = 50 packets/sec).
- * Prevents UDP buffer flooding, packet loss, and RTC desync that triggers the yellow "!" icon!
- */
-class TimedSilenceStream extends Readable {
-  constructor(options = {}) {
-    super(options);
-    this.interval = null;
-  }
-
-  _read() {
-    if (!this.interval) {
-      this.interval = setInterval(() => {
-        try {
-          const pushOk = this.push(Buffer.from([0xF8, 0xFF, 0xFE]));
-          if (!pushOk) {
-            clearInterval(this.interval);
-            this.interval = null;
-          }
-        } catch {
-          clearInterval(this.interval);
-          this.interval = null;
-        }
-      }, 20);
-    }
-  }
-
-  _destroy(err, callback) {
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
-    }
-    callback(err);
-  }
-}
 
 export class VCRWorker {
   constructor(config, manager) {
@@ -50,7 +13,6 @@ export class VCRWorker {
     this.manager = manager;
     this.client = null;
     this.connection = null;
-    this.player = null;
     this.assignedChannelId = config.defaultChannelId;
     this.isReady = false;
     this.isInternalSwitching = false;
@@ -97,21 +59,6 @@ export class VCRWorker {
         resolve(false);
       });
     });
-  }
-
-  createKeepAlivePlayer() {
-    const player = createAudioPlayer();
-    const playSilence = () => {
-      try {
-        const resource = createAudioResource(new TimedSilenceStream(), { inputType: StreamType.Opus });
-        player.play(resource);
-      } catch {}
-    };
-
-    playSilence();
-    player.on('error', () => {});
-    player.on(AudioPlayerStatus.Idle, playSilence);
-    return player;
   }
 
   cleanupSubscriptions() {
@@ -165,11 +112,6 @@ export class VCRWorker {
         selfMute: false,
         group: this.id // Multi-bot isolated voice group
       });
-
-      if (!this.player) {
-        this.player = this.createKeepAlivePlayer();
-      }
-      this.connection.subscribe(this.player);
 
       this.connection.on(VoiceConnectionStatus.Ready, () => {
         this.isInternalSwitching = false;
@@ -233,6 +175,7 @@ export class VCRWorker {
       if (!speakerMember || speakerMember.user?.bot) {
         return;
       }
+
       const session = this.manager.getOrCreateSession(channel, guild, this);
       if (!session || session.isFinalizing) return;
 
