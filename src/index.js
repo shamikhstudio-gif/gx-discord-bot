@@ -52,11 +52,13 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import { VCRManager, VCR_BOT_IDS, VCR_ROLE_NAME } from './vcr/index.js';
+import { loadVaultEnvironment } from './security/envVault.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables
+// Load environment variables (from encrypted SHA-512 .env.enc or .env)
+loadVaultEnvironment();
 dotenv.config();
 
 let BOT_VERSION = '2.0 Flash';
