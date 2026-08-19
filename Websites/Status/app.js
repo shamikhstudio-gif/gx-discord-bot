@@ -530,7 +530,8 @@ function updateGauge(uptimeSec, status = 'operational') {
   const label = document.getElementById('gaugeLabel');
   if (!fill || !label) return;
 
-  // Real-world Operational SLA Calculation
+  const ARC_LENGTH = 188.5; // PI * 60
+
   let pct = 0.9999;
   if (status === 'operational' || status === 'online') {
     pct = 0.9999;
@@ -542,21 +543,21 @@ function updateGauge(uptimeSec, status = 'operational') {
     pct = 0.0;
   }
 
-  const offset = Math.max(0, 173 * (1 - pct));
+  const offset = Math.max(0, ARC_LENGTH * (1 - pct));
   fill.style.strokeDashoffset = offset.toFixed(1);
 
   if (pct >= 0.999) {
     label.textContent = '99.9%';
-    label.style.color = 'var(--green)';
-    fill.style.stroke = 'var(--green)';
+    label.style.color = '#22c55e';
+    label.style.textShadow = '0 0 20px rgba(34, 197, 94, 0.45)';
   } else if (pct >= 0.95) {
     label.textContent = (pct * 100).toFixed(1) + '%';
-    label.style.color = 'var(--amber)';
-    fill.style.stroke = 'var(--amber)';
+    label.style.color = '#f59e0b';
+    label.style.textShadow = '0 0 20px rgba(245, 158, 11, 0.45)';
   } else {
     label.textContent = (pct * 100).toFixed(1) + '%';
-    label.style.color = 'var(--red)';
-    fill.style.stroke = 'var(--red)';
+    label.style.color = '#ef4444';
+    label.style.textShadow = '0 0 20px rgba(239, 68, 68, 0.45)';
   }
 }
 
