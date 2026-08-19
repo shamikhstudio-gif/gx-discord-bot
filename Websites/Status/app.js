@@ -10,9 +10,11 @@ let adminToken = sessionStorage.getItem('gx_admin_token') || null;
 let currentAppeals = [];
 let activeTab = 'overview';
 let activeModalAppealId = null;
+let serverChannels = [];
+let serverRoles = [];
 
 /* ══════════════════════════════════════════════════════
-   DOM HELPERS
+   DOM HELPERS & TOAST
    ══════════════════════════════════════════════════════ */
 const $ = (id) => document.getElementById(id);
 
@@ -30,7 +32,7 @@ function showToast(message, type = 'info') {
 }
 
 /* ══════════════════════════════════════════════════════
-   INITIALIZATION & LOGO INJECTION
+   INITIALIZATION & AUTH CHECK
    ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   // Inject official GX logo everywhere
@@ -45,8 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
     showAuthOverlay();
   }
 
-  // Setup tab navigation
-  document.querySelectorAll('.nav-tab').forEach((tab) => {
+  // Setup Instagram-style Sidebar Navigation
+  document.querySelectorAll('.nav-item[data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
       const target = tab.getAttribute('data-tab');
       switchTab(target);
@@ -110,10 +112,11 @@ async function handleLogin() {
       showToast('✅ Authenticated successfully! Welcome to GX Command Center.', 'success');
       loadAppeals();
       loadPanels();
+      loadModData();
     } else {
       if (errorEl) errorEl.textContent = data.error || 'Invalid master password.';
     }
-  } catch (err) {
+  } catch {
     if (errorEl) errorEl.textContent = 'Server connection error. Ensure backend is running.';
   } finally {
     if (spinner) spinner.style.display = 'none';
@@ -130,6 +133,7 @@ async function validateSession() {
       hideAuthOverlay();
       loadAppeals();
       loadPanels();
+      loadModData();
     } else {
       handleLogout();
     }
@@ -142,24 +146,314 @@ function handleLogout() {
   adminToken = null;
   sessionStorage.removeItem('gx_admin_token');
   showAuthOverlay();
-  showToast('Logged out of Command Center.', 'info');
+  showToast('Session locked.', 'info');
 }
 
 /* ══════════════════════════════════════════════════════
-   TAB SWITCHING
+   TAB SWITCHING & TITLES
    ══════════════════════════════════════════════════════ */
+const TAB_METAS = {
+  overview: { title: 'System Overview', sub: 'Realtime Telemetry & KPIs' },
+  moderation: { title: 'Moderation Center', sub: 'Server Enforcement & Administrative Tools' },
+  appeals: { title: 'Security Appeals Command', sub: 'Review & Resolve Member Untrusted/Ban Appeals' },
+  panels: { title: 'Interactive Panels Manager', sub: 'Deploy & Manage Discord Interactive Embeds' },
+  vcr: { title: 'VCR Audio Sentinel Fleet', sub: '5 Autonomous Multi-Track Recording Sentinels' },
+  security: { title: 'Security Shield & Roles', sub: 'Acoustic Ear-Rape Defense & Member Sync' },
+  broadcast: { title: 'Broadcast Studio', sub: 'Official Announcements to Discord Channels' },
+  logs: { title: 'Live Audit Console', sub: 'Realtime SSE Stream & Security Activity Logs' }
+};
+
 function switchTab(tabId) {
   activeTab = tabId;
-  document.querySelectorAll('.nav-tab').forEach((t) => {
+  document.querySelectorAll('.nav-item[data-tab]').forEach((t) => {
     t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
   });
   document.querySelectorAll('.tab-content').forEach((c) => {
     c.classList.toggle('active', c.id === `tab-${tabId}`);
   });
 
+  const meta = TAB_METAS[tabId] || { title: 'Control Panel', sub: 'GX Operations' };
+  if ($('pageTitle')) $('pageTitle').textContent = meta.title;
+  if ($('pageSubtitle')) $('pageSubtitle').textContent = meta.sub;
+
   if (tabId === 'appeals') loadAppeals();
   if (tabId === 'panels') loadPanels();
+  if (tabId === 'moderation') loadModData();
 }
+
+/* ══════════════════════════════════════════════════════
+   MODERATION METADATA & SELECTORS
+   ══════════════════════════════════════════════════════ */
+async function loadModData() {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/data`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      serverChannels = data.channels || [];
+      serverRoles = data.roles || [];
+      populateModDropdowns();
+    }
+  } catch {}
+}
+
+function populateModDropdowns() {
+  const textChannels = serverChannels.filter((c) => c.type === 'text');
+  const channelOptions = textChannels
+    .map((c) => `<option value="${c.id}">#${escapeHtml(c.name)} (${c.id})</option>`)
+    .join('');
+
+  if ($('purgeChannelSelect')) $('purgeChannelSelect').innerHTML = channelOptions;
+  if ($('lockChannelSelect')) $('lockChannelSelect').innerHTML = channelOptions;
+  if ($('slowmodeChannelSelect')) $('slowmodeChannelSelect').innerHTML = channelOptions;
+  if ($('broadcastChannelSelect')) $('broadcastChannelSelect').innerHTML = channelOptions;
+
+  const roleOptions = serverRoles
+    .map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`)
+    .join('');
+  if ($('roleSelect')) $('roleSelect').innerHTML = roleOptions;
+}
+
+/* ══════════════════════════════════════════════════════
+   MODERATION ACTION HANDLERS
+   ══════════════════════════════════════════════════════ */
+window.submitModBan = async () => {
+  const targetId = $('banUserId')?.value.trim();
+  const reason = $('banReason')?.value.trim();
+  const deleteMessageDays = parseInt($('banDeleteDays')?.value || '0');
+  if (!targetId) return showToast('Please enter target User ID', 'error');
+
+  showToast(`Executing permanent ban on ${targetId}…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/ban`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId, reason, deleteMessageDays })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+      $('banUserId').value = '';
+    } else {
+      showToast(data.error || 'Failed to ban user', 'error');
+    }
+  } catch {
+    showToast('Network error during ban request', 'error');
+  }
+};
+
+window.submitModUnban = async () => {
+  const targetId = $('unbanUserId')?.value.trim();
+  const reason = $('unbanReason')?.value.trim();
+  if (!targetId) return showToast('Please enter target User ID', 'error');
+
+  showToast(`Executing unban for ${targetId}…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/unban`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId, reason })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+      $('unbanUserId').value = '';
+    } else {
+      showToast(data.error || 'Failed to unban user', 'error');
+    }
+  } catch {
+    showToast('Network error during unban request', 'error');
+  }
+};
+
+window.submitModKick = async () => {
+  const targetId = $('kickUserId')?.value.trim();
+  const reason = $('kickReason')?.value.trim();
+  if (!targetId) return showToast('Please enter target User ID', 'error');
+
+  showToast(`Executing kick on ${targetId}…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/kick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId, reason })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+      $('kickUserId').value = '';
+    } else {
+      showToast(data.error || 'Failed to kick user', 'error');
+    }
+  } catch {
+    showToast('Network error during kick request', 'error');
+  }
+};
+
+window.submitModTimeout = async () => {
+  const targetId = $('timeoutUserId')?.value.trim();
+  const durationMinutes = parseInt($('timeoutDuration')?.value || '10');
+  const reason = $('timeoutReason')?.value.trim();
+  if (!targetId) return showToast('Please enter target User ID', 'error');
+
+  showToast(`Applying ${durationMinutes}m timeout on ${targetId}…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId, durationMinutes, reason })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+      $('timeoutUserId').value = '';
+    } else {
+      showToast(data.error || 'Failed to timeout user', 'error');
+    }
+  } catch {
+    showToast('Network error during timeout request', 'error');
+  }
+};
+
+window.submitModUntimeout = async () => {
+  const targetId = $('timeoutUserId')?.value.trim();
+  if (!targetId) return showToast('Please enter target User ID', 'error');
+
+  showToast(`Removing timeout from ${targetId}…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/untimeout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+      $('timeoutUserId').value = '';
+    } else {
+      showToast(data.error || 'Failed to remove timeout', 'error');
+    }
+  } catch {
+    showToast('Network error during untimeout request', 'error');
+  }
+};
+
+window.submitModPurge = async () => {
+  const channelId = $('purgeChannelSelect')?.value;
+  const count = parseInt($('purgeCount')?.value || '10');
+  const targetUserId = $('purgeFilterUser')?.value.trim() || null;
+  if (!channelId) return showToast('Please select a target channel', 'error');
+
+  showToast(`Purging ${count} messages…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/purge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ channelId, count, targetUserId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.error || 'Failed to purge messages', 'error');
+    }
+  } catch {
+    showToast('Network error during purge request', 'error');
+  }
+};
+
+window.submitModChannelLock = async (locked) => {
+  const channelId = $('lockChannelSelect')?.value;
+  if (!channelId) return showToast('Please select a target channel', 'error');
+
+  showToast(`${locked ? 'Locking' : 'Unlocking'} channel…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ channelId, locked })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.error || 'Failed to modify channel lock', 'error');
+    }
+  } catch {
+    showToast('Network error during channel lock request', 'error');
+  }
+};
+
+window.submitModSlowmode = async () => {
+  const channelId = $('slowmodeChannelSelect')?.value;
+  const seconds = parseInt($('slowmodeSeconds')?.value || '0');
+  if (!channelId) return showToast('Please select a target channel', 'error');
+
+  showToast(`Setting slowmode to ${seconds}s…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/slowmode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ channelId, seconds })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.error || 'Failed to set slowmode', 'error');
+    }
+  } catch {
+    showToast('Network error during slowmode request', 'error');
+  }
+};
+
+window.submitModRole = async (action) => {
+  const targetId = $('roleUserId')?.value.trim();
+  const roleId = $('roleSelect')?.value;
+  if (!targetId || !roleId) return showToast('Please provide target User ID and select a Role', 'error');
+
+  showToast(`${action === 'add' ? 'Granting' : 'Revoking'} role…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/role`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId, roleId, action })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.error || 'Failed to modify role', 'error');
+    }
+  } catch {
+    showToast('Network error during role request', 'error');
+  }
+};
+
+window.submitModVoiceAction = async () => {
+  const targetId = $('voiceUserId')?.value.trim();
+  const action = $('voiceActionSelect')?.value || 'mute';
+  if (!targetId) return showToast('Please enter target User ID in Voice', 'error');
+
+  showToast(`Executing voice action (${action})…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/voice-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId, action })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.error || 'Failed to execute voice action', 'error');
+    }
+  } catch {
+    showToast('Network error during voice action request', 'error');
+  }
+};
 
 /* ══════════════════════════════════════════════════════
    REALTIME TELEMETRY & SSE STREAM
@@ -175,7 +469,6 @@ function startRealtimeStream() {
   };
 
   eventSource.onerror = () => {
-    // Fallback to polling if SSE disconnected
     setInterval(async () => {
       try {
         const res = await fetch(`${API_BASE}/api/status`);
@@ -189,28 +482,23 @@ function startRealtimeStream() {
 }
 
 function updateTelemetry(d) {
-  // Live Pill
   const pill = $('livePillText');
   if (pill) pill.textContent = `Online · ${d.ping || 0}ms`;
 
-  // KPIs
   if ($('valPing')) $('valPing').textContent = d.ping || 0;
   if ($('valUptime')) $('valUptime').textContent = formatUptime(d.uptimeSeconds || 0);
   if ($('valMemory')) $('valMemory').textContent = Math.round((d.memory?.heapUsed || 0) / 1024 / 1024);
   if ($('valMembers')) $('valMembers').textContent = d.guild?.memberCount || '--';
 
-  // VCR Sentinels KPI & Grid
   if (d.vcrFleet && Array.isArray(d.vcrFleet)) {
     const readyCount = d.vcrFleet.filter((w) => w.status === 'online').length;
     if ($('valVcrOnline')) $('valVcrOnline').textContent = readyCount;
     renderVcrGrid(d.vcrFleet);
   }
 
-  // Live Gauge Fill
   const fill = $('gaugeFill');
   if (fill) fill.style.strokeDashoffset = '0';
 
-  // Activity stream
   if (d.recentActivity && Array.isArray(d.recentActivity)) {
     renderActivityLog(d.recentActivity);
   }
@@ -238,7 +526,7 @@ function renderVcrGrid(fleet) {
           Room: <span class="text-white">${w.defaultChannelName || 'Assigned'}</span>
         </div>
         <button class="btn-action" style="width:100%; font-size:11px;" onclick="reconnectSingleVCR('${w.id}')">
-          🔄 Re-Station
+          🔒 Locked & Stationed
         </button>
       </div>
     `
@@ -253,9 +541,9 @@ function renderActivityLog(logs) {
     .slice(0, 30)
     .map(
       (l) => `
-    <li class="log-entry ${l.category || 'system'}">
-      <span>[${new Date(l.timestamp || Date.now()).toLocaleTimeString()}] <strong>${l.action}</strong>: ${l.details || ''}</span>
-      <span class="mono text-muted">${l.category || 'SYSTEM'}</span>
+    <li class="log-entry ${l.category || l.type || 'system'}">
+      <span>[${new Date(l.timestamp || l.ts || Date.now()).toLocaleTimeString()}] <strong>${escapeHtml(l.action)}</strong>: ${escapeHtml(l.details || l.detail || '')}</span>
+      <span class="mono text-muted">${l.category || l.type || 'SYSTEM'}</span>
     </li>
   `
     )
@@ -379,7 +667,7 @@ window.resolveAppeal = async (targetId, action) => {
     } else {
       showToast(data.error || 'Failed to resolve appeal', 'error');
     }
-  } catch (err) {
+  } catch {
     showToast('Network error while resolving appeal', 'error');
   }
 };
@@ -476,13 +764,13 @@ window.triggerMassSync = async () => {
 
 window.sendBroadcast = async () => {
   if (!adminToken) return;
-  const channelId = $('broadcastChannel')?.value.trim();
+  const channelId = $('broadcastChannelSelect')?.value.trim();
   const title = $('broadcastTitle')?.value.trim();
   const message = $('broadcastMessage')?.value.trim();
   const color = parseInt($('broadcastColor')?.value || '16777215');
 
   if (!channelId || !message) {
-    showToast('Please provide channel ID and message content', 'error');
+    showToast('Please select channel and enter message content', 'error');
     return;
   }
 
