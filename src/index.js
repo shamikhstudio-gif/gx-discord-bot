@@ -59,7 +59,7 @@ const __dirname = path.dirname(__filename);
 // Load environment variables
 dotenv.config();
 
-let BOT_VERSION = '1.0';
+let BOT_VERSION = '2.0 Flash';
 let TOKEN = process.env.DISCORD_TOKEN;
 let ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID?.trim();
 let AUTO_ROLE_NAME = 'UNTRUSTED';
