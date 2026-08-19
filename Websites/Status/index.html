@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GX eSports — مركز القيادة والتحكم والدعم الفني المباشر</title>
+  <title>GX eSports — مركز القيادة والتحكم والدعم الفني</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <!-- ══════════════════════════════════════════════════════
-       AUTH OVERLAY (شاشة القفل والحماية العسكرية)
+       AUTH OVERLAY (شاشة القفل العسكرية)
        ══════════════════════════════════════════════════════ -->
   <div class="auth-overlay" id="authOverlay">
     <div class="auth-card">
@@ -39,24 +39,24 @@
       </form>
 
       <div class="auth-footer">
-        <span class="auth-badge">🔒 تشفير عسكري AES-256</span>
-        <span class="auth-badge">⚡ توثيق PBKDF2 / SHA-512</span>
+        <span class="auth-badge">🔒 تشفير AES-256</span>
+        <span class="auth-badge">⚡ توثيق SHA-512</span>
       </div>
     </div>
   </div>
 
   <!-- ══════════════════════════════════════════════════════
-       MAIN APPLICATION LAYOUT WITH INSTAGRAM-STYLE SIDEBAR (RTL)
+       MAIN APPLICATION LAYOUT
        ══════════════════════════════════════════════════════ -->
   <div class="app-layout" id="appLayout">
     
-    <!-- الشريط الجانبي بنمط إنستغرام القابل للتمدد -->
+    <!-- الشريط الجانبي الفاخر (Sidebar) -->
     <aside class="insta-sidebar" id="instaSidebar">
       <div class="sidebar-top">
         <div class="sidebar-brand">
           <img src="" alt="GX" class="sidebar-logo gx-logo-img" />
           <div class="brand-text">
-            <span class="brand-name">مركز <span>قيادة GX</span></span>
+            <span class="brand-name">GX <span>COMMAND</span></span>
             <span class="brand-tag">v2.0 Flash</span>
           </div>
         </div>
@@ -75,7 +75,7 @@
           <span class="nav-label">نظرة عامة</span>
         </button>
 
-        <button class="nav-item" data-tab="support" title="مركز الدعم المباشر">
+        <button class="nav-item" data-tab="support" title="مركز الدعم الفني المباشر">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -95,7 +95,7 @@
           <span class="nav-badge text-white">شامل</span>
         </button>
 
-        <button class="nav-item" data-tab="appeals" title="مركز مراجعة الطعون">
+        <button class="nav-item" data-tab="appeals" title="إدارة الطعون">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
@@ -116,7 +116,7 @@
           <span class="nav-label">البانلات التفاعلية</span>
         </button>
 
-        <button class="nav-item" data-tab="vcr" title="مسجلات الصوت VCR">
+        <button class="nav-item" data-tab="vcr" title="مسجلات VCR">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -129,7 +129,7 @@
           <span class="status-indicator"></span>
         </button>
 
-        <button class="nav-item" data-tab="security" title="درع الأمان والرتب">
+        <button class="nav-item" data-tab="security" title="الدرع والمزامنة">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
@@ -139,7 +139,7 @@
           <span class="nav-label">الدرع والمزامنة</span>
         </button>
 
-        <button class="nav-item" data-tab="broadcast" title="استوديو البث والإشعارات">
+        <button class="nav-item" data-tab="broadcast" title="استوديو البث">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"></path>
@@ -148,7 +148,7 @@
           <span class="nav-label">استوديو البث</span>
         </button>
 
-        <button class="nav-item" data-tab="logs" title="سجل الأحداث اللحظي">
+        <button class="nav-item" data-tab="logs" title="السجل اللحظي">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="4 17 10 11 4 5"></polyline>
@@ -172,7 +172,7 @@
       </div>
     </aside>
 
-    <!-- مساحة المحتوى الرئيسية -->
+    <!-- منطقة المحتوى الرئيسية -->
     <div class="content-shell">
       
       <!-- الشريط العلوي -->
@@ -185,26 +185,26 @@
         <div class="top-right">
           <div class="live-pill" id="livePill">
             <span class="live-dot"></span>
-            <span id="livePillText">متصل · جارٍ المزامنة…</span>
+            <span id="livePillText">متصل ومباشر · -- ms</span>
           </div>
         </div>
       </header>
 
-      <!-- محتوى الصفحات والتبويبات -->
+      <!-- محتوى التبويبات -->
       <main class="page-content">
 
         <!-- ── التبويب 1: نظرة عامة ── -->
         <section class="tab-content active" id="tab-overview">
           <div class="kpi-grid">
             <div class="kpi-card">
-              <div class="kpi-label">بينغ البوابة (Ping)</div>
+              <div class="kpi-label">بينغ البوابة (Gateway Ping)</div>
               <div class="kpi-value"><span id="valPing">--</span><span class="kpi-unit">ms</span></div>
-              <div class="kpi-sub" id="trendPing">استجابة فائقة السرعة</div>
+              <div class="kpi-sub" id="trendPing">استجابة سريعة ومستقرة</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-label">مدة التشغيل المستمر</div>
               <div class="kpi-value"><span id="valUptime">--</span></div>
-              <div class="kpi-sub text-white">99.9% استقرار تشغيلي</div>
+              <div class="kpi-sub text-white">99.9% جاهزية تشغيلية</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-label">استهلاك الذاكرة (RAM)</div>
@@ -279,75 +279,89 @@
           </div>
         </section>
 
-        <!-- ── التبويب 2: مركز الدعم الفني المباشر ── -->
+        <!-- ── التبويب 2: مركز الدعم الفني المباشر (LIVE SUPPORT DESK REDESIGN) ── -->
         <section class="tab-content" id="tab-support">
-          <div class="section-bar">
-            <div>
-              <h2 class="section-heading">مركز الدعم الفني المباشر</h2>
-              <p class="section-desc">منصة المحادثة المباشرة ثنائية الاتجاه مع أعضاء ديسكورد والرد الرسمي باسم وكيل الدعم.</p>
-            </div>
-            <div style="display:flex; gap:10px;">
-              <button class="btn-action primary" onclick="loadSupportTickets()">🔄 تحديث التذاكر</button>
-            </div>
-          </div>
-
-          <div class="support-desk-layout">
-            <!-- العمود الأيمن: قائمة التذاكر -->
-            <div class="support-ticket-list-panel">
-              <div class="support-list-header">
-                <input type="text" id="searchSupportTickets" class="input-search w-100" placeholder="بحث برقم التذكرة، العضو، أو السبب…" />
+          <div class="support-desk-container">
+            
+            <!-- العمود الأيمن: قائمة التذاكر وفلاترها -->
+            <div class="support-tickets-sidebar">
+              <div class="support-sidebar-header">
+                <div class="support-sidebar-title-row">
+                  <h3>تذاكر الدعم الفني</h3>
+                  <button class="btn-icon-refresh" onclick="loadSupportTickets()" title="تحديث التذاكر">🔄</button>
+                </div>
+                <input type="text" id="searchSupportTickets" class="input-search-tickets" placeholder="🔍 بحث برقم التذكرة أو العضو…" />
+                <div class="ticket-filter-chips">
+                  <button class="filter-chip active" data-filter="all">الكل</button>
+                  <button class="filter-chip" data-filter="active">🟢 النشطة</button>
+                  <button class="filter-chip" data-filter="closed">🔒 المغلقة</button>
+                </div>
               </div>
-              <div class="support-tickets-scroll" id="supportTicketsList">
-                <div class="text-center text-muted py-4" style="font-size: 13px;">جارٍ تحميل تذاكر الدعم الفني…</div>
+
+              <div class="support-tickets-list" id="supportTicketsList">
+                <div class="tickets-empty-placeholder">جارٍ تحميل التذاكر…</div>
               </div>
             </div>
 
-            <!-- العمود الأوسط: شاشة المحادثة المباشرة -->
-            <div class="support-chat-panel">
-              <div class="support-chat-header" id="chatHeaderInfo">
-                <div style="display:flex; align-items:center; gap:12px;">
-                  <img id="chatUserAvatar" src="" class="member-avatar-sm" alt="" style="display:none;" />
-                  <div>
-                    <div style="font-weight: 800; font-size: 15px;" id="chatUserTitle">اختر تذكرة للبدء</div>
-                    <div style="font-size: 11px; color: var(--text-muted);" id="chatTicketCode">لم يتم تحديد جلسة محادثة</div>
+            <!-- العمود الأوسط: شاشة المحادثة المباشرة الفاخرة -->
+            <div class="support-main-chat">
+              
+              <!-- هيدر الشات -->
+              <div class="chat-topbar" id="chatTopBar">
+                <div class="chat-user-profile">
+                  <img id="chatUserAvatar" src="https://cdn.discordapp.com/embed/avatars/0.png" class="chat-avatar-img" alt="" />
+                  <div class="chat-user-meta">
+                    <div class="chat-username" id="chatUserTitle">اختر تذكرة للبدء</div>
+                    <div class="chat-ticket-id" id="chatTicketCode">لم يتم تحديد جلسة دعم فني</div>
                   </div>
                 </div>
-                <div id="chatHeaderActions"></div>
-              </div>
 
-              <!-- مسار الرسائل -->
-              <div class="support-messages-stream" id="supportMessagesStream">
-                <div class="support-empty-state">
-                  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-sub);">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                  <p style="margin-top: 12px; font-weight: 600; color: var(--text-muted);">اختر تذكرة من القائمة الجانبية لبدء المحادثة المباشرة مع العضو</p>
+                <div class="chat-quick-actions" id="chatQuickActions">
+                  <!-- أزرار الإجراءات الديناميكية (أرشفة / حذف) -->
                 </div>
               </div>
 
-              <!-- صندوق كتابة الرد -->
-              <div class="support-reply-bar" id="supportReplyBar" style="display: none;">
-                <div class="support-reply-input-wrap">
-                  <textarea id="agentReplyInput" rows="2" placeholder="اكتب ردك الرسمي للعضو في ديسكورد… (اضغط Enter للإرسال)" onkeydown="handleAgentKey(event)"></textarea>
-                  <div class="support-reply-extras">
-                    <input type="text" id="agentImageInput" placeholder="رابط صورة اختياري مع الرد (https://…)" class="input-search" style="flex:1; font-size: 12px;" />
-                    <button class="btn-action primary" onclick="sendSupportAgentReply()">
-                      <span>🚀 إرسال كرد رسمي من الدعم</span>
+              <!-- مساحة الرسائل المباشرة -->
+              <div class="chat-stream-area" id="supportMessagesStream">
+                <div class="chat-placeholder-state">
+                  <div class="chat-placeholder-icon">💬</div>
+                  <h4>مركز الدعم الفني المباشر</h4>
+                  <p>اختر تذكرة من القائمة الجانبية لبدء المحادثة المباشرة مع العضو في ديسكورد</p>
+                </div>
+              </div>
+
+              <!-- شريط كتابة الردود السريعة وإرسال الرسائل -->
+              <div class="chat-input-container" id="supportReplyBar">
+                <!-- ردود سريعة جاهزة بنقرة زر -->
+                <div class="canned-responses-bar">
+                  <span class="canned-label">رد سريع:</span>
+                  <button class="btn-canned" onclick="insertCanned('مرحباً بك! كيف يمكننا مساعدتك اليوم؟ 👋')">👋 ترحيب</button>
+                  <button class="btn-canned" onclick="insertCanned('تم استلام المشكلة وجارٍ الفحص من قبل الفريق الفني... 🔍')">🔍 جارٍ الفحص</button>
+                  <button class="btn-canned" onclick="insertCanned('تم حل المشكلة وتحديث البيانات بنجاح! هل تحتاج مساعدة إضافية؟ ✅')">✅ تم الحل</button>
+                </div>
+
+                <div class="chat-input-box">
+                  <textarea id="agentReplyInput" rows="2" placeholder="اكتب ردك الرسمي للعضو هنا… (اضغط Enter للإرسال)" onkeydown="handleAgentKey(event)"></textarea>
+                  <div class="chat-input-bottom-row">
+                    <input type="text" id="agentImageInput" placeholder="رابط صورة اختياري مع الرد (https://…)" class="input-image-url" />
+                    <button class="btn-send-reply" onclick="sendSupportAgentReply()">
+                      <span>إرسال كرد رسمي</span>
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>
                     </button>
                   </div>
                 </div>
               </div>
+
             </div>
 
-            <!-- العمود الأيسر: بطاقة بيانات العضو -->
-            <div class="support-sidebar-panel" id="supportDetailsSidebar">
-              <div class="panel-header">
-                <div class="panel-title">تفاصيل التذكرة والعضو</div>
-              </div>
-              <div id="supportDetailsContent" class="spec-list">
-                <p class="text-muted" style="font-size: 12px;">اختر تذكرة لعرض معلومات العضو وسجلاته وتفاصيل طلبه.</p>
+            <!-- العمود الأيسر: بطاقة معلومات العضو وسجلاته -->
+            <div class="support-details-sidebar" id="supportDetailsSidebar">
+              <div class="sidebar-details-header">معلومات العضو والتذكرة</div>
+              <div id="supportDetailsContent" class="sidebar-details-body">
+                <div class="details-empty-placeholder">اختر تذكرة لعرض تفاصيل العضو</div>
               </div>
             </div>
+
           </div>
         </section>
 
@@ -583,7 +597,7 @@
         <section class="tab-content" id="tab-appeals">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">مركز مراجعة الطعون والتماسات الحظر</h2>
+              <h2 class="section-heading">مركز مراجعة الطعون والالتماسات</h2>
               <p class="section-desc">مراجعة طعون الأعضاء المحظورين أو المقيدين، مع إمكانية القبول وإلغاء الحظر وإرسال إشعار فوري في الخاص.</p>
             </div>
             <div class="filter-group">
