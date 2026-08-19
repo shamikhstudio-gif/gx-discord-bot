@@ -8210,7 +8210,34 @@ const healthServer = http.createServer(async (req, res) => {
     return sendJsonResponse(res, 200, { success: true, message: 'تم إغلاق وأرشفة التذكرة بنجاح' });
   }
 
-  // 29. Admin Audit Logs: GET /api/admin/audit-logs
+  // 29. Admin Support Desk - Permanently Delete Ticket: POST /api/admin/tickets/delete
+  if (url === '/api/admin/tickets/delete' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { threadId } = body;
+
+    const ticketsData = loadTickets();
+    const ticket = ticketsData.activeTickets ? ticketsData.activeTickets[threadId] : null;
+    if (!ticket) return sendJsonResponse(res, 404, { error: 'التذكرة غير موجودة' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const thread = guild?.channels.cache.get(threadId) || (await guild?.channels.fetch(threadId).catch(() => null));
+
+    if (thread) {
+      await thread.delete('Deleted permanently via GX Web Control Panel').catch(() => {});
+    }
+
+    const ticketId = ticket.ticketId;
+    delete ticketsData.activeTickets[threadId];
+    saveTickets(ticketsData);
+
+    logActivity('ticket', 'Ticket Deleted', `Permanently deleted ${ticketId} via Web Support Desk`);
+    return sendJsonResponse(res, 200, { success: true, message: `تم حذف التذكرة ${ticketId} والقناة نهائياً` });
+  }
+
+  // 30. Admin Audit Logs: GET /api/admin/audit-logs
   if (url === '/api/admin/audit-logs' && method === 'GET') {
     const session = authenticateAdmin(req);
     if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
