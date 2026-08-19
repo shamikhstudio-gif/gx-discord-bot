@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GX eSports — High Command Control Panel</title>
+  <title>GX eSports — High Command Control Panel & Live Support Desk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -73,6 +73,16 @@
             </svg>
           </div>
           <span class="nav-label">Overview</span>
+        </button>
+
+        <button class="nav-item" data-tab="support" title="Live Support Desk">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <span class="nav-label">Support Desk</span>
+          <span class="nav-badge" id="badgeOpenTickets">0</span>
         </button>
 
         <button class="nav-item" data-tab="moderation" title="Moderation Center">
@@ -269,7 +279,79 @@
           </div>
         </section>
 
-        <!-- ── SECTION 2: WEB MODERATION CENTER ── -->
+        <!-- ── SECTION 2: LIVE SUPPORT DESK (NEW) ── -->
+        <section class="tab-content" id="tab-support">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Live Support Desk Command</h2>
+              <p class="section-desc">Real-time 2-way conversation console with Discord members. Reply as official GX Support Agent.</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn-action primary" onclick="loadSupportTickets()">🔄 Refresh Tickets</button>
+            </div>
+          </div>
+
+          <div class="support-desk-layout">
+            <!-- Left: Ticket List -->
+            <div class="support-ticket-list-panel">
+              <div class="support-list-header">
+                <input type="text" id="searchSupportTickets" class="input-search w-100" placeholder="Search by Ticket ID, User, or Tag…" />
+              </div>
+              <div class="support-tickets-scroll" id="supportTicketsList">
+                <div class="text-center text-muted py-4" style="font-size: 13px;">Loading support tickets…</div>
+              </div>
+            </div>
+
+            <!-- Center: Active Chat Stream -->
+            <div class="support-chat-panel">
+              <div class="support-chat-header" id="chatHeaderInfo">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <img id="chatUserAvatar" src="" class="member-avatar-sm" alt="" style="display:none;" />
+                  <div>
+                    <div style="font-weight: 800; font-size: 15px;" id="chatUserTitle">Select a Ticket</div>
+                    <div style="font-size: 11px; color: var(--text-muted);" id="chatTicketCode">No active session selected</div>
+                  </div>
+                </div>
+                <div id="chatHeaderActions"></div>
+              </div>
+
+              <!-- Message Stream -->
+              <div class="support-messages-stream" id="supportMessagesStream">
+                <div class="support-empty-state">
+                  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-sub);">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <p style="margin-top: 12px; font-weight: 600; color: var(--text-muted);">Select a ticket from the left panel to begin live chat</p>
+                </div>
+              </div>
+
+              <!-- Reply Box -->
+              <div class="support-reply-bar" id="supportReplyBar" style="display: none;">
+                <div class="support-reply-input-wrap">
+                  <textarea id="agentReplyInput" rows="2" placeholder="Type official response to user in Discord… (Press Enter to send)" onkeydown="handleAgentKey(event)"></textarea>
+                  <div class="support-reply-extras">
+                    <input type="text" id="agentImageInput" placeholder="Optional Image URL (https://…)" class="input-search" style="flex:1; font-size: 12px;" />
+                    <button class="btn-action primary" onclick="sendSupportAgentReply()">
+                      <span>🚀 Send as GX Support</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Member Profile & Context Sidebar -->
+            <div class="support-sidebar-panel" id="supportDetailsSidebar">
+              <div class="panel-header">
+                <div class="panel-title">Ticket Information</div>
+              </div>
+              <div id="supportDetailsContent" class="spec-list">
+                <p class="text-muted" style="font-size: 12px;">Select a ticket to view member intelligence and logs.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── SECTION 3: WEB MODERATION CENTER ── -->
         <section class="tab-content" id="tab-moderation">
           <div class="section-bar">
             <div>
@@ -285,9 +367,10 @@
                 <div class="panel-title">🔨 Ban Member</div>
               </div>
               <form onsubmit="return false;" id="formModBan">
-                <div class="input-group">
-                  <label>Target User ID</label>
-                  <input type="text" id="banUserId" placeholder="e.g. 1152686277255237663" required />
+                <div class="input-group search-autocomplete-wrap">
+                  <label>Search Member / Target ID</label>
+                  <input type="text" id="banUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <div class="member-autocomplete-dropdown" id="dropdown_banUserId"></div>
                 </div>
                 <div class="input-group">
                   <label>Reason</label>
@@ -329,9 +412,10 @@
                 <div class="panel-title">👢 Kick Member</div>
               </div>
               <form onsubmit="return false;" id="formModKick">
-                <div class="input-group">
-                  <label>Target User ID</label>
-                  <input type="text" id="kickUserId" placeholder="e.g. 1152686277255237663" required />
+                <div class="input-group search-autocomplete-wrap">
+                  <label>Search Member / Target ID</label>
+                  <input type="text" id="kickUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <div class="member-autocomplete-dropdown" id="dropdown_kickUserId"></div>
                 </div>
                 <div class="input-group">
                   <label>Reason</label>
@@ -347,9 +431,10 @@
                 <div class="panel-title">⏳ Timeout / Mute Member</div>
               </div>
               <form onsubmit="return false;" id="formModTimeout">
-                <div class="input-group">
-                  <label>Target User ID</label>
-                  <input type="text" id="timeoutUserId" placeholder="e.g. 1152686277255237663" required />
+                <div class="input-group search-autocomplete-wrap">
+                  <label>Search Member / Target ID</label>
+                  <input type="text" id="timeoutUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <div class="member-autocomplete-dropdown" id="dropdown_timeoutUserId"></div>
                 </div>
                 <div class="input-group">
                   <label>Duration</label>
@@ -388,9 +473,10 @@
                   <label>Number of Messages (1 - 100)</label>
                   <input type="number" id="purgeCount" min="1" max="100" value="10" required />
                 </div>
-                <div class="input-group">
-                  <label>Filter Specific User ID (Optional)</label>
-                  <input type="text" id="purgeFilterUser" placeholder="Leave empty for all users" />
+                <div class="input-group search-autocomplete-wrap">
+                  <label>Filter Specific User (Optional)</label>
+                  <input type="text" id="purgeFilterUser" class="member-search-input" placeholder="Leave empty for all users" autocomplete="off" />
+                  <div class="member-autocomplete-dropdown" id="dropdown_purgeFilterUser"></div>
                 </div>
                 <button class="btn-action danger w-100" onclick="submitModPurge()">Purge Messages</button>
               </form>
@@ -447,9 +533,10 @@
                 <div class="panel-title">👑 Role Management</div>
               </div>
               <form onsubmit="return false;">
-                <div class="input-group">
-                  <label>Target User ID</label>
-                  <input type="text" id="roleUserId" placeholder="e.g. 1152686277255237663" required />
+                <div class="input-group search-autocomplete-wrap">
+                  <label>Search Member / Target ID</label>
+                  <input type="text" id="roleUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <div class="member-autocomplete-dropdown" id="dropdown_roleUserId"></div>
                 </div>
                 <div class="input-group">
                   <label>Role</label>
@@ -470,9 +557,10 @@
                 <div class="panel-title">🎙️ Voice Moderation</div>
               </div>
               <form onsubmit="return false;">
-                <div class="input-group">
-                  <label>Target User ID in Voice</label>
-                  <input type="text" id="voiceUserId" placeholder="e.g. 1152686277255237663" required />
+                <div class="input-group search-autocomplete-wrap">
+                  <label>Search Member in Voice</label>
+                  <input type="text" id="voiceUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <div class="member-autocomplete-dropdown" id="dropdown_voiceUserId"></div>
                 </div>
                 <div class="input-group">
                   <label>Voice Action</label>
@@ -491,7 +579,7 @@
           </div>
         </section>
 
-        <!-- ── SECTION 3: APPEALS CENTER ── -->
+        <!-- ── SECTION 4: APPEALS CENTER ── -->
         <section class="tab-content" id="tab-appeals">
           <div class="section-bar">
             <div>
@@ -530,7 +618,7 @@
           </div>
         </section>
 
-        <!-- ── SECTION 4: PANELS MANAGER ── -->
+        <!-- ── SECTION 5: PANELS MANAGER ── -->
         <section class="tab-content" id="tab-panels">
           <div class="section-bar">
             <div>
@@ -545,7 +633,7 @@
                 <div class="panel-title">🎫 Ticket Support Panel</div>
                 <span class="status-chip" id="chipTicketStatus">Active</span>
               </div>
-              <p class="panel-info">Permanent support ticket panel with category selection in `#open-ticket`.</p>
+              <p class="panel-info">Permanent support ticket panel with private thread generation in `#🎫・تذاكر-الدعم`.</p>
               <div class="panel-actions">
                 <button class="btn-action primary" onclick="deployPanel('ticket')">🚀 Deploy / Refresh</button>
                 <button class="btn-action danger" onclick="removePanel('ticket')">🗑️ Remove Panel</button>
@@ -577,7 +665,7 @@
           </div>
         </section>
 
-        <!-- ── SECTION 5: VCR SENTINELS ── -->
+        <!-- ── SECTION 6: VCR SENTINELS ── -->
         <section class="tab-content" id="tab-vcr">
           <div class="section-bar">
             <div>
@@ -592,7 +680,7 @@
           </div>
         </section>
 
-        <!-- ── SECTION 6: SECURITY & SHIELD ── -->
+        <!-- ── SECTION 7: SECURITY & SHIELD ── -->
         <section class="tab-content" id="tab-security">
           <div class="section-bar">
             <div>
@@ -649,7 +737,7 @@
           </div>
         </section>
 
-        <!-- ── SECTION 7: BROADCAST COMPOSER ── -->
+        <!-- ── SECTION 8: BROADCAST COMPOSER ── -->
         <section class="tab-content" id="tab-broadcast">
           <div class="section-bar">
             <div>
@@ -690,7 +778,7 @@
           </div>
         </section>
 
-        <!-- ── SECTION 8: LIVE CONSOLE LOGS ── -->
+        <!-- ── SECTION 9: LIVE CONSOLE LOGS ── -->
         <section class="tab-content" id="tab-logs">
           <div class="section-bar">
             <div>
