@@ -1419,7 +1419,13 @@ function isAuthorizedRoleManager(member, user) {
 function buildSlashCommandsFromJson() {
   const commandsDef = loadCommandsConfig();
 
-  return commandsDef.map((def) => {
+  // 🛡️ Filter strictly for public commands for server users
+  // All moderation & administration commands are controlled via the GX Control Panel
+  const publicCommands = commandsDef.filter(
+    (def) => def.Public_Command === true || (def.category !== 'moderation' && def.category !== 'admin' && !def.permission)
+  );
+
+  return publicCommands.map((def) => {
     const builder = new SlashCommandBuilder()
       .setName(def.name)
       .setDescription(def.description);
@@ -7761,7 +7767,264 @@ const healthServer = http.createServer(async (req, res) => {
     return sendJsonResponse(res, 200, { success: true, message: 'تمت إعادة تثبيت وربط المسجلات الصوتية' });
   }
 
-  // 14. Admin Audit Logs: GET /api/admin/audit-logs
+  // 14. Admin Moderation Metadata: GET /api/admin/mod/data
+  if (url === '/api/admin/mod/data' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    const channels = guild.channels.cache
+      .filter((c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildVoice)
+      .map((c) => ({ id: c.id, name: c.name, type: c.type === ChannelType.GuildText ? 'text' : 'voice' }));
+
+    const roles = guild.roles.cache
+      .filter((r) => r.id !== guild.id)
+      .map((r) => ({ id: r.id, name: r.name, color: r.hexColor }));
+
+    return sendJsonResponse(res, 200, { success: true, channels, roles, memberCount: guild.memberCount });
+  }
+
+  // 15. Mod Ban: POST /api/admin/mod/ban
+  if (url === '/api/admin/mod/ban' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, reason = 'حظر بواسطة لوحة تحكم GX', deleteMessageDays = 0 } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      await guild.members.ban(targetId, {
+        reason: `${reason} • [GX Control Panel by High Command]`,
+        deleteMessageSeconds: deleteMessageDays * 24 * 60 * 60
+      });
+      logActivity('security', 'Member Banned', `Banned ID: ${targetId} via Control Panel (${reason})`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم حظر العضو (${targetId}) بنجاح` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل الحظر: ${err.message}` });
+    }
+  }
+
+  // 16. Mod Unban: POST /api/admin/mod/unban
+  if (url === '/api/admin/mod/unban' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, reason = 'إلغاء حظر بواسطة لوحة تحكم GX' } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      await guild.members.unban(targetId, `${reason} • [GX Control Panel]`);
+      logActivity('security', 'Member Unbanned', `Unbanned ID: ${targetId} via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم إلغاء حظر العضو (${targetId}) بنجاح` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل إلغاء الحظر: ${err.message}` });
+    }
+  }
+
+  // 17. Mod Kick: POST /api/admin/mod/kick
+  if (url === '/api/admin/mod/kick' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, reason = 'طرد بواسطة لوحة تحكم GX' } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (!member) return sendJsonResponse(res, 404, { error: 'العضو غير موجود بالسيرفر' });
+      await member.kick(`${reason} • [GX Control Panel]`);
+      logActivity('security', 'Member Kicked', `Kicked ${member.user.tag} (${targetId}) via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم طرد العضو ${member.user.tag} بنجاح` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل الطرد: ${err.message}` });
+    }
+  }
+
+  // 18. Mod Timeout / Mute: POST /api/admin/mod/timeout
+  if (url === '/api/admin/mod/timeout' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, durationMinutes = 10, reason = 'كتم بواسطة لوحة تحكم GX' } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (!member) return sendJsonResponse(res, 404, { error: 'العضو غير موجود بالسيرفر' });
+      const ms = durationMinutes * 60 * 1000;
+      await member.timeout(ms, `${reason} • [GX Control Panel]`);
+      logActivity('security', 'Member Timed Out', `Muted ${member.user.tag} for ${durationMinutes}m via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم كتم ${member.user.tag} لمدة ${durationMinutes} دقيقة` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل الكتم: ${err.message}` });
+    }
+  }
+
+  // 19. Mod Untimeout / Unmute: POST /api/admin/mod/untimeout
+  if (url === '/api/admin/mod/untimeout' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (!member) return sendJsonResponse(res, 404, { error: 'العضو غير موجود بالسيرفر' });
+      await member.timeout(null, 'إلغاء الكتم بواسطة لوحة تحكم GX');
+      logActivity('security', 'Timeout Removed', `Unmuted ${member.user.tag} via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم إلغاء الكتم عن ${member.user.tag}` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل إلغاء الكتم: ${err.message}` });
+    }
+  }
+
+  // 20. Mod Purge Messages: POST /api/admin/mod/purge
+  if (url === '/api/admin/mod/purge' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { channelId, count = 10, targetUserId = null } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const channel = guild?.channels.cache.get(channelId);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      return sendJsonResponse(res, 400, { error: 'الروم النصي المحدد غير موجود' });
+    }
+
+    try {
+      const safeCount = Math.min(Math.max(parseInt(count) || 1, 1), 100);
+      const messages = await channel.messages.fetch({ limit: safeCount });
+      const toDelete = targetUserId ? messages.filter((m) => m.author.id === targetUserId) : messages;
+      const deleted = await channel.bulkDelete(toDelete, true);
+      logActivity('security', 'Messages Purged', `Deleted ${deleted.size} msgs in #${channel.name} via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم مسح ${deleted.size} رسالة بنجاح في #${channel.name}` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل المسح: ${err.message}` });
+    }
+  }
+
+  // 21. Mod Lock/Unlock Channel: POST /api/admin/mod/lock
+  if (url === '/api/admin/mod/lock' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { channelId, locked = true } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const channel = guild?.channels.cache.get(channelId);
+    if (!channel) return sendJsonResponse(res, 400, { error: 'الروم المحدد غير موجود' });
+
+    try {
+      await channel.permissionOverwrites.edit(guild.roles.everyone, {
+        SendMessages: !locked
+      });
+      logActivity('security', locked ? 'Channel Locked' : 'Channel Unlocked', `${locked ? 'Locked' : 'Unlocked'} #${channel.name} via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم ${locked ? 'قفل' : 'فتح'} الروم #${channel.name} بنجاح` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل تعديل حالة الروم: ${err.message}` });
+    }
+  }
+
+  // 22. Mod Slowmode: POST /api/admin/mod/slowmode
+  if (url === '/api/admin/mod/slowmode' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { channelId, seconds = 0 } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const channel = guild?.channels.cache.get(channelId);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      return sendJsonResponse(res, 400, { error: 'الروم النصي المحدد غير موجود' });
+    }
+
+    try {
+      await channel.setRateLimitPerUser(parseInt(seconds) || 0, 'تعديل السلو مود عبر لوحة تحكم GX');
+      logActivity('security', 'Slowmode Changed', `Set slowmode to ${seconds}s in #${channel.name}`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم ضبط السلو مود إلى ${seconds} ثانية في #${channel.name}` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل ضبط السلو مود: ${err.message}` });
+    }
+  }
+
+  // 23. Mod Role Assign/Remove: POST /api/admin/mod/role
+  if (url === '/api/admin/mod/role' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, roleId, action = 'add' } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      const role = guild.roles.cache.get(roleId);
+      if (!member || !role) return sendJsonResponse(res, 404, { error: 'العضو أو الرتبة غير موجودة' });
+
+      if (action === 'add') {
+        await member.roles.add(role, 'إعطاء رتبة عبر لوحة تحكم GX');
+        logActivity('security', 'Role Added', `Assigned @${role.name} to ${member.user.tag}`);
+        return sendJsonResponse(res, 200, { success: true, message: `تمت إضافة رتبة @${role.name} للعضو ${member.user.tag}` });
+      } else {
+        await member.roles.remove(role, 'سحب رتبة عبر لوحة تحكم GX');
+        logActivity('security', 'Role Removed', `Removed @${role.name} from ${member.user.tag}`);
+        return sendJsonResponse(res, 200, { success: true, message: `تم سحب رتبة @${role.name} من العضو ${member.user.tag}` });
+      }
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل تعديل الرتبة: ${err.message}` });
+    }
+  }
+
+  // 24. Mod Voice Action: POST /api/admin/mod/voice-action
+  if (url === '/api/admin/mod/voice-action' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, action = 'mute' } = body; // 'mute', 'unmute', 'deafen', 'undeafen', 'disconnect'
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (!member || !member.voice?.channel) {
+        return sendJsonResponse(res, 404, { error: 'العضو غير متصل بأي روم صوتي' });
+      }
+
+      if (action === 'mute') {
+        await member.voice.setMute(true, 'كتم صوتي عبر لوحة تحكم GX');
+      } else if (action === 'unmute') {
+        await member.voice.setMute(false, 'إلغاء كتم صوتي عبر لوحة تحكم GX');
+      } else if (action === 'deafen') {
+        await member.voice.setDeaf(true, 'تصميت صوتي عبر لوحة تحكم GX');
+      } else if (action === 'undeafen') {
+        await member.voice.setDeaf(false, 'إلغاء تصميت صوتي عبر لوحة تحكم GX');
+      } else if (action === 'disconnect') {
+        await member.voice.disconnect('فصل من الصوت عبر لوحة تحكم GX');
+      }
+
+      logActivity('security', 'Voice Action', `Executed voice ${action} on ${member.user.tag}`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم تنفيذ الإجراء الصوتي (${action}) على ${member.user.tag}` });
+    } catch (err) {
+      return sendJsonResponse(res, 400, { error: `فشل الإجراء الصوتي: ${err.message}` });
+    }
+  }
+
+  // 25. Admin Audit Logs: GET /api/admin/audit-logs
   if (url === '/api/admin/audit-logs' && method === 'GET') {
     const session = authenticateAdmin(req);
     if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
