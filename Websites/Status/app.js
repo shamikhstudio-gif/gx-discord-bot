@@ -4,7 +4,7 @@
    Auto-Target: Railway Cloud 24/7 + Local Dev Auto-Switch
    ══════════════════════════════════════════════════════ */
 
-const CLOUD_API_BASE = 'https://gx-bot-production-production.up.railway.app';
+const CLOUD_API_BASE = 'https://gxbot.eshamikh.com';
 const LOCAL_API_BASE = 'http://localhost:3000';
 
 let activeApiBase = (location.protocol === 'file:' || location.hostname === '')
