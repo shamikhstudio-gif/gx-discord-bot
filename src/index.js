@@ -2055,6 +2055,40 @@ async function sendSecurityDMToExistingMembers(guild) {
 /**
  * 🎫 Support Ticket Thread Generator with Collected Data (Instant Modal Creation)
  */
+/**
+ * 📩 Sends a high-priority DM notification to Executives (OWNER, CEO, COO) when a ticket is opened.
+ */
+async function sendTicketNotificationToExecutives(guild, user, ticketCode, realName, reason, thread) {
+  if (!guild || !user) return;
+  const executives = await getExecutiveMembers(guild);
+  if (!executives || executives.size === 0) return;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setAuthor({ name: '🎫 إشعار تذكرة دعم فني جديدة | GX Support Alert', iconURL: user.displayAvatarURL() })
+    .setTitle(`تم فتح تذكرة جديدة: ${ticketCode}`)
+    .setDescription(
+      `# 🎫 طلب دعم فني جديد\n` +
+      `> 👤 **صاحب التذكرة:** <@${user.id}> (\`${user.tag}\`)\n` +
+      `> 📛 **الاسم:** \`${realName}\`\n` +
+      `> 📝 **السبب:** ${reason}\n` +
+      `> 🧵 **القناة الفرعية الخاصة:** <#${thread.id}>\n\n` +
+      `🔗 **الرد والمعالجة المباشرة عبر لوحة التحكم:**\n` +
+      `### [اضغط هنا للدخول إلى مركز الدعم الفني (gxbot.eshamikh.com/support)](https://gxbot.eshamikh.com/support)`
+    )
+    .setFooter({ text: 'GX eSports High Command Support • gxbot.eshamikh.com/support' })
+    .setTimestamp();
+
+  for (const [, execMember] of executives) {
+    try {
+      await execMember.send({
+        content: `🔔 **إشعار دعم فني جديد:** قام العضو \`${user.tag}\` بفتح تذكرة [${ticketCode}]. اضغط الرابط للرد من الموقع: https://gxbot.eshamikh.com/support`,
+        embeds: [embed]
+      }).catch(() => null);
+    } catch {}
+  }
+}
+
 async function openTicketThreadWithData(guild, originChannel, user, realName, reason) {
   const ticketsData = loadTickets();
   const counter = ticketsData.counter || 1;
@@ -2067,33 +2101,25 @@ async function openTicketThreadWithData(guild, originChannel, user, realName, re
                   guild.channels.cache.find(c => c.type === ChannelType.GuildText);
   }
 
-  const managersRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'managers' || r.name.toLowerCase() === 'manager');
-
   let thread;
   try {
     thread = await baseChannel.threads.create({
       name: ticketCode,
       autoArchiveDuration: 1440,
       type: ChannelType.PrivateThread,
-      reason: `تذكرة دعم فني جديدة بواسطة ${user.tag}`
+      reason: `تذكرة دعم فني خاصة بواسطة ${user.tag}`
     });
   } catch (e) {
     thread = await baseChannel.threads.create({
       name: ticketCode,
       autoArchiveDuration: 1440,
       type: ChannelType.PublicThread,
-      reason: `تذكرة دعم فني جديدة بواسطة ${user.tag}`
+      reason: `تذكرة دعم فني بواسطة ${user.tag}`
     });
   }
 
-  // 1. جلب كافة الأعضاء وإضافة صاحب التذكرة وجميع الإداريين
-  const allMembers = await guild.members.fetch().catch(() => guild.members.cache);
+  // 🔒 ISOLATE THREAD: Strictly add ONLY the ticket author to the thread
   await thread.members.add(user.id).catch(() => {});
-  for (const [, m] of allMembers) {
-    if (isManagerMember(m)) {
-      await thread.members.add(m.id).catch(() => {});
-    }
-  }
 
   if (!ticketsData.activeTickets) ticketsData.activeTickets = {};
   ticketsData.activeTickets[thread.id] = {
@@ -2101,68 +2127,56 @@ async function openTicketThreadWithData(guild, originChannel, user, realName, re
     threadId: thread.id,
     userId: user.id,
     userTag: user.tag,
+    userAvatar: user.displayAvatarURL(),
     channelId: baseChannel.id,
-    stage: 'WAITING_CLAIM',
+    stage: 'WAITING_AGENT',
     realName: realName,
     reason: reason,
     claimedBy: null,
     claimedByTag: null,
     openedAt: Date.now(),
-    transcript: []
+    lastActivityAt: Date.now(),
+    hasUnreadAgent: true,
+    transcript: [
+      {
+        authorId: user.id,
+        authorTag: user.tag,
+        authorAvatar: user.displayAvatarURL(),
+        content: `[فتح التذكرة] الاسم: ${realName} • السبب: ${reason}`,
+        timestamp: Date.now()
+      }
+    ]
   };
   saveTickets(ticketsData);
 
-  // 1. رسالة الانتظار الكبيرة لصاحب التذكرة
-  const waitingEmbed = new EmbedBuilder()
-    .setColor(0xFEE75C)
-    .setTitle('⏳ في انتظار وكيل الدعم للحضور...')
+  // Clean Welcome Card for the User in the Thread
+  const userWelcomeEmbed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setAuthor({ name: 'مركز الدعم الفني | GX Support Desk', iconURL: guild.iconURL() })
+    .setTitle(`🎫 تذكرة الدعم الفني: ${ticketCode}`)
     .setDescription(
-      `# ⏳ مرحباً بك يا <@${user.id}>\n` +
-      `> ### 📢 تم تسجيل طلبك وإشعار فريق الإدارة بنجاح.\n` +
-      `> ### يرجى الانتظار في هذه القناة، سيتصل بك وكيل الدعم قريباً لمساعدتك!`
+      `مرحباً بك يا <@${user.id}>،\n\n` +
+      `✅ **تم تسجيل واستلام طلبك بنجاح من قبل فريق الدعم الفني.**\n` +
+      `📝 **تفاصيل المشكلة:** ${reason}\n\n` +
+      `💬 يرجى كتابة أي تفاصيل إضافية أو إرسال الصور هنا، وسيقوم وكيل الدعم بالرد عليك مباشرة من لوحة التحكم.`
     )
-    .setFooter({ text: `GX eSports Support Engine • ${ticketCode}` })
+    .setFooter({ text: `GX Support Engine • ${ticketCode}` })
     .setTimestamp();
 
   await thread.send({
     content: `<@${user.id}>`,
-    embeds: [waitingEmbed]
+    embeds: [userWelcomeEmbed]
   });
 
-  // 2. بطاقة التقرير الإداري للمشرفين مع زر السحب
-  const summaryEmbed = new EmbedBuilder()
-    .setColor(0x00D26A)
-    .setAuthor({ name: '📋 تقرير وبيانات طلب الدعم الفني', iconURL: user.displayAvatarURL() })
-    .setTitle(`تقرير التذكرة: ${ticketCode}`)
-    .setDescription(
-      `# 📋 بيانات الملف الإداري للطلب:\n` +
-      `> 👤 **صاحب التذكرة:** <@${user.id}> (\`${user.tag}\`)\n` +
-      `> 📛 **الاسم الحقيقي:** \`${realName}\`\n` +
-      `> 📝 **سبب التذكرة:** ${reason}\n` +
-      `> ⏰ **وقت الفتح:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-      `> 🌐 **عنوان IP:** \`محمي بسياسة خصوصية Discord API\` 🛡️`
-    )
-    .setFooter({ text: `GX eSports Support Engine • اضغط أدناه لسحب واستلام التذكرة` })
-    .setTimestamp();
+  // Notify Executives with direct Web link
+  await sendTicketNotificationToExecutives(guild, user, ticketCode, realName, reason, thread);
 
-  const claimBtn = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`claim_ticket_${thread.id}`)
-      .setLabel('🙋‍♂️ سحب التذكرة واستلام الطلب')
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  await thread.send({
-    content: `${managersRole ? `<@&${managersRole.id}>` : '@MANAGERS'} • تذكرة جديدة جاهزة للاستلام!`,
-    embeds: [summaryEmbed],
-    components: [claimBtn],
-    allowedMentions: { parse: ['roles', 'users'] }
-  });
+  logActivity('ticket', 'Ticket Opened', `${user.tag} opened ${ticketCode} (${reason.slice(0, 30)})`, user);
 
   const logEmbed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setAuthor({ name: '🎫 فتح تذكرة دعم جديدة', iconURL: user.displayAvatarURL() })
-    .setDescription(`قام العضو <@${user.id}> (\`${user.tag}\`) بفتح تذكرة جديدة: <#${thread.id}> (\`${ticketCode}\`).`)
+    .setDescription(`قام العضو <@${user.id}> (\`${user.tag}\`) بفتح تذكرة جديدة: <#${thread.id}> (\`${ticketCode}\`).\n🔗 الإدارة والرد مباشرة عبر: https://gxbot.eshamikh.com/support`)
     .setFooter({ text: `GX eSports Support • ${ticketCode}` })
     .setTimestamp();
   await sendToLogChannel(guild, logEmbed);
@@ -3712,7 +3726,33 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
-  // 2. Intercept any message sent by untrusted members
+  // 2. 🎫 2-WAY SUPPORT DESK LIVE SYNC: If message sent in an active Ticket Thread
+  if (message.channel.isThread()) {
+    const ticketsData = loadTickets();
+    if (ticketsData.activeTickets && ticketsData.activeTickets[message.channel.id]) {
+      const ticket = ticketsData.activeTickets[message.channel.id];
+      if (!ticket.transcript) ticket.transcript = [];
+      const attachments = message.attachments.map(a => a.url);
+
+      ticket.transcript.push({
+        authorId: message.author.id,
+        authorTag: message.author.tag,
+        authorAvatar: message.author.displayAvatarURL(),
+        content: message.content || '',
+        attachments: attachments,
+        timestamp: Date.now(),
+        isAgent: false
+      });
+      ticket.lastActivityAt = Date.now();
+      ticket.hasUnreadAgent = true;
+      saveTickets(ticketsData);
+
+      logActivity('ticket', 'Ticket Message', `${message.author.tag}: ${(message.content || 'Image').slice(0, 50)}`, message.author);
+      return; // Allow ticket communication freely
+    }
+  }
+
+  // 3. Intercept any message sent by untrusted members in general channels
   const isUntrusted = isUntrustedMember(message.member) || message.member?.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
   if (isUntrusted) {
     try {
@@ -8024,7 +8064,153 @@ const healthServer = http.createServer(async (req, res) => {
     }
   }
 
-  // 25. Admin Audit Logs: GET /api/admin/audit-logs
+  // 25. Real-Time Member Autocomplete Search: GET /api/admin/members/search?q=...
+  if (url.startsWith('/api/admin/members/search') && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    try {
+      const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const query = (parsedUrl.searchParams.get('q') || '').trim().toLowerCase();
+
+      const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+      if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+      const members = guild.members.cache;
+      const results = [];
+
+      for (const [, m] of members) {
+        if (results.length >= 30) break;
+        const tag = m.user.tag || '';
+        const username = m.user.username || '';
+        const displayName = m.displayName || '';
+        const id = m.id;
+
+        if (
+          !query ||
+          id.includes(query) ||
+          username.toLowerCase().includes(query) ||
+          displayName.toLowerCase().includes(query) ||
+          tag.toLowerCase().includes(query)
+        ) {
+          results.push({
+            id: m.id,
+            tag: m.user.tag,
+            username: m.user.username,
+            displayName: m.displayName,
+            avatar: m.user.displayAvatarURL(),
+            isBot: m.user.bot,
+            joinedTimestamp: m.joinedTimestamp,
+            roles: m.roles.cache
+              .filter((r) => r.id !== guild.id)
+              .map((r) => ({ id: r.id, name: r.name, color: r.hexColor }))
+          });
+        }
+      }
+
+      return sendJsonResponse(res, 200, { success: true, members: results });
+    } catch (err) {
+      return sendJsonResponse(res, 500, { error: err.message });
+    }
+  }
+
+  // 26. Admin Support Desk - List Tickets: GET /api/admin/tickets
+  if (url === '/api/admin/tickets' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const ticketsData = loadTickets();
+    const activeList = Object.values(ticketsData.activeTickets || {});
+    return sendJsonResponse(res, 200, { success: true, tickets: activeList });
+  }
+
+  // 27. Admin Support Desk - Send Agent Reply: POST /api/admin/tickets/reply
+  if (url === '/api/admin/tickets/reply' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { threadId, replyText, imageUrl, agentName = 'GX Support Agent' } = body;
+
+    const ticketsData = loadTickets();
+    const ticket = ticketsData.activeTickets ? ticketsData.activeTickets[threadId] : null;
+    if (!ticket) return sendJsonResponse(res, 404, { error: 'التذكرة غير موجودة' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const thread = guild?.channels.cache.get(threadId) || (await guild?.channels.fetch(threadId).catch(() => null));
+    if (!thread) return sendJsonResponse(res, 404, { error: 'القناة الفرعية للتذكرة غير موجودة في ديسكورد' });
+
+    const agentEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setAuthor({ name: `${agentName} | GX eSports Support Desk`, iconURL: client.user?.displayAvatarURL() })
+      .setDescription(replyText || '')
+      .setFooter({ text: `GX Support Engine • ${ticket.ticketId}` })
+      .setTimestamp();
+
+    if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:image/'))) {
+      agentEmbed.setImage(imageUrl);
+    }
+
+    await thread.send({ embeds: [agentEmbed] });
+
+    if (!ticket.transcript) ticket.transcript = [];
+    ticket.transcript.push({
+      authorId: client.user.id,
+      authorTag: `${agentName} (الدعم الفني)`,
+      authorAvatar: client.user.displayAvatarURL(),
+      content: replyText || '',
+      attachments: imageUrl ? [imageUrl] : [],
+      timestamp: Date.now(),
+      isAgent: true
+    });
+    ticket.lastActivityAt = Date.now();
+    ticket.hasUnreadAgent = false;
+    ticket.stage = 'IN_PROGRESS';
+    saveTickets(ticketsData);
+
+    logActivity('ticket', 'Support Agent Reply', `Replied to ${ticket.ticketId} via Web Support Desk`);
+    return sendJsonResponse(res, 200, { success: true, message: 'تم إرسال الرد بنجاح إلى ديسكورد', ticket });
+  }
+
+  // 28. Admin Support Desk - Close Ticket: POST /api/admin/tickets/close
+  if (url === '/api/admin/tickets/close' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { threadId, reason = 'تم إغلاق التذكرة بواسطة وكيل الدعم الفني' } = body;
+
+    const ticketsData = loadTickets();
+    const ticket = ticketsData.activeTickets ? ticketsData.activeTickets[threadId] : null;
+    if (!ticket) return sendJsonResponse(res, 404, { error: 'التذكرة غير موجودة' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const thread = guild?.channels.cache.get(threadId) || (await guild?.channels.fetch(threadId).catch(() => null));
+
+    if (thread) {
+      const closeEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '🔒 إغلاق وأرشفة تذكرة الدعم | GX Support', iconURL: client.user?.displayAvatarURL() })
+        .setTitle(`تم إغلاق التذكرة: ${ticket.ticketId}`)
+        .setDescription(
+          `شكراً لتواصلك مع مركز الدعم الفني لسيرفر **${guild.name}**.\n\n📝 **سبب الإغلاق:** ${reason}\n\nنتمنى لك وقتاً ممتعاً في مجتمعنا!`
+        )
+        .setFooter({ text: 'GX Support Engine • تم أرشفة التذكرة' })
+        .setTimestamp();
+
+      await thread.send({ embeds: [closeEmbed] }).catch(() => {});
+      await thread.setArchived(true, `Closed via Support Desk: ${reason}`).catch(() => {});
+    }
+
+    ticket.stage = 'CLOSED';
+    ticket.closedAt = Date.now();
+    saveTickets(ticketsData);
+
+    logActivity('ticket', 'Ticket Closed', `Closed ${ticket.ticketId} via Web Support Desk`);
+    return sendJsonResponse(res, 200, { success: true, message: 'تم إغلاق وأرشفة التذكرة بنجاح' });
+  }
+
+  // 29. Admin Audit Logs: GET /api/admin/audit-logs
   if (url === '/api/admin/audit-logs' && method === 'GET') {
     const session = authenticateAdmin(req);
     if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
@@ -8036,8 +8222,8 @@ const healthServer = http.createServer(async (req, res) => {
     });
   }
 
-  // 15. Serve Static Website Files (Websites/Status)
-  let cleanUrl = url === '/' ? '/index.html' : url;
+  // 30. Serve Static Website Files (Websites/Status)
+  let cleanUrl = url === '/' || url === '/support' || url.startsWith('/support') ? '/index.html' : url;
   let filePath = path.join(STATUS_DIR, cleanUrl.replace(/^\//, ''));
   
   let contentType = 'text/html; charset=utf-8';
