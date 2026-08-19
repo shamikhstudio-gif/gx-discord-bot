@@ -77,14 +77,8 @@ const TAB_METAS = {
 
 function switchTab(tabId) {
   activeTab = tabId;
-  document.querySelectorAll('.nav-group').forEach((g) => g.classList.remove('expanded'));
   document.querySelectorAll('.nav-item[data-tab]').forEach((t) => {
-    const isTarget = t.getAttribute('data-tab') === tabId;
-    t.classList.toggle('active', isTarget);
-    if (isTarget) {
-      const parentGroup = t.closest('.nav-group');
-      if (parentGroup) parentGroup.classList.add('expanded');
-    }
+    t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
   });
   document.querySelectorAll('.tab-content').forEach((c) => {
     c.classList.toggle('active', c.id === `tab-${tabId}`);
