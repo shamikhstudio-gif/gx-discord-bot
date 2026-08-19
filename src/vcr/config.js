@@ -1,39 +1,43 @@
 import dotenv from 'dotenv';
+import { loadVaultEnvironment } from '../security/envVault.js';
+
+// Ensure encrypted vault is loaded into memory
+loadVaultEnvironment();
 dotenv.config();
 
 export const VCR_CONFIGS = [
   { 
     id: '1539231767683137646', 
     name: 'GX VCR #1', 
-    token: process.env.VCR_TOKEN_1?.trim() || '',
+    get token() { return process.env.VCR_TOKEN_1?.trim() || ''; },
     defaultChannelId: '1537461175908958259',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟏'
   },
   { 
     id: '1539241189629362246', 
     name: 'GX VCR #2', 
-    token: process.env.VCR_TOKEN_2?.trim() || '',
+    get token() { return process.env.VCR_TOKEN_2?.trim() || ''; },
     defaultChannelId: '1538568733692530798',
     defaultChannelName: '🔒・فويس الإدارة'
   },
   { 
     id: '1539241414318227466', 
     name: 'GX VCR #3', 
-    token: process.env.VCR_TOKEN_3?.trim() || '',
+    get token() { return process.env.VCR_TOKEN_3?.trim() || ''; },
     defaultChannelId: '1538564154141577276',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟐'
   },
   { 
     id: '1539241621328101497', 
     name: 'GX VCR #4', 
-    token: process.env.VCR_TOKEN_4?.trim() || '',
+    get token() { return process.env.VCR_TOKEN_4?.trim() || ''; },
     defaultChannelId: '1538564786680233984',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟑'
   },
   { 
     id: '1539241867105927209', 
     name: 'GX VCR #5', 
-    token: process.env.VCR_TOKEN_5?.trim() || '',
+    get token() { return process.env.VCR_TOKEN_5?.trim() || ''; },
     defaultChannelId: '1538564321905479731',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟒'
   }
@@ -59,8 +63,12 @@ export const TOP_EXEC_USERNAMES = ['itszoki', 'ice0090'];
 
 // 🔊 Advanced Acoustic Scream & Ear-Rape Calibration
 export const SUSTAINED_SCREAM_RMS_THRESHOLD = 11000;
-export const SUSTAINED_SCREAM_FRAMES_REQUIRED = 3;
+export const SUSTAINED_SCREAM_FRAMES_REQUIRED = 30; // ~1.5 seconds sustained
 export const INSTANT_EAR_RAPE_RMS_THRESHOLD = 16000;
-export const INSTANT_EAR_RAPE_PEAK_THRESHOLD = 29000;
+export const INSTANT_EAR_RAPE_PEAK_THRESHOLD = 32000;
+export const LOUD_SOUND_THRESHOLD = 25000;
 export const MUTE_DURATION_MS = 30000; // Exactly 30 seconds fixed server mute
 export const MUTE_COOLDOWN_MS = 35000;
+export const DEFAULT_SUSTAINED_THRESHOLD = 11000;
+export const DEFAULT_INSTANT_THRESHOLD = 16000;
+export const DEFAULT_MUTE_DURATION_SEC = 30;
