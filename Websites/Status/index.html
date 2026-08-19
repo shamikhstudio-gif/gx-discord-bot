@@ -393,12 +393,29 @@
             <span class="chart-val-badge green">99.9% Target</span>
           </div>
           <div class="gauge-wrap">
-            <svg class="gauge-svg" viewBox="0 0 120 80">
-              <path class="gauge-bg" d="M10,70 A55,55 0 0,1 110,70" stroke-width="10" fill="none"/>
-              <path class="gauge-fill" id="gaugeFill" d="M10,70 A55,55 0 0,1 110,70" stroke-width="10" fill="none"
-                stroke-dasharray="173" stroke-dashoffset="0"/>
+            <svg class="gauge-svg" viewBox="0 0 160 95">
+              <defs>
+                <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#10b981"/>
+                  <stop offset="50%" stop-color="#06b6d4"/>
+                  <stop offset="100%" stop-color="#22c55e"/>
+                </linearGradient>
+                <filter id="gaugeGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur"/>
+                  <feMerge>
+                    <feMergeNode in="blur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              <path class="gauge-bg" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="11" stroke-linecap="round" fill="none"/>
+              <path class="gauge-fill" id="gaugeFill" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="11" stroke-linecap="round" fill="none"
+                stroke="url(#gaugeGrad)" filter="url(#gaugeGlow)" stroke-dasharray="188.5" stroke-dashoffset="0"/>
             </svg>
-            <div class="gauge-label" id="gaugeLabel">99.9%</div>
+            <div class="gauge-center">
+              <div class="gauge-label" id="gaugeLabel">99.9%</div>
+              <div class="gauge-sub">AVAILABILITY</div>
+            </div>
           </div>
         </div>
 
