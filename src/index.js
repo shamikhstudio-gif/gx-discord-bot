@@ -7616,7 +7616,7 @@ const healthServer = http.createServer(async (req, res) => {
 
     const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
     const ticketPanelData = loadTicketPanelData();
-    const eventData = loadActiveEventData();
+    const eventData = loadActiveEvent();
 
     return sendJsonResponse(res, 200, {
       success: true,
@@ -7689,7 +7689,7 @@ const healthServer = http.createServer(async (req, res) => {
       logActivity('admin', 'Panel Removed', 'Removed Ticket Panel via Control Panel');
       return sendJsonResponse(res, 200, { success: true, message: 'تم حذف بانل التذاكر بنجاح' });
     } else if (panelType === 'event') {
-      const e = loadActiveEventData();
+      const e = loadActiveEvent();
       if (e.channelId && e.messageId) {
         const ch = guild.channels.cache.get(e.channelId);
         if (ch) {
@@ -7697,7 +7697,7 @@ const healthServer = http.createServer(async (req, res) => {
           if (msg) await msg.delete().catch(() => {});
         }
       }
-      saveActiveEventData({ channelId: null, messageId: null, active: false });
+      saveActiveEvent({ ...e, channelId: null, messageId: null, status: 'inactive' });
       logActivity('admin', 'Panel Removed', 'Removed Event Panel via Control Panel');
       return sendJsonResponse(res, 200, { success: true, message: 'تم حذف بانل الفعاليات بنجاح' });
     } else {
