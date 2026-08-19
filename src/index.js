@@ -1402,6 +1402,84 @@ function isOwnerOrCeo(member) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────
+// ⏱️ MANAGERS 10-Second Grace Timer & Auto Demotion Engine
+// If no moderating role (LOWER ADMIN, SUPER ADMIN, etc.) for 10s -> Strip MANAGERS and restore MEMBER
+// ─────────────────────────────────────────────────────────────
+const pendingManagerDemotions = new Map(); // memberId -> NodeJS.Timeout
+
+function scheduleManagerDemotionCheck(member) {
+  if (!member || member.user?.bot) return;
+  const guild = member.guild;
+  if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
+
+  const managersRole = findManagersRole(guild);
+  const memberRole = findAutoRole(guild);
+  if (!managersRole) return;
+
+  const hasAdminRole = hasAdminTierRole(member);
+  const hasManagers = member.roles.cache.has(managersRole.id);
+
+  // If user currently HAS an admin tier role, cancel any pending demotion timer immediately!
+  if (hasAdminRole) {
+    if (pendingManagerDemotions.has(member.id)) {
+      clearTimeout(pendingManagerDemotions.get(member.id));
+      pendingManagerDemotions.delete(member.id);
+      console.log(`🛡️ [إلغاء مؤقت الإزالة] تم إلغاء سحب MANAGERS للعضو ${member.user?.tag || member.id} لاستعادته رتبة إدارية.`);
+    }
+    return;
+  }
+
+  // If user has MANAGERS but NO moderating role, start 10-second timer
+  if (hasManagers && !hasAdminRole) {
+    if (pendingManagerDemotions.has(member.id)) return; // Timer already ticking
+
+    console.log(`⏱️ [مؤقت إزالة MANAGERS] العضو ${member.user?.tag || member.id} لا يحمل أي رتبة إدارية. جارٍ العد التنازلي لمدة 10 ثوانٍ لسحب MANAGERS وإعادته إلى MEMBER...`);
+
+    const timer = setTimeout(async () => {
+      pendingManagerDemotions.delete(member.id);
+      try {
+        const freshMember = await guild.members.fetch(member.id).catch(() => null);
+        if (!freshMember) return;
+
+        // Re-verify after 10 seconds: still no admin tier role and still has managers role?
+        if (!hasAdminTierRole(freshMember) && freshMember.roles.cache.has(managersRole.id)) {
+          const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
+
+          // 1. Remove MANAGERS
+          if (botMember && botMember.roles.highest.comparePositionTo(managersRole) > 0) {
+            await freshMember.roles.remove(managersRole).catch(() => {});
+            console.log(`🗑️ [إزالة MANAGERS تلقائية] تم سحب رتبة MANAGERS من ${freshMember.user.tag} لمرور 10 ثوانٍ بدون أي رتبة إدارية.`);
+          }
+
+          // 2. Restore MEMBER role
+          if (memberRole && botMember && botMember.roles.highest.comparePositionTo(memberRole) > 0 && !freshMember.roles.cache.has(memberRole.id)) {
+            await freshMember.roles.add(memberRole).catch(() => {});
+            console.log(`✅ [إعادة رتبة MEMBER] تم إعطاء رتبة MEMBER للعضو ${freshMember.user.tag}.`);
+          }
+
+          // 3. Send log embed
+          const demoteEmbed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setAuthor({ name: '⏱️ إزالة رتبة MANAGERS وإعادته إلى MEMBER', iconURL: freshMember.user.displayAvatarURL() })
+            .setDescription(
+              `تم سحب رتبة <@&${managersRole.id}> تلقائياً من العضو <@${freshMember.id}> (\`${freshMember.user.tag}\`) وإعادته إلى رتبة <@&${memberRole?.id || ''}>\n\n` +
+              `> ⚠️ **السبب:** لم يتم العثور على أي رتبة إشرافية/إدارية عليا (\`LOWER ADMIN\`, \`SUPER ADMIN\`, \`MIDDLE ADMIN\`, \`COO\`, \`CEO\`, \`OWNER\`) لمدة **10 ثوانٍ**.`
+            )
+            .setFooter({ text: `GX eSports Auto-Demote • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+
+          await sendToLogChannel(guild, demoteEmbed);
+        }
+      } catch (err) {
+        console.error(`❌ خطأ في معالجة إزالة MANAGERS للعضو ${member.id}:`, err.message);
+      }
+    }, 10000); // 10 Seconds Exact
+
+    pendingManagerDemotions.set(member.id, timer);
+  }
+}
+
 /**
  * 👑 Checks if a user is authorized to grant, upgrade, or revoke roles (@itszoki or @ice0090).
  */
@@ -2485,6 +2563,10 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
 
       // 1. If user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN -> Ensure they have MANAGERS role
       if (hasAdminRole && managersRole && !member.roles.cache.has(managersRole.id)) {
+        if (pendingManagerDemotions.has(member.id)) {
+          clearTimeout(pendingManagerDemotions.get(member.id));
+          pendingManagerDemotions.delete(member.id);
+        }
         try {
           if (botMember.roles.highest.comparePositionTo(managersRole) > 0) {
             await member.roles.add(managersRole);
@@ -2503,6 +2585,11 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
         } catch (err) {
           console.error(`❌ تعذر منح رتبة MANAGERS للعضو ${member.user.tag}:`, err.message);
         }
+      }
+
+      // If user has MANAGERS role without any Admin Tier role -> Trigger 10-second grace demotion check
+      if (managersRole && member.roles.cache.has(managersRole.id) && !hasAdminRole) {
+        scheduleManagerDemotionCheck(member);
       }
 
       // 2. If Manager has MEMBER or UNTRUSTED role -> REMOVE IT!
@@ -3903,6 +3990,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
     // Auto-grant MANAGERS role if user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN
     if (hasAdminTierRole(newMember)) {
+      scheduleManagerDemotionCheck(newMember); // Cancels any pending demotion timer
       const managersRole = findManagersRole(newMember.guild);
       if (managersRole && !newMember.roles.cache.has(managersRole.id)) {
         try {
@@ -3919,10 +4007,8 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
           console.error(`خطأ في منح رتبة MANAGERS للإداري ${newMember.user.tag}:`, err.message);
         }
       }
-    }
 
-    // Auto-strip MEMBER role if user is/became a MANAGER
-    if (isManagerMember(newMember) || hasAdminTierRole(newMember)) {
+      // Auto-strip MEMBER role if user is an Admin / Manager
       const autoRole = findAutoRole(newMember.guild);
       if (autoRole && newMember.roles.cache.has(autoRole.id)) {
         try {
@@ -3939,6 +4025,9 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
           console.error(`خطأ في سحب الرتبة من الإداري ${newMember.user.tag}:`, err.message);
         }
       }
+    } else {
+      // User has NO admin tier role: if they have MANAGERS, trigger the 10-second grace timer
+      scheduleManagerDemotionCheck(newMember);
     }
   }
 
