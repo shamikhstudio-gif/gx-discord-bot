@@ -383,21 +383,22 @@
           <canvas id="chartMem" height="90"></canvas>
         </div>
 
-        <!-- Uptime Gauge -->
-        <div class="chart-card chart-card-sm">
+        <!-- Uptime SLA Gauge -->
+        <div class="chart-card chart-card-gauge">
           <div class="chart-card-header">
             <div class="chart-card-title">
               <span class="chart-dot green"></span>
-              Uptime %
+              Operational SLA
             </div>
+            <span class="chart-val-badge green">99.9% Target</span>
           </div>
           <div class="gauge-wrap">
             <svg class="gauge-svg" viewBox="0 0 120 80">
               <path class="gauge-bg" d="M10,70 A55,55 0 0,1 110,70" stroke-width="10" fill="none"/>
               <path class="gauge-fill" id="gaugeFill" d="M10,70 A55,55 0 0,1 110,70" stroke-width="10" fill="none"
-                stroke-dasharray="173" stroke-dashoffset="173"/>
+                stroke-dasharray="173" stroke-dashoffset="0"/>
             </svg>
-            <div class="gauge-label" id="gaugeLabel">--%</div>
+            <div class="gauge-label" id="gaugeLabel">99.9%</div>
           </div>
         </div>
 
