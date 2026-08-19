@@ -14,13 +14,30 @@ let activeTicketThreadId = null;
 let activeTab = 'overview';
 let activeModalAppealId = null;
 let ticketFilter = 'all';
+let verificationFilter = 'pending';
 let serverChannels = [];
 let serverRoles = [];
+
+/* ══════════════════════════════════════════════════════
+   NOTIFICATION CENTER STATE
+   ══════════════════════════════════════════════════════ */
+let notifications = [];
+let unreadNotifCount = 0;
 
 /* ══════════════════════════════════════════════════════
    DOM HELPERS & TOAST
    ══════════════════════════════════════════════════════ */
 const $ = (id) => document.getElementById(id);
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function showToast(message, type = 'info') {
   const container = $('toastContainer');
@@ -33,6 +50,131 @@ function showToast(message, type = 'info') {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
   }, 4000);
+}
+
+/* ══════════════════════════════════════════════════════
+   ACCORDION NAVIGATION & TAB SWITCHING
+   ══════════════════════════════════════════════════════ */
+window.toggleNavGroup = (headerEl) => {
+  const group = headerEl.closest('.nav-group');
+  if (group) {
+    group.classList.toggle('expanded');
+  }
+};
+
+const TAB_METAS = {
+  overview: { title: 'نظرة عامة على النظام', sub: 'المؤشرات التشغيلية والقياسات الحية اللحظية' },
+  support: { title: 'مركز الدعم الفني المباشر', sub: 'منصة المحادثة المباشرة ثنائية الاتجاه مع أعضاء ديسكورد' },
+  moderation: { title: 'مركز الإشراف والأدوات الإدارية', sub: 'تنفيذ القرارات الإدارية وعمليات العقاب والعزل من الموقع' },
+  verifications: { title: 'مركز مراجعة وتوثيق الوافدين (Gatekeeper)', sub: 'إدارة طلبات الوافدين برتبة UNTRUSTED والبت الفوري في منحهم رتبة MEMBER أو أرشفتها' },
+  appeals: { title: 'مركز مراجعة الطعون والالتماسات', sub: 'مراجعة طلبات فك الحظر والبت الفوري فيها' },
+  panels: { title: 'مدير البانلات والرسائل التفاعلية', sub: 'نشر وإدارة رسائل وإمبدات التفاعل في قنوات ديسكورد' },
+  vcr: { title: 'أسطول مسجلات الصوت (GX VCR Fleet)', sub: '5 مسجلات صوتية ذاتية ومقفولة في روماتها' },
+  security: { title: 'درع الأمان ومزامنة الرتب الشاملة', sub: 'فحص رتب السيرفر وخوارزميات الحماية الصوتية' },
+  broadcast: { title: 'استوديو البث والإعلانات الرسمية', sub: 'إرسال ونشر الإعلانات الرسمية إلى رومات السيرفر' },
+  logs: { title: 'سجل الأحداث والعمليات اللحظي', sub: 'مراقبة حية لكافة عمليات البوت والنشاط الأمني' }
+};
+
+function switchTab(tabId) {
+  activeTab = tabId;
+  document.querySelectorAll('.nav-item[data-tab]').forEach((t) => {
+    const isTarget = t.getAttribute('data-tab') === tabId;
+    t.classList.toggle('active', isTarget);
+    if (isTarget) {
+      const parentGroup = t.closest('.nav-group');
+      if (parentGroup) parentGroup.classList.add('expanded');
+    }
+  });
+  document.querySelectorAll('.tab-content').forEach((c) => {
+    c.classList.toggle('active', c.id === `tab-${tabId}`);
+  });
+
+  const meta = TAB_METAS[tabId] || { title: 'لوحة التحكم', sub: 'عمليات GX' };
+  if ($('pageTitle')) $('pageTitle').textContent = meta.title;
+  if ($('pageSubtitle')) $('pageSubtitle').textContent = meta.sub;
+
+  if (tabId === 'support') loadSupportTickets();
+  if (tabId === 'verifications') loadVerifications();
+  if (tabId === 'appeals') loadAppeals();
+  if (tabId === 'panels') loadPanels();
+  if (tabId === 'moderation') loadModData();
+}
+
+/* ══════════════════════════════════════════════════════
+   NOTIFICATION CENTER LOGIC
+   ══════════════════════════════════════════════════════ */
+function addNotification(type, title, desc, linkTab = null) {
+  const notif = {
+    id: Date.now() + Math.random().toString(36).substr(2, 4),
+    type,
+    title,
+    desc,
+    linkTab,
+    time: Date.now(),
+    read: false
+  };
+  notifications.unshift(notif);
+  if (notifications.length > 40) notifications.pop();
+  unreadNotifCount++;
+  renderNotifications();
+}
+
+function renderNotifications() {
+  const listEl = $('notifList');
+  const badgeEl = $('notifBadge');
+  if (badgeEl) {
+    badgeEl.textContent = unreadNotifCount;
+    badgeEl.classList.toggle('hidden', unreadNotifCount === 0);
+  }
+  if (!listEl) return;
+
+  if (notifications.length === 0) {
+    listEl.innerHTML = '<div class="notif-empty">لا توجد تنبيهات جديدة في الوقت الحالي</div>';
+    return;
+  }
+
+  listEl.innerHTML = notifications.map(n => `
+    <div class="notif-item ${n.read ? '' : 'unread'}" onclick="handleNotifClick('${n.id}', '${n.linkTab || ''}')">
+      <div class="notif-icon-box">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          ${n.type === 'security' ? '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>' :
+            n.type === 'support' ? '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>' :
+            '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'}
+        </svg>
+      </div>
+      <div class="notif-content">
+        <div class="notif-item-title">${escapeHtml(n.title)}</div>
+        <div class="notif-item-desc">${escapeHtml(n.desc)}</div>
+        <div class="notif-item-time">${formatTimeAgo(n.time)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.handleNotifClick = (id, linkTab) => {
+  const notif = notifications.find(n => n.id === id);
+  if (notif && !notif.read) {
+    notif.read = true;
+    unreadNotifCount = Math.max(0, unreadNotifCount - 1);
+    renderNotifications();
+  }
+  $('notifDropdown')?.classList.remove('open');
+  if (linkTab) switchTab(linkTab);
+};
+
+window.markAllNotificationsRead = () => {
+  notifications.forEach(n => n.read = true);
+  unreadNotifCount = 0;
+  renderNotifications();
+  showToast('تم تحديد جميع الإشعارات كمقروءة', 'info');
+};
+
+function formatTimeAgo(timestamp) {
+  const diff = Math.floor((Date.now() - timestamp) / 1000);
+  if (diff < 60) return 'الآن';
+  if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
+  if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
+  return `منذ ${Math.floor(diff / 86400)} يوم`;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -71,11 +213,21 @@ document.addEventListener('DOMContentLoaded', () => {
   $('togglePw')?.addEventListener('click', togglePasswordVisibility);
   $('btnLogout')?.addEventListener('click', handleLogout);
 
-  // Search & Filter Appeals, Support Tickets & Verifications
+  // Setup Notifications Toggle & Click Outside
+  $('btnNotificationsToggle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('notifDropdown')?.classList.toggle('open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.notif-wrapper')) {
+      $('notifDropdown')?.classList.remove('open');
+    }
+  });
+
+  // Search & Filter Appeals & Support Tickets
   $('searchAppeals')?.addEventListener('input', renderAppealsTable);
   $('filterAppealStatus')?.addEventListener('change', renderAppealsTable);
-  $('searchVerifications')?.addEventListener('input', renderVerificationsTable);
-  $('filterVerificationStatus')?.addEventListener('change', renderVerificationsTable);
   $('searchSupportTickets')?.addEventListener('input', renderSupportTicketsList);
 
   // Setup Ticket Filter Chips
@@ -136,12 +288,13 @@ async function handleLogin() {
       adminToken = data.token;
       sessionStorage.setItem('gx_admin_token', adminToken);
       hideAuthOverlay();
-      showToast('✅ تم توثيق الدخول بنجاح! مرحباً بك في مركز قيادة GX eSports.', 'success');
+      showToast('تم توثيق الدخول بنجاح! مرحباً بك في مركز قيادة GX eSports.', 'success');
       loadAppeals();
       loadVerifications();
       loadPanels();
       loadModData();
       loadSupportTickets();
+      addNotification('security', 'تسجيل دخول جديد', 'تم تسجيل الدخول بنجاح إلى لوحة التحكم الرئيسية.');
     } else {
       if (errorEl) errorEl.textContent = data.error || 'كلمة المرور الرئيسية غير صحيحة.';
     }
@@ -178,42 +331,6 @@ function handleLogout() {
   sessionStorage.removeItem('gx_admin_token');
   showAuthOverlay();
   showToast('تم قفل الجلسة بنجاح.', 'info');
-}
-
-/* ══════════════════════════════════════════════════════
-   TAB SWITCHING & TITLES (ARABIC)
-   ══════════════════════════════════════════════════════ */
-const TAB_METAS = {
-  overview: { title: 'نظرة عامة على النظام', sub: 'المؤشرات التشغيلية والقياسات الحية اللحظية' },
-  support: { title: 'مركز الدعم الفني المباشر', sub: 'منصة المحادثة المباشرة ثنائية الاتجاه مع أعضاء ديسكورد' },
-  moderation: { title: 'مركز الإشراف والأدوات الإدارية', sub: 'تنفيذ القرارات الإدارية وعمليات العقاب والعزل من الموقع' },
-  verifications: { title: 'مركز مراجعة وتوثيق الوافدين (Gatekeeper)', sub: 'إدارة طلبات الوافدين برتبة UNTRUSTED والبت الفوري في منحهم رتبة MEMBER أو طردهم من الموقع' },
-  appeals: { title: 'مركز مراجعة الطعون والالتماسات', sub: 'مراجعة طلبات فك الحظر والبت الفوري فيها' },
-  panels: { title: 'مدير البانلات والرسائل التفاعلية', sub: 'نشر وإدارة رسائل وإمبدات التفاعل في قنوات ديسكورد' },
-  vcr: { title: 'أسطول مسجلات الصوت (GX VCR Fleet)', sub: '5 مسجلات صوتية ذاتية ومقفولة في روماتها' },
-  security: { title: 'درع الأمان ومزامنة الرتب الشاملة', sub: 'فحص رتب السيرفر وخوارزميات الحماية الصوتية' },
-  broadcast: { title: 'استوديو البث والإعلانات الرسمية', sub: 'إرسال ونشر الإعلانات الرسمية إلى رومات السيرفر' },
-  logs: { title: 'سجل الأحداث والعمليات اللحظي', sub: 'مراقبة حية لكافة عمليات البوت والنشاط الأمني' }
-};
-
-function switchTab(tabId) {
-  activeTab = tabId;
-  document.querySelectorAll('.nav-item[data-tab]').forEach((t) => {
-    t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
-  });
-  document.querySelectorAll('.tab-content').forEach((c) => {
-    c.classList.toggle('active', c.id === `tab-${tabId}`);
-  });
-
-  const meta = TAB_METAS[tabId] || { title: 'لوحة التحكم', sub: 'عمليات GX' };
-  if ($('pageTitle')) $('pageTitle').textContent = meta.title;
-  if ($('pageSubtitle')) $('pageSubtitle').textContent = meta.sub;
-
-  if (tabId === 'support') loadSupportTickets();
-  if (tabId === 'verifications') loadVerifications();
-  if (tabId === 'appeals') loadAppeals();
-  if (tabId === 'panels') loadPanels();
-  if (tabId === 'moderation') loadModData();
 }
 
 /* ══════════════════════════════════════════════════════
@@ -290,7 +407,7 @@ function renderMemberDropdownResults(members, container, onSelect) {
         <img src="${m.avatar || ''}" class="member-avatar-sm" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="" />
         <div class="member-info-col">
           <span class="member-tag-line">${escapeHtml(m.displayName || m.username)} <span style="color:var(--text-muted); font-size:11px;">(${escapeHtml(m.tag)})</span></span>
-          <span class="member-id-line">${m.id} ${m.isBot ? '• 🤖 بوت' : ''}</span>
+          <span class="member-id-line">${m.id} ${m.isBot ? '• بوت' : ''}</span>
         </div>
       </div>
     `
@@ -374,7 +491,7 @@ function renderSupportTicketsList() {
           <div class="ticket-preview-text">${escapeHtml(lastMsg || '')}</div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
             <span class="ticket-status-pill ${isClosed ? 'closed' : 'open'}">
-              ${isClosed ? '🔒 مغلقة' : '🟢 نشطة'}
+              ${isClosed ? 'مغلقة' : 'نشطة'}
             </span>
             ${t.hasUnreadAgent && !isClosed ? `<span class="unread-dot-badge" title="رسالة جديدة"></span>` : ''}
           </div>
@@ -402,11 +519,11 @@ window.selectSupportTicket = (threadId, autoScroll = true) => {
     quickActions.innerHTML = `
       ${ticket.stage !== 'CLOSED' ? `
         <button class="btn-chat-action archive" onclick="closeSupportTicket('${ticket.threadId}')" title="أرشفة وإغلاق التذكرة في ديسكورد">
-          <span>🔒 أرشفة وإغلاق</span>
+          <span>أرشفة وإغلاق</span>
         </button>
       ` : ''}
       <button class="btn-chat-action delete" onclick="deleteSupportTicket('${ticket.threadId}')" title="حذف التذكرة نهائياً من السيرفر والقاعدة">
-        <span>🗑️ حذف نهائي</span>
+        <span>حذف نهائي</span>
       </button>
     `;
   }
@@ -448,14 +565,11 @@ function renderTranscript(transcript, ticket) {
           <img src="${avatarUrl}" class="msg-avatar" alt="" />
           <div class="msg-content-block">
             <div class="msg-header">
-              <span class="msg-author-name">${isAgent ? 'وكيل الدعم الفني' : escapeHtml(ticket.userTag)}</span>
-              ${isAgent ? '<span class="msg-author-badge">GX SUPPORT</span>' : ''}
-              <span class="msg-time">• ${timeStr}</span>
+              <span class="msg-author">${escapeHtml(msg.authorTag)} ${isAgent ? '<span class="msg-agent-tag">فريق الدعم</span>' : ''}</span>
+              <span class="msg-time">${timeStr}</span>
             </div>
-            <div class="msg-bubble">
-              ${escapeHtml(msg.content || '')}
-              ${imagesHtml}
-            </div>
+            <div class="msg-text">${escapeHtml(msg.content)}</div>
+            ${imagesHtml}
           </div>
         </div>
       `;
@@ -467,84 +581,110 @@ function renderTicketDetailsSidebar(ticket) {
   const container = $('supportDetailsContent');
   if (!container) return;
 
+  const durationHours = Math.round(((Date.now() - (ticket.openedAt || Date.now())) / 3600000) * 10) / 10;
+  const isClosed = ticket.stage === 'CLOSED';
+
   container.innerHTML = `
-    <div class="profile-card-centered">
-      <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="profile-avatar-lg" alt="" />
-      <div class="profile-user-tag">${escapeHtml(ticket.userTag || 'غير معروف')}</div>
-      <div class="profile-user-id-badge" onclick="copyText('${ticket.userId}')" title="اضغط لنسخ المعرف">
-        🆔 ${ticket.userId} 📋
+    <div class="detail-card-section">
+      <div class="detail-user-card">
+        <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="detail-user-avatar" alt="" />
+        <div class="detail-user-titles">
+          <h4>${escapeHtml(ticket.realName || ticket.userTag)}</h4>
+          <span class="mono">${ticket.userTag}</span>
+        </div>
+      </div>
+
+      <div class="detail-key-val-list">
+        <div class="detail-row">
+          <span class="detail-label">معرف المستخدم:</span>
+          <span class="detail-val mono">${ticket.userId}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">تاريخ الإنشاء:</span>
+          <span class="detail-val">${new Date(ticket.openedAt || Date.now()).toLocaleDateString('ar-SA')}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">الحالة الحالية:</span>
+          <span class="detail-val font-weight-bold ${isClosed ? 'text-danger' : 'text-success'}">
+            ${isClosed ? 'مغلقة ومؤرشفة' : 'نشطة ومباشرة'}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">سبب التذكرة:</span>
+          <span class="detail-val">${escapeHtml(ticket.reason || 'عام')}</span>
+        </div>
       </div>
     </div>
-    
-    <div class="detail-row">
-      <span class="detail-label">رقم التذكرة</span>
-      <span class="detail-value mono" style="color:#5865f2;">${ticket.ticketId}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">الاسم المسجل</span>
-      <span class="detail-value">${escapeHtml(ticket.realName || 'لم يُحدد')}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">حالة التذكرة</span>
-      <span class="detail-value">${ticket.stage === 'CLOSED' ? '🔒 مغلقة ومؤرشفة' : '🟢 نشطة ومفتوحة'}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">وقت الفتح</span>
-      <span class="detail-value">${new Date(ticket.openedAt || Date.now()).toLocaleDateString('ar-SA')}</span>
-    </div>
 
-    <div style="margin-top: 10px;">
-      <div style="font-size: 11.5px; color: var(--text-sub); font-weight:700; margin-bottom:6px;">وصف المشكلة:</div>
-      <div class="issue-box">
-        ${escapeHtml(ticket.reason || 'لا يوجد وصف')}
-      </div>
-    </div>
-
-    <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
-      ${ticket.stage !== 'CLOSED' ? `
-        <button class="btn-action" style="width:100%; border-color:var(--amber); color:var(--amber);" onclick="closeSupportTicket('${ticket.threadId}')">
-          🔒 أرشفة وإغلاق التذكرة
+    <div class="detail-card-section">
+      <div class="detail-section-title">إجراءات سريعة على العضو</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn-action danger" style="width:100%; font-size:12px;" onclick="quickModTimeout('${ticket.userId}')">
+          كتم العضو (10 دقائق)
         </button>
-      ` : ''}
-      <button class="btn-action danger" style="width:100%;" onclick="deleteSupportTicket('${ticket.threadId}')">
-        🗑️ حذف التذكرة نهائياً
-      </button>
+        <button class="btn-action" style="width:100%; font-size:12px;" onclick="copyUserId('${ticket.userId}')">
+          نسخ معرف العضو (ID)
+        </button>
+      </div>
     </div>
   `;
 }
 
-window.copyText = (text) => {
-  navigator.clipboard.writeText(text);
-  showToast('تم نسخ المعرف إلى الحافظة! 📋', 'success');
+window.copyUserId = (id) => {
+  navigator.clipboard.writeText(id);
+  showToast(`تم نسخ المعرف: ${id}`, 'info');
 };
 
-window.insertCanned = (text) => {
-  const input = $('agentReplyInput');
-  if (!input) return;
-  input.value = text;
-  input.focus();
+window.quickModTimeout = async (userId) => {
+  if (!adminToken || !userId) return;
+  showToast('جارٍ تطبيق الكتم السريع…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId: userId, durationMinutes: 10, reason: 'كتم سريع من شات الدعم الفني' })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('تم كتم العضو لمدة 10 دقائق بنجاح', 'success');
+    } else {
+      showToast(data.error || 'فشل الكتم', 'error');
+    }
+  } catch {
+    showToast('خطأ في الاتصال', 'error');
+  }
 };
 
 window.handleAgentKey = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    window.sendSupportAgentReply();
+    sendSupportAgentReply();
+  }
+};
+
+window.insertCanned = (text) => {
+  const input = $('agentReplyInput');
+  if (input) {
+    input.value = text;
+    input.focus();
   }
 };
 
 window.sendSupportAgentReply = async () => {
-  if (!adminToken || !activeTicketThreadId) return;
-  const replyInput = $('agentReplyInput');
-  const imageInput = $('agentImageInput');
-  const replyText = replyInput?.value.trim() || '';
-  const imageUrl = imageInput?.value.trim() || null;
+  if (!adminToken) return showToast('يرجى تسجيل الدخول أولاً', 'error');
+  if (!activeTicketThreadId) return showToast('يرجى تحديد تذكرة دعم فني أولاً', 'warning');
 
-  if (!replyText && !imageUrl) {
-    showToast('يرجى كتابة نص الرد أو وضع رابط الصورة', 'error');
-    return;
+  const contentInput = $('agentReplyInput');
+  const imageInput = $('agentImageInput');
+  const content = contentInput?.value.trim() || '';
+  const imageUrl = imageInput?.value.trim() || '';
+
+  if (!content && !imageUrl) {
+    return showToast('يرجى كتابة نص الرسالة أو إرفاق رابط صورة', 'warning');
   }
 
-  showToast('جارٍ إرسال الرد إلى ديسكورد…', 'info');
+  showToast('جارٍ إرسال رد الدعم الفني…', 'info');
+
   try {
     const res = await fetch(`${API_BASE}/api/admin/tickets/reply`, {
       method: 'POST',
@@ -554,17 +694,16 @@ window.sendSupportAgentReply = async () => {
       },
       body: JSON.stringify({
         threadId: activeTicketThreadId,
-        replyText,
-        imageUrl,
-        agentName: 'وكيل الدعم الفني (GX Support)'
+        content,
+        imageUrl
       })
     });
 
     const data = await res.json();
     if (res.ok && data.success) {
-      if (replyInput) replyInput.value = '';
+      if (contentInput) contentInput.value = '';
       if (imageInput) imageInput.value = '';
-      showToast('✅ تم تسليم الرد للعضو في ديسكورد بنجاح!', 'success');
+      showToast('تم إرسال الرد بنجاح إلى ديسكورد!', 'success');
       loadSupportTickets();
     } else {
       showToast(data.error || 'فشل إرسال الرد', 'error');
@@ -576,128 +715,96 @@ window.sendSupportAgentReply = async () => {
 
 window.closeSupportTicket = async (threadId) => {
   if (!adminToken) return;
-  const id = threadId || activeTicketThreadId;
-  if (!confirm('هل تريد أرشفة وإغلاق هذه التذكرة في ديسكورد؟')) return;
-
-  showToast('جارٍ إغلاق التذكرة…', 'info');
+  showToast('جارٍ أرشفة وإغلاق التذكرة…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/tickets/close`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({
-        threadId: id,
-        reason: 'تم الحل والإغلاق عبر مركز الدعم الفني بالموقع'
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ threadId })
     });
-
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('🔒 تم إغلاق وأرشفة التذكرة بنجاح في ديسكورد!', 'success');
+      showToast('تم إغلاق وأرشفة التذكرة بنجاح', 'success');
       loadSupportTickets();
     } else {
       showToast(data.error || 'فشل إغلاق التذكرة', 'error');
     }
   } catch {
-    showToast('خطأ في الشبكة أثناء إغلاق التذكرة', 'error');
+    showToast('خطأ في الاتصال أثناء إغلاق التذكرة', 'error');
   }
 };
 
 window.deleteSupportTicket = async (threadId) => {
   if (!adminToken) return;
-  const id = threadId || activeTicketThreadId;
-  if (!confirm('⚠️ تحذير: هل أنت متأكد من حذف التذكرة والقناة نهائياً من ديسكورد وقاعدة البيانات؟')) return;
-
+  if (!confirm('هل أنت متأكد من رغبتك في حذف هذه التذكرة نهائياً؟')) return;
   showToast('جارٍ حذف التذكرة نهائياً…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/tickets/delete`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({ threadId: id })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ threadId })
     });
-
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('🗑️ تم حذف التذكرة والقناة نهائياً!', 'success');
-      if (activeTicketThreadId === id) {
-        activeTicketThreadId = null;
-        const stream = $('supportMessagesStream');
-        if (stream) {
-          stream.innerHTML = `
-            <div class="chat-placeholder-state">
-              <div class="chat-placeholder-icon">💬</div>
-              <h4>تم حذف التذكرة بنجاح</h4>
-              <p>اختر تذكرة أخرى من القائمة للمتابعة</p>
-            </div>
-          `;
-        }
-        if ($('chatUserTitle')) $('chatUserTitle').textContent = 'اختر تذكرة للبدء';
-        if ($('chatTicketCode')) $('chatTicketCode').textContent = 'لم يتم تحديد جلسة دعم فني';
-        if ($('chatQuickActions')) $('chatQuickActions').innerHTML = '';
-        if ($('supportDetailsContent')) $('supportDetailsContent').innerHTML = '<div class="details-empty-placeholder">اختر تذكرة لعرض تفاصيل العضو</div>';
-      }
+      showToast('تم حذف التذكرة نهائياً بنجاح', 'success');
+      activeTicketThreadId = null;
       loadSupportTickets();
     } else {
       showToast(data.error || 'فشل حذف التذكرة', 'error');
     }
   } catch {
-    showToast('خطأ في الشبكة أثناء حذف التذكرة', 'error');
+    showToast('خطأ في الاتصال أثناء حذف التذكرة', 'error');
   }
 };
 
 /* ══════════════════════════════════════════════════════
-   MODERATION METADATA & SELECTORS (ARABIC)
+   MODERATION MODULE (ARABIC)
    ══════════════════════════════════════════════════════ */
 async function loadModData() {
   if (!adminToken) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/data`, {
+    const res = await fetch(`${API_BASE}/api/admin/channels`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
       const data = await res.json();
       serverChannels = data.channels || [];
       serverRoles = data.roles || [];
-      populateModDropdowns();
+      populateModSelects();
     }
   } catch {}
 }
 
-function populateModDropdowns() {
-  const textChannels = serverChannels.filter((c) => c.type === 'text');
-  const channelOptions = textChannels
-    .map((c) => `<option value="${c.id}">#${escapeHtml(c.name)} (${c.id})</option>`)
-    .join('');
+function populateModSelects() {
+  const channelSelects = [
+    $('purgeChannelSelect'),
+    $('lockChannelSelect'),
+    $('slowmodeChannelSelect'),
+    $('broadcastChannelSelect')
+  ];
 
-  if ($('purgeChannelSelect')) $('purgeChannelSelect').innerHTML = channelOptions;
-  if ($('lockChannelSelect')) $('lockChannelSelect').innerHTML = channelOptions;
-  if ($('slowmodeChannelSelect')) $('slowmodeChannelSelect').innerHTML = channelOptions;
-  if ($('broadcastChannelSelect')) $('broadcastChannelSelect').innerHTML = channelOptions;
+  channelSelects.forEach((sel) => {
+    if (!sel) return;
+    sel.innerHTML = serverChannels
+      .map((c) => `<option value="${c.id}"># ${escapeHtml(c.name)}</option>`)
+      .join('');
+  });
 
-  const roleOptions = serverRoles
-    .map((r) => {
-      const flag = r.isManageable === false ? ' ⚠️ (أعلى من رتبة البوت)' : '';
-      return `<option value="${r.id}" ${r.isManageable === false ? 'style="color:#f59e0b;"' : ''}>@${escapeHtml(r.name)}${flag}</option>`;
-    })
-    .join('');
-  if ($('roleSelect')) $('roleSelect').innerHTML = roleOptions;
+  const roleSel = $('roleSelect');
+  if (roleSel) {
+    roleSel.innerHTML = serverRoles
+      .map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`)
+      .join('');
+  }
 }
 
-/* ══════════════════════════════════════════════════════
-   MODERATION ACTION HANDLERS (ARABIC)
-   ══════════════════════════════════════════════════════ */
 window.submitModBan = async () => {
   const targetId = $('banUserId')?.value.trim();
-  const reason = $('banReason')?.value.trim();
-  const deleteMessageDays = parseInt($('banDeleteDays')?.value || '0');
-  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
+  const reason = $('banReason')?.value.trim() || 'مخالفة القوانين';
+  const deleteMessageDays = parseInt($('banDeleteDays')?.value || '0', 10);
+  if (!targetId) return showToast('يرجى إدخال معرف العضو', 'error');
 
-  showToast(`جارٍ تنفيذ الحظر النهائي على ${targetId}…`, 'info');
+  showToast('جارٍ تنفيذ الحظر النهائي…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/ban`, {
       method: 'POST',
@@ -709,7 +816,7 @@ window.submitModBan = async () => {
       showToast(data.message || 'تم حظر العضو بنجاح', 'success');
       $('banUserId').value = '';
     } else {
-      showToast(data.error || 'فشل حظر العضو', 'error');
+      showToast(data.error || 'فشل الحظر', 'error');
     }
   } catch {
     showToast('خطأ في الاتصال أثناء تنفيذ الحظر', 'error');
@@ -718,10 +825,10 @@ window.submitModBan = async () => {
 
 window.submitModUnban = async () => {
   const targetId = $('unbanUserId')?.value.trim();
-  const reason = $('unbanReason')?.value.trim();
-  if (!targetId) return showToast('يرجى إدخال معرف العضو المحظور', 'error');
+  const reason = $('unbanReason')?.value.trim() || 'عفو وقبول الطعن';
+  if (!targetId) return showToast('يرجى إدخال معرف العضو', 'error');
 
-  showToast(`جارٍ فك الحظر عن ${targetId}…`, 'info');
+  showToast('جارٍ فك الحظر…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/unban`, {
       method: 'POST',
@@ -742,10 +849,10 @@ window.submitModUnban = async () => {
 
 window.submitModKick = async () => {
   const targetId = $('kickUserId')?.value.trim();
-  const reason = $('kickReason')?.value.trim();
-  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
+  const reason = $('kickReason')?.value.trim() || 'طرد إداري';
+  if (!targetId) return showToast('يرجى إدخال معرف العضو', 'error');
 
-  showToast(`جارٍ طرد العضو ${targetId}…`, 'info');
+  showToast('جارٍ تنفيذ الطرد…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/kick`, {
       method: 'POST',
@@ -757,7 +864,7 @@ window.submitModKick = async () => {
       showToast(data.message || 'تم طرد العضو بنجاح', 'success');
       $('kickUserId').value = '';
     } else {
-      showToast(data.error || 'فشل طرد العضو', 'error');
+      showToast(data.error || 'فشل الطرد', 'error');
     }
   } catch {
     showToast('خطأ في الاتصال أثناء تنفيذ الطرد', 'error');
@@ -766,11 +873,11 @@ window.submitModKick = async () => {
 
 window.submitModTimeout = async () => {
   const targetId = $('timeoutUserId')?.value.trim();
-  const durationMinutes = parseInt($('timeoutDuration')?.value || '10');
-  const reason = $('timeoutReason')?.value.trim();
-  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
+  const durationMinutes = parseInt($('timeoutDuration')?.value || '10', 10);
+  const reason = $('timeoutReason')?.value.trim() || 'كتم إداري';
+  if (!targetId) return showToast('يرجى إدخال معرف العضو', 'error');
 
-  showToast(`جارٍ تطبيق الكتم لمدة ${durationMinutes} دقيقة على ${targetId}…`, 'info');
+  showToast('جارٍ تطبيق الكتم…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
       method: 'POST',
@@ -779,8 +886,7 @@ window.submitModTimeout = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message || 'تم تطبيق الكتم بنجاح', 'success');
-      $('timeoutUserId').value = '';
+      showToast(data.message || 'تم كتم العضو بنجاح', 'success');
     } else {
       showToast(data.error || 'فشل تطبيق الكتم', 'error');
     }
@@ -791,19 +897,18 @@ window.submitModTimeout = async () => {
 
 window.submitModUntimeout = async () => {
   const targetId = $('timeoutUserId')?.value.trim();
-  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
+  if (!targetId) return showToast('يرجى إدخال معرف العضو', 'error');
 
-  showToast(`جارٍ إلغاء الكتم عن ${targetId}…`, 'info');
+  showToast('جارٍ إلغاء الكتم…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/untimeout`, {
+    const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
-      body: JSON.stringify({ targetId })
+      body: JSON.stringify({ targetId, durationMinutes: 0, reason: 'إلغاء الكتم مبكراً' })
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message || 'تم إلغاء الكتم بنجاح', 'success');
-      $('timeoutUserId').value = '';
+      showToast('تم إلغاء الكتم عن العضو بنجاح', 'success');
     } else {
       showToast(data.error || 'فشل إلغاء الكتم', 'error');
     }
@@ -814,16 +919,16 @@ window.submitModUntimeout = async () => {
 
 window.submitModPurge = async () => {
   const channelId = $('purgeChannelSelect')?.value;
-  const count = parseInt($('purgeCount')?.value || '10');
-  const targetUserId = $('purgeFilterUser')?.value.trim() || null;
-  if (!channelId) return showToast('يرجى اختيار الروم المستهدف', 'error');
+  const count = parseInt($('purgeCount')?.value || '10', 10);
+  const filterUserId = $('purgeFilterUser')?.value.trim() || null;
+  if (!channelId) return showToast('يرجى اختيار الروم', 'error');
 
   showToast(`جارٍ مسح ${count} رسالة…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/purge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
-      body: JSON.stringify({ channelId, count, targetUserId })
+      body: JSON.stringify({ channelId, count, filterUserId })
     });
     const data = await res.json();
     if (res.ok && data.success) {
@@ -838,7 +943,7 @@ window.submitModPurge = async () => {
 
 window.submitModChannelLock = async (locked) => {
   const channelId = $('lockChannelSelect')?.value;
-  if (!channelId) return showToast('يرجى اختيار الروم المستهدف', 'error');
+  if (!channelId) return showToast('يرجى اختيار الروم', 'error');
 
   showToast(`جارٍ ${locked ? 'قفل' : 'فتح'} الروم…`, 'info');
   try {
@@ -849,21 +954,21 @@ window.submitModChannelLock = async (locked) => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message || 'تم تعديل قفل الروم بنجاح', 'success');
+      showToast(data.message || `تم ${locked ? 'قفل' : 'فتح'} الروم بنجاح`, 'success');
     } else {
-      showToast(data.error || 'فشل تعديل قفل الروم', 'error');
+      showToast(data.error || 'فشل تغيير حالة الروم', 'error');
     }
   } catch {
-    showToast('خطأ في الاتصال أثناء تعديل القفل', 'error');
+    showToast('خطأ في الاتصال', 'error');
   }
 };
 
 window.submitModSlowmode = async () => {
   const channelId = $('slowmodeChannelSelect')?.value;
-  const seconds = parseInt($('slowmodeSeconds')?.value || '0');
-  if (!channelId) return showToast('يرجى اختيار الروم المستهدف', 'error');
+  const seconds = parseInt($('slowmodeSeconds')?.value || '0', 10);
+  if (!channelId) return showToast('يرجى اختيار الروم', 'error');
 
-  showToast(`جارٍ ضبط السلو مود على ${seconds} ثانية…`, 'info');
+  showToast('جارٍ تطبيق السلو مود…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/slowmode`, {
       method: 'POST',
@@ -874,17 +979,18 @@ window.submitModSlowmode = async () => {
     if (res.ok && data.success) {
       showToast(data.message || 'تم تطبيق السلو مود بنجاح', 'success');
     } else {
-      showToast(data.error || 'فشل ضبط السلو مود', 'error');
+      showToast(data.error || 'فشل تطبيق السلو مود', 'error');
     }
   } catch {
-    showToast('خطأ في الاتصال أثناء تطبيق السلو مود', 'error');
+    showToast('خطأ في الاتصال', 'error');
   }
 };
 
 window.submitModRole = async (action) => {
   const targetId = $('roleUserId')?.value.trim();
   const roleId = $('roleSelect')?.value;
-  if (!targetId || !roleId) return showToast('يرجى اختيار العضو وتحديد الرتبة', 'error');
+  if (!targetId) return showToast('يرجى إدخال معرف العضو', 'error');
+  if (!roleId) return showToast('يرجى اختيار الرتبة', 'error');
 
   showToast(`جارٍ ${action === 'add' ? 'منح' : 'سحب'} الرتبة…`, 'info');
   try {
@@ -998,7 +1104,7 @@ function renderVcrGrid(fleet) {
           الروم: <span class="text-white">${w.defaultChannelName || 'مخصص'}</span>
         </div>
         <button class="btn-action" style="width:100%; font-size:11.5px;" onclick="reconnectSingleVCR('${w.id}')">
-          🔒 مثبت ومقفول بالروم
+          مثبت ومقفول بالروم
         </button>
       </div>
     `
@@ -1073,7 +1179,7 @@ function renderAppealsTable() {
       </td>
       <td>
         <span class="badge-status ${a.status}">
-          ${a.status === 'approved' ? '✅ تم القبول وفك الحظر' : a.status === 'rejected' ? '❌ مرفوض' : '⏳ قيد الانتظار'}
+          ${a.status === 'approved' ? 'تم القبول وفك الحظر' : a.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}
         </span>
       </td>
       <td style="text-align: left;">
@@ -1098,19 +1204,20 @@ window.openStatementModal = (targetId) => {
   if (!appeal) return;
   activeModalAppealId = targetId;
 
-  if ($('modalUserTag')) $('modalUserTag').textContent = `طعن العضو: ${appeal.userTag}`;
-  if ($('modalUserId')) $('modalUserId').textContent = appeal.targetId;
-  if ($('modalStatementText')) $('modalStatementText').textContent = appeal.statement || 'لا توجد إفادة مكتوبة.';
+  if ($('modalUserTag')) $('modalUserTag').textContent = `بيان الطعن: ${appeal.userTag || targetId}`;
+  if ($('modalUserId')) $('modalUserId').textContent = targetId;
+  if ($('modalStatementText')) $('modalStatementText').textContent = appeal.statement || 'لا توجد تفاصيل مرفقة';
 
-  const footer = $('modalActions');
-  if (footer) {
-    footer.innerHTML =
-      appeal.status === 'pending'
-        ? `
-      <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve'); closeStatementModal();">✅ قبول وفك الحظر</button>
-      <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject'); closeStatementModal();">❌ رفض الطعن</button>
-    `
-        : `<span class="badge-status ${appeal.status}">تمت المعالجة: ${appeal.status === 'approved' ? 'مقبول' : 'مرفوض'} بواسطة ${appeal.handledByName || 'الإدارة'}</span>`;
+  const actionsEl = $('modalActions');
+  if (actionsEl) {
+    if (appeal.status === 'pending') {
+      actionsEl.innerHTML = `
+        <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve')">قبول الطعن وفك الحظر</button>
+        <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject')">رفض الطعن</button>
+      `;
+    } else {
+      actionsEl.innerHTML = `<span class="badge-status ${appeal.status}">تم البت في هذا الطلب (${appeal.status})</span>`;
+    }
   }
 
   $('statementModal')?.classList.add('open');
@@ -1147,6 +1254,14 @@ window.resolveAppeal = async (targetId, action) => {
 /* ══════════════════════════════════════════════════════
    VERIFICATIONS & GATEKEEPER (ARABIC)
    ══════════════════════════════════════════════════════ */
+window.setVerificationFilter = (filter) => {
+  verificationFilter = filter;
+  document.querySelectorAll('.vfilter-chip').forEach(c => {
+    c.classList.toggle('active', c.getAttribute('data-vfilter') === filter);
+  });
+  renderVerificationsTable();
+};
+
 async function loadVerifications() {
   if (!adminToken) return;
   try {
@@ -1156,8 +1271,6 @@ async function loadVerifications() {
     if (res.ok) {
       const data = await res.json();
       currentVerifications = data.verifications || [];
-      const pendingCount = currentVerifications.filter((v) => v.status === 'pending').length;
-      if ($('badgePendingVerifications')) $('badgePendingVerifications').textContent = pendingCount;
       renderVerificationsTable();
     }
   } catch {}
@@ -1167,8 +1280,8 @@ function formatAccountAge(ts) {
   if (!ts) return 'غير محدد';
   const diffMs = Date.now() - ts;
   const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (days < 1) return '<span class="text-danger font-weight-bold">جديد اليوم ⚠️</span>';
-  if (days < 7) return `<span class="text-warning">${days} أيام ⚠️</span>`;
+  if (days < 1) return '<span class="text-danger font-weight-bold">جديد اليوم</span>';
+  if (days < 7) return `<span class="text-warning">${days} أيام</span>`;
   if (days < 30) return `${Math.floor(days / 7)} أسابيع`;
   if (days < 365) return `${Math.floor(days / 30)} أشهر`;
   return `${(days / 365).toFixed(1)} سنة`;
@@ -1179,18 +1292,35 @@ function renderVerificationsTable() {
   if (!tbody) return;
 
   const searchQuery = ($('searchVerifications')?.value || '').toLowerCase();
-  const filterStatus = $('filterVerificationStatus')?.value || 'all';
 
-  const filtered = currentVerifications.filter((v) => {
+  const pendingList = currentVerifications.filter(v => v.status === 'pending' && !v.hidden);
+  const approvedList = currentVerifications.filter(v => v.status === 'approved' && !v.hidden);
+  const hiddenList = currentVerifications.filter(v => Boolean(v.hidden));
+
+  if ($('chipPendingCount')) $('chipPendingCount').textContent = pendingList.length;
+  if ($('chipApprovedCount')) $('chipApprovedCount').textContent = approvedList.length;
+  if ($('chipHiddenCount')) $('chipHiddenCount').textContent = hiddenList.length;
+  if ($('badgePendingVerifications')) $('badgePendingVerifications').textContent = pendingList.length;
+
+  let currentList = [];
+  if (verificationFilter === 'pending') currentList = pendingList;
+  else if (verificationFilter === 'approved') currentList = approvedList;
+  else if (verificationFilter === 'hidden') currentList = hiddenList;
+
+  const filtered = currentList.filter((v) => {
     const matchSearch =
       (v.userTag || '').toLowerCase().includes(searchQuery) ||
       (v.targetId || '').toLowerCase().includes(searchQuery);
-    const matchStatus = filterStatus === 'all' || v.status === filterStatus;
-    return matchSearch && matchStatus;
+    return matchSearch;
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">لا توجد طلبات توثيق مطابقة لمعايير البحث.</td></tr>`;
+    const emptyMessages = {
+      pending: 'لا توجد طلبات توثيق نشطة بانتظار المراجعة.',
+      approved: 'لا توجد طلبات موثقة حالياً.',
+      hidden: 'لا توجد طلبات مخفية أو مؤرشفة.'
+    };
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">${emptyMessages[verificationFilter] || 'لا توجد عناصر مطابقة.'}</td></tr>`;
     return;
   }
 
@@ -1210,7 +1340,7 @@ function renderVerificationsTable() {
       <td class="mono">
         <span style="display: inline-flex; align-items: center; gap: 6px;">
           ${v.targetId}
-          <button class="btn-action" style="padding: 2px 6px; font-size: 11px;" onclick="navigator.clipboard.writeText('${v.targetId}'); showToast('تم نسخ المعرف: ${v.targetId}', 'info');" title="نسخ المعرف">📋</button>
+          <button class="btn-action" style="padding: 2px 6px; font-size: 11px;" onclick="navigator.clipboard.writeText('${v.targetId}'); showToast('تم نسخ المعرف: ${v.targetId}', 'info');" title="نسخ المعرف">نسخ</button>
         </span>
       </td>
       <td>${formatAccountAge(v.accountCreatedAt)}</td>
@@ -1218,23 +1348,30 @@ function renderVerificationsTable() {
       <td class="text-muted">${new Date(v.createdAt || Date.now()).toLocaleDateString('ar-SA')}</td>
       <td>
         <span class="badge-status ${v.status}">
-          ${v.status === 'approved' ? '✅ تم التوثيق (MEMBER)' : v.status === 'rejected' ? '❌ مرفوض' : '⏳ قيد الانتظار'}
+          ${v.status === 'approved' ? 'موثق (MEMBER)' : v.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}
         </span>
         ${v.handledByName ? `<div style="font-size: 10px; color: var(--color-muted); margin-top: 3px;">بواسطة: ${escapeHtml(v.handledByName)}</div>` : ''}
+        ${v.hidden ? `<div style="font-size: 10px; color: var(--color-warning); margin-top: 3px;">(مخفي / مؤرشف)</div>` : ''}
       </td>
       <td style="text-align: left;">
         <div style="display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">
           ${
-            v.status === 'pending'
+            verificationFilter === 'hidden'
               ? `
-            <button class="btn-action primary" onclick="resolveVerification('${v.targetId}', 'approve')" title="منح رتبة MEMBER وإلغاء UNTRUSTED وتفعيل الكتابة">✅ قبول وتوثيق</button>
-            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'reject')" title="رفض الطلب وإبقاؤه UNTRUSTED">❌ رفض</button>
-            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'kick')" title="طرد العضو من السيرفر">🚪 طرد</button>
-            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'ban')" title="حظر العضو نهائياً">🔨 حظر</button>
+            <button class="btn-action primary" onclick="resolveVerification('${v.targetId}', 'unhide')" title="استعادة إلى قائمة الطلبات النشطة">استعادة للنشطة</button>
+            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'approve')" title="قبول وتوثيق العضو">قبول وتوثيق</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'delete')" title="حذف السجل نهائياً">حذف نهائي</button>
+          `
+              : verificationFilter === 'approved'
+              ? `
+            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'hide')" title="إخفاء من قائمة الموثقين ونقله للمخفية">إخفاء الطلب</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'ban')" title="حظر العضو">حظر</button>
           `
               : `
-            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'approve')" title="إعادة التوثيق ومنح MEMBER">🔄 إعادة توثيق</button>
-            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'ban')" title="حظر العضو">🔨 حظر</button>
+            <button class="btn-action primary" onclick="resolveVerification('${v.targetId}', 'approve')" title="منح رتبة MEMBER وإلغاء UNTRUSTED وتفعيل الكتابة">قبول وتوثيق</button>
+            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'hide')" title="إخفاء هذا الطلب ونقله إلى قسم المخفية">إخفاء الطلب</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'kick')" title="طرد العضو من السيرفر">طرد</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'ban')" title="حظر العضو نهائياً">حظر</button>
           `
           }
         </div>
@@ -1250,6 +1387,9 @@ window.resolveVerification = async (targetId, action) => {
   const actionNames = {
     approve: 'قبول وتوثيق العضو ومنحه رتبة MEMBER',
     reject: 'رفض طلب التوثيق',
+    hide: 'إخفاء الطلب ونقله لقسم المخفية',
+    unhide: 'استعادة الطلب لقائمة الطلبات النشطة',
+    delete: 'حذف سجل الطلب نهائياً',
     kick: 'طرد العضو من السيرفر',
     ban: 'حظر العضو نهائياً'
   };
@@ -1323,7 +1463,7 @@ window.deployPanel = async (panelType) => {
       showToast(data.error || 'فشل نشر البانل', 'error');
     }
   } catch {
-    showToast('خطأ في الاتصال بالخادم أثناء نشر البانل', 'error');
+    showToast('خطأ في الاتصال أثناء نشر البانل', 'error');
   }
 };
 
@@ -1347,90 +1487,134 @@ window.removePanel = async (panelType) => {
       showToast(data.error || 'فشل حذف البانل', 'error');
     }
   } catch {
-    showToast('خطأ أثناء حذف البانل', 'error');
+    showToast('خطأ في الاتصال أثناء حذف البانل', 'error');
   }
 };
 
-window.triggerMassSync = async () => {
+/* ══════════════════════════════════════════════════════
+   VCR FLEET CONTROLS (ARABIC)
+   ══════════════════════════════════════════════════════ */
+window.forceReStationVCR = async () => {
   if (!adminToken) return;
-  showToast('⚡ جارٍ المزامنة الشاملة لكافة رتب وأعضاء السيرفر…', 'info');
+  showToast('جارٍ إعادة تثبيت وضبط أسطول مسجلات الصوت…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/bot/sync`, {
+    const res = await fetch(`${API_BASE}/api/admin/vcr/re-station`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('✅ تمت المزامنة الشاملة للأعضاء والرتب بنجاح!', 'success');
+      showToast(data.message || 'تمت إعادة تثبيت المسجلات بنجاح!', 'success');
+    } else {
+      showToast(data.error || 'فشلت إعادة التثبيت', 'error');
     }
   } catch {
-    showToast('فشلت عملية المزامنة', 'error');
+    showToast('خطأ في الاتصال', 'error');
   }
 };
 
-window.sendBroadcast = async () => {
+window.reconnectSingleVCR = async (vcrId) => {
   if (!adminToken) return;
-  const channelId = $('broadcastChannelSelect')?.value.trim();
-  const title = $('broadcastTitle')?.value.trim();
-  const message = $('broadcastMessage')?.value.trim();
-  const color = parseInt($('broadcastColor')?.value || '16777215');
-
-  if (!channelId || !message) {
-    showToast('يرجى اختيار الروم وكتابة نص الإعلان', 'error');
-    return;
-  }
-
-  showToast('جارٍ نشر الإعلان الرسمي…', 'info');
+  showToast(`جارٍ فحص وإعادة تثبيت مسجل VCR: ${vcrId}…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/bot/broadcast`, {
+    const res = await fetch(`${API_BASE}/api/admin/vcr/reconnect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${adminToken}`
       },
-      body: JSON.stringify({ channelId, title, message, color })
+      body: JSON.stringify({ vcrId })
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('📢 تم نشر الإعلان الرسمي بنجاح في ديسكورد!', 'success');
-      $('broadcastMessage').value = '';
+      showToast(data.message || 'تمت إعادة ربط المسجل بنجاح!', 'success');
     } else {
-      showToast(data.error || 'فشل نشر الإعلان', 'error');
+      showToast(data.error || 'فشلت إعادة ربط المسجل', 'error');
     }
   } catch {
-    showToast('خطأ في إرسال الإعلان', 'error');
+    showToast('خطأ في الاتصال', 'error');
   }
 };
 
-window.forceReStationVCR = async () => {
+/* ══════════════════════════════════════════════════════
+   SECURITY & MASS ROLE SYNC (ARABIC)
+   ══════════════════════════════════════════════════════ */
+window.triggerMassSync = async () => {
   if (!adminToken) return;
-  showToast('جارٍ إعادة تثبيت مسجلات الصوت الخمسة في روماتها…', 'info');
+  const btn = $('btnSyncRoles');
+  if (btn) btn.disabled = true;
+  showToast('جارٍ تنفيذ الفحص والمزامنة الشاملة لكافة أعضاء ورتب السيرفر…', 'info');
+
   try {
-    const res = await fetch(`${API_BASE}/api/admin/vcr/reconnect`, {
+    const res = await fetch(`${API_BASE}/api/admin/security/sync-all`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${adminToken}` },
-      body: JSON.stringify({})
+      headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     const data = await res.json();
-    if (res.ok) showToast(data.message || 'تمت إعادة تثبيت المسجلات بنجاح!', 'success');
+    if (res.ok && data.success) {
+      showToast(`اكتملت المزامنة بنجاح! تم فحص وتحديث (${data.updatedCount || 0}) عضواً.`, 'success');
+    } else {
+      showToast(data.error || 'فشلت المزامنة الشاملة', 'error');
+    }
   } catch {
-    showToast('خطأ في طلب إعادة التثبيت', 'error');
+    showToast('خطأ في الشبكة أثناء المزامنة', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 };
 
-window.reconnectSingleVCR = async (vcrId) => {
-  window.forceReStationVCR();
+/* ══════════════════════════════════════════════════════
+   OFFICIAL BROADCAST STUDIO (ARABIC)
+   ══════════════════════════════════════════════════════ */
+window.sendBroadcast = async () => {
+  if (!adminToken) return showToast('يرجى تسجيل الدخول أولاً', 'error');
+
+  const channelId = $('broadcastChannelSelect')?.value;
+  const title = $('broadcastTitle')?.value.trim();
+  const message = $('broadcastMessage')?.value.trim();
+  const color = parseInt($('broadcastColor')?.value || '16777215', 10);
+
+  if (!channelId || !title || !message) {
+    return showToast('يرجى تعبئة جميع حقول الإعلان الرسمي', 'warning');
+  }
+
+  showToast('جارٍ إرسال ونشر الإعلان الرسمي…', 'info');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/broadcast`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        channelId,
+        title,
+        message,
+        color
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('تم نشر الإعلان الرسمي بنجاح في ديسكورد!', 'success');
+      $('broadcastTitle').value = '';
+      $('broadcastMessage').value = '';
+    } else {
+      showToast(data.error || 'فشل إرسال الإعلان', 'error');
+    }
+  } catch {
+    showToast('خطأ في الشبكة أثناء نشر الإعلان', 'error');
+  }
 };
 
+/* ══════════════════════════════════════════════════════
+   EVENT LOGS MODULE (ARABIC)
+   ══════════════════════════════════════════════════════ */
 window.clearEventLog = () => {
   const list = $('eventStreamList');
-  if (list) list.innerHTML = `<li class="log-entry">تم مسح سجل الأحداث من الشاشة.</li>`;
+  if (list) {
+    list.innerHTML = '<li class="log-entry">تم مسح سجل الأحداث من الشاشة.</li>';
+    showToast('تم مسح الشاشة', 'info');
+  }
 };
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
