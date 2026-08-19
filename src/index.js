@@ -7623,8 +7623,8 @@ const healthServer = http.createServer(async (req, res) => {
     if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
 
     const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
-    const ticketPanelData = loadTicketPanelData();
-    const eventData = loadActiveEvent();
+    const ticketPanelData = loadTicketPanelData() || {};
+    const eventData = loadActiveEvent() || {};
 
     return sendJsonResponse(res, 200, {
       success: true,
@@ -7636,11 +7636,11 @@ const healthServer = http.createServer(async (req, res) => {
           status: ticketPanelData.messageId ? 'active' : 'inactive'
         },
         eventPanel: {
-          exists: !!eventData.messageId,
-          channelId: eventData.channelId || null,
-          messageId: eventData.messageId || null,
-          title: eventData.title || 'بطولة GX',
-          status: eventData.messageId ? 'active' : 'inactive'
+          exists: !!eventData?.messageId,
+          channelId: eventData?.channelId || null,
+          messageId: eventData?.messageId || null,
+          title: eventData?.title || 'بطولة GX',
+          status: eventData?.messageId ? 'active' : 'inactive'
         },
         statusChannel: {
           exists: true,
@@ -7761,7 +7761,7 @@ const healthServer = http.createServer(async (req, res) => {
     const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
 
     if (guild) {
-      await vcrManager.forceStationAll(guild);
+      await vcrManager.deployStationary(guild);
       logActivity('admin', 'VCR Reconnect', `Forced re-stationing of VCR audio sentinels via Control Panel`);
     }
     return sendJsonResponse(res, 200, { success: true, message: 'تمت إعادة تثبيت وربط المسجلات الصوتية' });
