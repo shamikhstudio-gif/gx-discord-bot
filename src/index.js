@@ -8391,6 +8391,7 @@ const healthServer = http.createServer(async (req, res) => {
         userTag: item.userTag || member?.user.tag || 'عضو غير معروف',
         userAvatar: member?.user.displayAvatarURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
         status: item.status || 'pending',
+        hidden: Boolean(item.hidden),
         joinCount: item.joinCount || 1,
         accountCreatedAt: member?.user.createdTimestamp || null,
         joinedAt: member?.joinedTimestamp || item.createdAt || Date.now(),
@@ -8411,6 +8412,7 @@ const healthServer = http.createServer(async (req, res) => {
             userTag: member.user.tag,
             userAvatar: member.user.displayAvatarURL({ dynamic: true }),
             status: 'pending',
+            hidden: false,
             joinCount: 1,
             accountCreatedAt: member.user.createdTimestamp,
             joinedAt: member.joinedTimestamp || Date.now(),
@@ -8442,10 +8444,42 @@ const healthServer = http.createServer(async (req, res) => {
     const body = await parseJsonBody(req);
     const { targetId, action = 'approve', notes = '' } = body;
 
-    if (!targetId || !['approve', 'reject', 'kick', 'ban'].includes(action)) {
-      return sendJsonResponse(res, 400, { error: 'بيانات غير صالحة' });
+    const allowedActions = ['approve', 'reject', 'kick', 'ban', 'hide', 'unhide', 'delete'];
+    if (!targetId || !allowedActions.includes(action)) {
+      return sendJsonResponse(res, 400, { error: 'بيانات أو إجراء غير صالح' });
     }
 
+    const requestsData = loadVerificationRequests();
+
+    // 1. Hide action
+    if (action === 'hide') {
+      if (!requestsData[targetId]) requestsData[targetId] = { targetId, messages: [] };
+      requestsData[targetId].hidden = true;
+      requestsData[targetId].hiddenAt = Date.now();
+      saveVerificationRequests(requestsData);
+      logActivity('security', 'Order Hidden', `Hidden/Archived verification request for ${targetId}`);
+      return sendJsonResponse(res, 200, { success: true, message: 'تم إخفاء الطلب ونقله إلى قسم المخفية' });
+    }
+
+    // 2. Unhide action
+    if (action === 'unhide') {
+      if (requestsData[targetId]) {
+        requestsData[targetId].hidden = false;
+        saveVerificationRequests(requestsData);
+      }
+      logActivity('security', 'Order Restored', `Restored verification request for ${targetId}`);
+      return sendJsonResponse(res, 200, { success: true, message: 'تم استعادة الطلب إلى قائمة الطلبات النشطة' });
+    }
+
+    // 3. Delete action
+    if (action === 'delete') {
+      delete requestsData[targetId];
+      saveVerificationRequests(requestsData);
+      logActivity('security', 'Order Deleted', `Permanently removed verification request for ${targetId}`);
+      return sendJsonResponse(res, 200, { success: true, message: 'تم حذف سجل الطلب نهائياً' });
+    }
+
+    // 4. Approval action
     if (action === 'approve') {
       const resData = await executeVerificationApproval(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
       if (resData.success) {
@@ -8453,13 +8487,14 @@ const healthServer = http.createServer(async (req, res) => {
       } else {
         return sendJsonResponse(res, 400, { error: resData.error || 'فشلت الموافقة' });
       }
+    }
+
+    // 5. Rejection / Kick / Ban
+    const resData = await executeVerificationRejection(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION, action);
+    if (resData.success) {
+      return sendJsonResponse(res, 200, resData);
     } else {
-      const resData = await executeVerificationRejection(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION, action);
-      if (resData.success) {
-        return sendJsonResponse(res, 200, resData);
-      } else {
-        return sendJsonResponse(res, 400, { error: resData.error || 'فشل الرفض' });
-      }
+      return sendJsonResponse(res, 400, { error: resData.error || 'فشلت المعالجة' });
     }
   }
 
