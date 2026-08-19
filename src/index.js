@@ -8451,11 +8451,21 @@ const healthServer = http.createServer(async (req, res) => {
       return sendJsonResponse(res, 400, { error: 'بيانات أو إجراء غير صالح' });
     }
 
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
     const requestsData = loadVerificationRequests();
 
     // 1. Hide action
     if (action === 'hide') {
-      if (!requestsData[targetId]) requestsData[targetId] = { targetId, messages: [] };
+      if (!requestsData[targetId]) {
+        const member = guild?.members.cache.get(targetId);
+        requestsData[targetId] = {
+          targetId,
+          userTag: member?.user.tag || targetId,
+          status: 'pending',
+          messages: [],
+          createdAt: member?.joinedTimestamp || Date.now()
+        };
+      }
       requestsData[targetId].hidden = true;
       requestsData[targetId].hiddenAt = Date.now();
       saveVerificationRequests(requestsData);
