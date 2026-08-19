@@ -671,7 +671,10 @@ function populateModDropdowns() {
   if ($('broadcastChannelSelect')) $('broadcastChannelSelect').innerHTML = channelOptions;
 
   const roleOptions = serverRoles
-    .map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`)
+    .map((r) => {
+      const flag = r.isManageable === false ? ' ⚠️ (أعلى من رتبة البوت)' : '';
+      return `<option value="${r.id}" ${r.isManageable === false ? 'style="color:#f59e0b;"' : ''}>@${escapeHtml(r.name)}${flag}</option>`;
+    })
     .join('');
   if ($('roleSelect')) $('roleSelect').innerHTML = roleOptions;
 }
