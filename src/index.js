@@ -249,18 +249,25 @@ function isUntrustedMember(member) {
   return member.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
 }
 
+let VERIFICATION_MEMORY_CACHE = null;
+
 function loadVerificationRequests() {
+  if (VERIFICATION_MEMORY_CACHE) return VERIFICATION_MEMORY_CACHE;
   try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     if (fs.existsSync(VERIFICATION_REQUESTS_FILE)) {
-      return JSON.parse(fs.readFileSync(VERIFICATION_REQUESTS_FILE, 'utf-8'));
+      VERIFICATION_MEMORY_CACHE = JSON.parse(fs.readFileSync(VERIFICATION_REQUESTS_FILE, 'utf-8'));
+      return VERIFICATION_MEMORY_CACHE;
     }
   } catch {}
-  return {};
+  VERIFICATION_MEMORY_CACHE = {};
+  return VERIFICATION_MEMORY_CACHE;
 }
 
 function saveVerificationRequests(data) {
-  safeWriteJson(VERIFICATION_REQUESTS_FILE, data);
+  VERIFICATION_MEMORY_CACHE = data;
+  try {
+    safeWriteJson(VERIFICATION_REQUESTS_FILE, data);
+  } catch {}
 }
 
 // ----------------------------------------------------
