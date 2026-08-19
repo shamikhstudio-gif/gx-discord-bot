@@ -71,30 +71,33 @@ export function decryptEnvContent(encryptedJsonStr, passphrase = MASTER_KEY_PHRA
 }
 
 /**
- * Automatically loads and injects encrypted .env.enc or plain .env into process.env in memory.
+ * Parses raw .env string into process.env
  */
-export function syncEnvToEncrypted(envFilePath = '.env', encFilePath = '.env.enc') {
-  const resolvedEnv = path.resolve(envFilePath);
-  const resolvedEnc = path.resolve(encFilePath);
-  if (!fs.existsSync(resolvedEnv)) {
-    throw new Error(`Cannot find ${resolvedEnv} to encrypt.`);
+function parseAndInjectEnv(envString) {
+  const lines = envString.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx !== -1) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      process.env[key] = val;
+    }
   }
-  const plain = fs.readFileSync(resolvedEnv, 'utf8');
-  const encrypted = encryptEnvContent(plain);
-  const encDir = path.dirname(resolvedEnc);
-  if (!fs.existsSync(encDir)) fs.mkdirSync(encDir, { recursive: true });
-  fs.writeFileSync(resolvedEnc, encrypted, 'utf8');
-  console.log(`✅ [GX Vault] تم تشفير ${envFilePath} وحفظه في ${encFilePath} بنجاح!`);
 }
 
-export function loadVaultEnvironment(envFilePath = '.env', encFilePath = '.env.enc') {
-  const resolvedEnv = path.resolve(envFilePath);
-  const resolvedEnc = path.resolve(encFilePath);
-
+/**
+ * Automatically loads and injects encrypted .env.enc or plain .env into process.env in memory.
+ */
+export function loadVaultEnvironment(encFilePath = '.env.enc', envFilePath = '.env') {
   // 1. If encrypted vault exists, decrypt and load into memory
-  if (fs.existsSync(resolvedEnc)) {
+  if (fs.existsSync(encFilePath)) {
     try {
-      const rawEnc = fs.readFileSync(resolvedEnc, 'utf8');
+      const rawEnc = fs.readFileSync(encFilePath, 'utf8');
       const decrypted = decryptEnvContent(rawEnc);
       parseAndInjectEnv(decrypted);
       console.log('🔒 [GX Vault] تم تحميل وفك تشفير متغيرات البيئة من .env.enc بنجاح (SHA-512 / AES-256-GCM)');
@@ -105,8 +108,8 @@ export function loadVaultEnvironment(envFilePath = '.env', encFilePath = '.env.e
   }
 
   // 2. Fallback to standard .env file if available
-  if (fs.existsSync(resolvedEnv)) {
-    const rawPlain = fs.readFileSync(resolvedEnv, 'utf8');
+  if (fs.existsSync(envFilePath)) {
+    const rawPlain = fs.readFileSync(envFilePath, 'utf8');
     parseAndInjectEnv(rawPlain);
     console.log('📄 [GX Vault] تم تحميل متغيرات البيئة من ملف .env المحلي.');
   }
