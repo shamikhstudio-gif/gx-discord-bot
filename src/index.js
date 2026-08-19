@@ -62,6 +62,7 @@ const __dirname = path.dirname(__filename);
 loadVaultEnvironment();
 dotenv.config();
 
+const TOKEN = process.env.DISCORD_TOKEN;
 const ALLOWED_GUILD_ID = process.env.GUILD_ID?.trim() || '1537461174222725120';
 const VERIFIED_MEMBER_ROLE_ID = process.env.VERIFIED_ROLE_ID?.trim() || '1538486805211389982';
 const BOT_VERSION = '2.0 Flash';
