@@ -7818,13 +7818,23 @@ const healthServer = http.createServer(async (req, res) => {
     const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
     if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
 
+    const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
+    const botHighestPos = botMember ? botMember.roles.highest.position : 0;
+
     const channels = guild.channels.cache
       .filter((c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildVoice)
       .map((c) => ({ id: c.id, name: c.name, type: c.type === ChannelType.GuildText ? 'text' : 'voice' }));
 
     const roles = guild.roles.cache
       .filter((r) => r.id !== guild.id)
-      .map((r) => ({ id: r.id, name: r.name, color: r.hexColor }));
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        color: r.hexColor,
+        position: r.position,
+        isManageable: r.position < botHighestPos && !r.managed
+      }))
+      .sort((a, b) => b.position - a.position);
 
     return sendJsonResponse(res, 200, { success: true, channels, roles, memberCount: guild.memberCount });
   }
@@ -7840,6 +7850,14 @@ const healthServer = http.createServer(async (req, res) => {
     if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
 
     try {
+      const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
+      const targetMember = await guild.members.fetch(targetId).catch(() => null);
+      if (targetMember && botMember && targetMember.roles.highest.position >= botMember.roles.highest.position) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ تسلسل الرتب: لا يمكن حظر هذا العضو لأن رتبته (${targetMember.roles.highest.name}) أعلى من أو مساوية لرتبة البوت.`
+        });
+      }
+
       await guild.members.ban(targetId, {
         reason: `${reason} • [GX Control Panel by High Command]`,
         deleteMessageSeconds: deleteMessageDays * 24 * 60 * 60
@@ -7881,8 +7899,16 @@ const healthServer = http.createServer(async (req, res) => {
     if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
 
     try {
+      const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
       const member = await guild.members.fetch(targetId).catch(() => null);
       if (!member) return sendJsonResponse(res, 404, { error: 'العضو غير موجود بالسيرفر' });
+
+      if (botMember && member.roles.highest.position >= botMember.roles.highest.position) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ تسلسل الرتب: لا يمكن طرد هذا العضو لأن رتبته (${member.roles.highest.name}) أعلى من أو مساوية لرتبة البوت.`
+        });
+      }
+
       await member.kick(`${reason} • [GX Control Panel]`);
       logActivity('security', 'Member Kicked', `Kicked ${member.user.tag} (${targetId}) via Control Panel`);
       return sendJsonResponse(res, 200, { success: true, message: `تم طرد العضو ${member.user.tag} بنجاح` });
@@ -7902,8 +7928,16 @@ const healthServer = http.createServer(async (req, res) => {
     if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
 
     try {
+      const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
       const member = await guild.members.fetch(targetId).catch(() => null);
       if (!member) return sendJsonResponse(res, 404, { error: 'العضو غير موجود بالسيرفر' });
+
+      if (botMember && member.roles.highest.position >= botMember.roles.highest.position) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ تسلسل الرتب: لا يمكن كتم هذا العضو لأن رتبته (${member.roles.highest.name}) أعلى من أو مساوية لرتبة البوت.`
+        });
+      }
+
       const ms = durationMinutes * 60 * 1000;
       await member.timeout(ms, `${reason} • [GX Control Panel]`);
       logActivity('security', 'Member Timed Out', `Muted ${member.user.tag} for ${durationMinutes}m via Control Panel`);
@@ -8016,7 +8050,35 @@ const healthServer = http.createServer(async (req, res) => {
     try {
       const member = await guild.members.fetch(targetId).catch(() => null);
       const role = guild.roles.cache.get(roleId);
-      if (!member || !role) return sendJsonResponse(res, 404, { error: 'العضو أو الرتبة غير موجودة' });
+      if (!member) return sendJsonResponse(res, 404, { error: 'العضو غير موجود بالسيرفر' });
+      if (!role) return sendJsonResponse(res, 404, { error: 'الرتبة المحددة غير موجودة' });
+
+      const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
+      const botHighestPos = botMember ? botMember.roles.highest.position : 0;
+
+      if (role.position >= botHighestPos) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ تسلسل الرتب: رتبة @${role.name} أعلى من أو مساوية لرتبة البوت (@${botMember ? botMember.roles.highest.name : 'GX Bot'}). يرجى سحب رتبة البوت في إعدادات السيرفر لتكون أعلى من هذه الرتبة.`
+        });
+      }
+
+      if (role.managed) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ لا يمكن تعديل رتبة @${role.name} لأنها رتبة نظام/تطبيق مدمج (Managed Role).`
+        });
+      }
+
+      if (member.id === guild.ownerId) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ لا يمكن تعديل رتب مالك السيرفر (Server Owner) عبر ديسكورد.`
+        });
+      }
+
+      if (botMember && member.roles.highest.position >= botHighestPos && member.id !== client.user.id) {
+        return sendJsonResponse(res, 400, {
+          error: `⚠️ تسلسل الرتب: العضو المستهدف يملك رتبة (${member.roles.highest.name}) أعلى من أو مساوية لرتبة البوت. لا يمكن تعديل رتبه إلا بعد رفع رتبة البوت فوقها.`
+        });
+      }
 
       if (action === 'add') {
         await member.roles.add(role, 'إعطاء رتبة عبر لوحة تحكم GX');
