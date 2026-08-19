@@ -8,6 +8,7 @@ const API_BASE = IS_LOCAL ? `http://${window.location.hostname}:3000` : 'https:/
 
 let adminToken = sessionStorage.getItem('gx_admin_token') || null;
 let currentAppeals = [];
+let currentVerifications = [];
 let currentTickets = [];
 let activeTicketThreadId = null;
 let activeTab = 'overview';
@@ -58,9 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Direct Route Check (/support or #support)
+  // Direct Route Check (/support or #support or #verifications)
   if (window.location.pathname.includes('/support') || window.location.hash.includes('support')) {
     switchTab('support');
+  } else if (window.location.pathname.includes('/verifications') || window.location.hash.includes('verifications')) {
+    switchTab('verifications');
   }
 
   // Setup Auth Events
@@ -68,9 +71,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('togglePw')?.addEventListener('click', togglePasswordVisibility);
   $('btnLogout')?.addEventListener('click', handleLogout);
 
-  // Search & Filter Appeals & Support Tickets
+  // Search & Filter Appeals, Support Tickets & Verifications
   $('searchAppeals')?.addEventListener('input', renderAppealsTable);
   $('filterAppealStatus')?.addEventListener('change', renderAppealsTable);
+  $('searchVerifications')?.addEventListener('input', renderVerificationsTable);
+  $('filterVerificationStatus')?.addEventListener('change', renderVerificationsTable);
   $('searchSupportTickets')?.addEventListener('input', renderSupportTicketsList);
 
   // Setup Ticket Filter Chips
@@ -133,6 +138,7 @@ async function handleLogin() {
       hideAuthOverlay();
       showToast('✅ تم توثيق الدخول بنجاح! مرحباً بك في مركز قيادة GX eSports.', 'success');
       loadAppeals();
+      loadVerifications();
       loadPanels();
       loadModData();
       loadSupportTickets();
@@ -155,6 +161,7 @@ async function validateSession() {
     if (res.ok) {
       hideAuthOverlay();
       loadAppeals();
+      loadVerifications();
       loadPanels();
       loadModData();
       loadSupportTickets();
@@ -180,6 +187,7 @@ const TAB_METAS = {
   overview: { title: 'نظرة عامة على النظام', sub: 'المؤشرات التشغيلية والقياسات الحية اللحظية' },
   support: { title: 'مركز الدعم الفني المباشر', sub: 'منصة المحادثة المباشرة ثنائية الاتجاه مع أعضاء ديسكورد' },
   moderation: { title: 'مركز الإشراف والأدوات الإدارية', sub: 'تنفيذ القرارات الإدارية وعمليات العقاب والعزل من الموقع' },
+  verifications: { title: 'مركز مراجعة وتوثيق الوافدين (Gatekeeper)', sub: 'إدارة طلبات الوافدين برتبة UNTRUSTED والبت الفوري في منحهم رتبة MEMBER أو طردهم من الموقع' },
   appeals: { title: 'مركز مراجعة الطعون والالتماسات', sub: 'مراجعة طلبات فك الحظر والبت الفوري فيها' },
   panels: { title: 'مدير البانلات والرسائل التفاعلية', sub: 'نشر وإدارة رسائل وإمبدات التفاعل في قنوات ديسكورد' },
   vcr: { title: 'أسطول مسجلات الصوت (GX VCR Fleet)', sub: '5 مسجلات صوتية ذاتية ومقفولة في روماتها' },
@@ -202,6 +210,7 @@ function switchTab(tabId) {
   if ($('pageSubtitle')) $('pageSubtitle').textContent = meta.sub;
 
   if (tabId === 'support') loadSupportTickets();
+  if (tabId === 'verifications') loadVerifications();
   if (tabId === 'appeals') loadAppeals();
   if (tabId === 'panels') loadPanels();
   if (tabId === 'moderation') loadModData();
@@ -1132,6 +1141,140 @@ window.resolveAppeal = async (targetId, action) => {
     }
   } catch {
     showToast('خطأ في الشبكة أثناء معالجة الطعن', 'error');
+  }
+};
+
+/* ══════════════════════════════════════════════════════
+   VERIFICATIONS & GATEKEEPER (ARABIC)
+   ══════════════════════════════════════════════════════ */
+async function loadVerifications() {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/verifications`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentVerifications = data.verifications || [];
+      const pendingCount = currentVerifications.filter((v) => v.status === 'pending').length;
+      if ($('badgePendingVerifications')) $('badgePendingVerifications').textContent = pendingCount;
+      renderVerificationsTable();
+    }
+  } catch {}
+}
+
+function formatAccountAge(ts) {
+  if (!ts) return 'غير محدد';
+  const diffMs = Date.now() - ts;
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 1) return '<span class="text-danger font-weight-bold">جديد اليوم ⚠️</span>';
+  if (days < 7) return `<span class="text-warning">${days} أيام ⚠️</span>`;
+  if (days < 30) return `${Math.floor(days / 7)} أسابيع`;
+  if (days < 365) return `${Math.floor(days / 30)} أشهر`;
+  return `${(days / 365).toFixed(1)} سنة`;
+}
+
+function renderVerificationsTable() {
+  const tbody = $('verificationsTableBody');
+  if (!tbody) return;
+
+  const searchQuery = ($('searchVerifications')?.value || '').toLowerCase();
+  const filterStatus = $('filterVerificationStatus')?.value || 'all';
+
+  const filtered = currentVerifications.filter((v) => {
+    const matchSearch =
+      (v.userTag || '').toLowerCase().includes(searchQuery) ||
+      (v.targetId || '').toLowerCase().includes(searchQuery);
+    const matchStatus = filterStatus === 'all' || v.status === filterStatus;
+    return matchSearch && matchStatus;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">لا توجد طلبات توثيق مطابقة لمعايير البحث.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map(
+      (v) => `
+    <tr>
+      <td>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <img src="${v.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" alt="" style="width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15);" />
+          <div>
+            <strong class="text-white">${escapeHtml(v.userTag || 'غير معروف')}</strong>
+            ${!v.isCurrentlyInServer ? '<span style="font-size: 11px; color: var(--color-danger); display: block;">(غادر السيرفر)</span>' : ''}
+          </div>
+        </div>
+      </td>
+      <td class="mono">
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+          ${v.targetId}
+          <button class="btn-action" style="padding: 2px 6px; font-size: 11px;" onclick="navigator.clipboard.writeText('${v.targetId}'); showToast('تم نسخ المعرف: ${v.targetId}', 'info');" title="نسخ المعرف">📋</button>
+        </span>
+      </td>
+      <td>${formatAccountAge(v.accountCreatedAt)}</td>
+      <td><span class="status-chip" style="font-size: 11px;">${v.joinCount || 1} ${v.joinCount > 1 ? 'مرات' : 'مرة'}</span></td>
+      <td class="text-muted">${new Date(v.createdAt || Date.now()).toLocaleDateString('ar-SA')}</td>
+      <td>
+        <span class="badge-status ${v.status}">
+          ${v.status === 'approved' ? '✅ تم التوثيق (MEMBER)' : v.status === 'rejected' ? '❌ مرفوض' : '⏳ قيد الانتظار'}
+        </span>
+        ${v.handledByName ? `<div style="font-size: 10px; color: var(--color-muted); margin-top: 3px;">بواسطة: ${escapeHtml(v.handledByName)}</div>` : ''}
+      </td>
+      <td style="text-align: left;">
+        <div style="display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">
+          ${
+            v.status === 'pending'
+              ? `
+            <button class="btn-action primary" onclick="resolveVerification('${v.targetId}', 'approve')" title="منح رتبة MEMBER وإلغاء UNTRUSTED وتفعيل الكتابة">✅ قبول وتوثيق</button>
+            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'reject')" title="رفض الطلب وإبقاؤه UNTRUSTED">❌ رفض</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'kick')" title="طرد العضو من السيرفر">🚪 طرد</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'ban')" title="حظر العضو نهائياً">🔨 حظر</button>
+          `
+              : `
+            <button class="btn-action" onclick="resolveVerification('${v.targetId}', 'approve')" title="إعادة التوثيق ومنح MEMBER">🔄 إعادة توثيق</button>
+            <button class="btn-action danger" onclick="resolveVerification('${v.targetId}', 'ban')" title="حظر العضو">🔨 حظر</button>
+          `
+          }
+        </div>
+      </td>
+    </tr>
+  `
+    )
+    .join('');
+}
+
+window.resolveVerification = async (targetId, action) => {
+  if (!adminToken) return;
+  const actionNames = {
+    approve: 'قبول وتوثيق العضو ومنحه رتبة MEMBER',
+    reject: 'رفض طلب التوثيق',
+    kick: 'طرد العضو من السيرفر',
+    ban: 'حظر العضو نهائياً'
+  };
+
+  showToast(`جارٍ تنفيذ (${actionNames[action] || action})…`, 'info');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/verifications/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ targetId, action })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || `تمت العملية بنجاح!`, 'success');
+      loadVerifications();
+    } else {
+      showToast(data.error || 'فشلت معالجة طلب التوثيق', 'error');
+    }
+  } catch {
+    showToast('خطأ في الاتصال أثناء معالجة طلب التوثيق', 'error');
   }
 };
 
