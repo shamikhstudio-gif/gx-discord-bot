@@ -50,6 +50,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import http from 'http';
 import { VCRManager, VCR_BOT_IDS, VCR_ROLE_NAME } from './vcr/index.js';
 import { loadVaultEnvironment } from './security/envVault.js';
@@ -61,18 +62,18 @@ const __dirname = path.dirname(__filename);
 loadVaultEnvironment();
 dotenv.config();
 
-let BOT_VERSION = '2.0 Flash';
-let TOKEN = process.env.DISCORD_TOKEN;
-let ALLOWED_GUILD_ID = process.env.ALLOWED_GUILD_ID?.trim();
+const ALLOWED_GUILD_ID = process.env.GUILD_ID?.trim() || '1537461174222725120';
+const VERIFIED_MEMBER_ROLE_ID = process.env.VERIFIED_ROLE_ID?.trim() || '1538486805211389982';
+const BOT_VERSION = '2.0 Flash';
+
 let AUTO_ROLE_NAME = 'UNTRUSTED';
-let VERIFIED_MEMBER_ROLE_NAME = 'MEMBER';
-let VERIFIED_MEMBER_ROLE_ID = process.env.AUTO_ROLE_ID?.trim() || '1538486805211389982';
 let AUTO_ROLE_ID = VERIFIED_MEMBER_ROLE_ID;
 let WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID?.trim() || '1538560876339265667';
 let LEAVE_CHANNEL_ID = process.env.LEAVE_CHANNEL_ID?.trim() || '1538561457912946788';
 
 // Data Directories and Files
-const DATA_DIR = path.resolve('data');
+const DATA_DIR = path.resolve(__dirname, '..', 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const WELCOMED_FILE = path.join(DATA_DIR, 'welcomed_members.json');
 const WELCOME_TRACKER_FILE = path.join(DATA_DIR, 'welcome_tracker.json');
 const STATUS_MSG_FILE = path.join(DATA_DIR, 'status_message.json');
@@ -130,14 +131,10 @@ function safeWriteJson(filePath, data) {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const content = JSON.stringify(data, null, 2);
-    const tmpPath = `${filePath}.tmp.${Date.now()}`;
+    const tmpPath = path.join(os.tmpdir(), `gx_${Date.now()}_${path.basename(filePath)}`);
     fs.writeFileSync(tmpPath, content, 'utf-8');
-    try {
-      fs.renameSync(tmpPath, filePath);
-    } catch {
-      fs.copyFileSync(tmpPath, filePath);
-      try { fs.unlinkSync(tmpPath); } catch {}
-    }
+    fs.copyFileSync(tmpPath, filePath);
+    try { fs.unlinkSync(tmpPath); } catch {}
   } catch {
     try {
       const content = JSON.stringify(data, null, 2);
