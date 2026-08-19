@@ -1,566 +1,424 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="GX eSports — Live Bot Operations Center. Real-time telemetry, VCR fleet status, acoustic defense analytics, and live activity stream.">
-  <title>GX eSports · Operations Center</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GX eSports — Command Center & Control Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════ NAV ═══ -->
-  <nav class="nav" id="navbar">
-    <div class="nav-inner">
-      <a class="nav-brand" href="#">
-        <div class="nav-logo">GX</div>
-        <div class="nav-brand-text">
-          <span class="nav-title">eSports</span>
-          <span class="nav-sub">Operations Center</span>
+  <!-- ══════════════════════════════════════════════════════
+       AUTH OVERLAY (Obsidian Lock Screen)
+       ══════════════════════════════════════════════════════ -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <div class="auth-glow"></div>
+      <div class="auth-header">
+        <img src="" alt="GX Logo" class="auth-logo gx-logo-img" />
+        <h1 class="auth-title">GX COMMAND CENTER</h1>
+        <p class="auth-subtitle">Executive Authorization Required • High Command Access</p>
+      </div>
+
+      <form id="authForm" class="auth-form" onsubmit="return false;">
+        <div class="input-group">
+          <label for="adminPassword">Master Security Key</label>
+          <div class="input-wrap">
+            <input type="password" id="adminPassword" placeholder="Enter master password…" autocomplete="current-password" required />
+            <button type="button" class="btn-toggle-pw" id="togglePw" aria-label="Toggle password visibility">👁️</button>
+          </div>
         </div>
-      </a>
-      <ul class="nav-links">
-        <li><a href="#overview" class="nav-link active" data-section="overview">Overview</a></li>
-        <li><a href="#servers"  class="nav-link" data-section="servers">Servers</a></li>
-        <li><a href="#vcr"     class="nav-link" data-section="vcr">VCR Fleet</a></li>
-        <li><a href="#activity" class="nav-link" data-section="activity">Activity &amp; Logs</a></li>
-        <li><a href="#analytics" class="nav-link" data-section="analytics">Analytics</a></li>
-        <li><a href="#security" class="nav-link" data-section="security">Security</a></li>
-      </ul>
-      <div class="nav-right">
-        <div class="overall-pill" id="overallPill">
-          <span class="pill-dot" id="pillDot"></span>
-          <span id="pillText">Connecting…</span>
-        </div>
-        <div class="nav-clock" id="navClock">--:--:-- UTC</div>
-        <button class="btn-icon" id="refreshBtn" title="Force refresh">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-          </svg>
+        <div class="auth-error" id="authError"></div>
+        <button type="submit" class="btn-auth" id="btnSubmitAuth">
+          <span class="btn-text">Authenticate & Enter</span>
+          <div class="btn-spinner" id="authSpinner"></div>
         </button>
+      </form>
+
+      <div class="auth-footer">
+        <span class="auth-badge">🔒 AES-256 Encrypted DB</span>
+        <span class="auth-badge">⚡ PBKDF2/SHA-512 Auth</span>
       </div>
     </div>
-  </nav>
+  </div>
 
-  <!-- ═══════════════════════════════════════════ HERO ═══ -->
-  <section class="hero" id="overview">
-    <div class="hero-bg-grid"></div>
-    <div class="hero-glow hero-glow-1"></div>
-    <div class="hero-glow hero-glow-2"></div>
-    <div class="container">
-      <div class="hero-top">
-        <div class="hero-label">
-          <span class="label-dot pulse-green"></span>
-          Live Stream · Ultra-low Latency SSE (500ms)
-        </div>
-        <div class="hero-meta" id="lastUpdated">Last updated: --</div>
-      </div>
-      <h1 class="hero-title">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔 <br><span class="hero-accent">Bot Operations Center</span></h1>
-      <p class="hero-desc">Real-time telemetry for GX Main Bot, 5 VCR Audio Sentinels, acoustic security engine, live commands activity, and auto-checks.</p>
-
-      <!-- KPI Strip -->
-      <div class="kpi-strip">
-        <div class="kpi-card" id="kpiPing">
-          <div class="kpi-label">WebSocket Ping</div>
-          <div class="kpi-value"><span id="valPing">--</span><span class="kpi-unit">ms</span></div>
-          <div class="kpi-trend" id="trendPing"></div>
-          <canvas class="kpi-spark" id="sparkPing" width="120" height="36"></canvas>
-        </div>
-        <div class="kpi-card" id="kpiUptime">
-          <div class="kpi-label">Uptime</div>
-          <div class="kpi-value"><span id="valUptime">--</span></div>
-          <div class="kpi-trend text-green">↑ Zero-downtime SLA</div>
-          <canvas class="kpi-spark" id="sparkUptime" width="120" height="36"></canvas>
-        </div>
-        <div class="kpi-card" id="kpiMemory">
-          <div class="kpi-label">Heap Memory</div>
-          <div class="kpi-value"><span id="valMemory">--</span><span class="kpi-unit">MB</span></div>
-          <div class="kpi-trend" id="trendMemory"></div>
-          <canvas class="kpi-spark" id="sparkMem" width="120" height="36"></canvas>
-        </div>
-        <div class="kpi-card" id="kpiMembers">
-          <div class="kpi-label">Members Protected</div>
-          <div class="kpi-value"><span id="valMembers">--</span></div>
-          <div class="kpi-trend text-cyan">GX Shield Active</div>
-          <canvas class="kpi-spark" id="sparkMembers" width="120" height="36"></canvas>
-        </div>
-        <div class="kpi-card" id="kpiVcr">
-          <div class="kpi-label">VCR Sentinels</div>
-          <div class="kpi-value"><span id="valVcrOnline">5</span><span class="kpi-unit text-muted"> / 5</span></div>
-          <div class="kpi-trend text-green">All recording</div>
-          <canvas class="kpi-spark" id="sparkVcr" width="120" height="36"></canvas>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ SERVERS ═══ -->
-  <section class="section" id="servers">
-    <div class="container">
-      <div class="section-head">
-        <div>
-          <div class="section-eyebrow">Backend Infrastructure</div>
-          <h2 class="section-title">Server Nodes</h2>
-        </div>
-        <div class="section-badge" id="serversSummary">Fetching…</div>
-      </div>
-
-      <div class="server-grid">
-        <!-- Main Bot Node -->
-        <div class="server-card" id="nodeMain">
-          <div class="server-card-header">
-            <div class="server-node-indicator online" id="mainNodeDot"></div>
-            <div class="server-node-info">
-              <div class="server-node-name" id="mainBotTag">GX Bot#3131</div>
-              <div class="server-node-sub">Master Core · Discord Gateway</div>
-            </div>
-            <div class="server-status-tag operational" id="mainBotStatusTag">Operational</div>
-          </div>
-          <div class="server-metrics">
-            <div class="server-metric">
-              <span class="sm-label">Guild</span>
-              <span class="sm-val" id="mainGuildName">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Commands</span>
-              <span class="sm-val" id="mainCmdCount">42 Slash</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Version</span>
-              <span class="sm-val mono" id="mainVersion">v1.0</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Bot ID</span>
-              <span class="sm-val mono text-muted" id="mainBotId">1507671146487742464</span>
-            </div>
-          </div>
-          <div class="server-bar-wrap">
-            <div class="server-bar-label">
-              <span>Response Speed</span>
-              <span id="mainPingLabel">-- ms</span>
-            </div>
-            <div class="server-bar-track">
-              <div class="server-bar-fill cyan" id="mainPingBar" style="width:0%"></div>
-            </div>
-          </div>
-          <div class="server-bar-wrap">
-            <div class="server-bar-label">
-              <span>Heap Memory</span>
-              <span id="mainMemLabel">-- MB</span>
-            </div>
-            <div class="server-bar-track">
-              <div class="server-bar-fill purple" id="mainMemBar" style="width:0%"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Railway Cloud Node -->
-        <div class="server-card" id="nodeCloud">
-          <div class="server-card-header">
-            <div class="server-node-indicator online"></div>
-            <div class="server-node-info">
-              <div class="server-node-name">Railway Cloud</div>
-              <div class="server-node-sub">24/7 Production · Node.js Runtime</div>
-            </div>
-            <div class="server-status-tag operational">Operational</div>
-          </div>
-          <div class="server-metrics">
-            <div class="server-metric">
-              <span class="sm-label">Cluster Host</span>
-              <span class="sm-val">gxbot.eshamikh.com</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Region</span>
-              <span class="sm-val">US West</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Runtime</span>
-              <span class="sm-val mono">Node.js v22</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Port</span>
-              <span class="sm-val mono">3000</span>
-            </div>
-          </div>
-          <div class="server-bar-wrap">
-            <div class="server-bar-label">
-              <span>Process Uptime</span>
-              <span id="cloudUptimeLabel">--</span>
-            </div>
-            <div class="server-bar-track">
-              <div class="server-bar-fill green" id="cloudUptimeBar" style="width:0%"></div>
-            </div>
-          </div>
-          <div class="server-bar-wrap">
-            <div class="server-bar-label">
-              <span>Load Balancer</span>
-              <span class="text-green">Non-blocking</span>
-            </div>
-            <div class="server-bar-track">
-              <div class="server-bar-fill green" style="width:100%"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Discord API Node -->
-        <div class="server-card" id="nodeDiscord">
-          <div class="server-card-header">
-            <div class="server-node-indicator online"></div>
-            <div class="server-node-info">
-              <div class="server-node-name">Discord API</div>
-              <div class="server-node-sub">WebSocket Gateway · REST v10</div>
-            </div>
-            <div class="server-status-tag operational">Operational</div>
-          </div>
-          <div class="server-metrics">
-            <div class="server-metric">
-              <span class="sm-label">Gateway</span>
-              <span class="sm-val">wss://gateway.discord.gg</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Shard</span>
-              <span class="sm-val mono">0 / 1</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">Intents</span>
-              <span class="sm-val mono">131071</span>
-            </div>
-            <div class="server-metric">
-              <span class="sm-label">WS Ping</span>
-              <span class="sm-val mono" id="discordWsPing">-- ms</span>
-            </div>
-          </div>
-          <div class="server-bar-wrap">
-            <div class="server-bar-label">
-              <span>Latency Quality</span>
-              <span id="discordLatencyLabel">--</span>
-            </div>
-            <div class="server-bar-track">
-              <div class="server-bar-fill cyan" id="discordLatencyBar" style="width:0%"></div>
-            </div>
-          </div>
-          <div class="server-bar-wrap">
-            <div class="server-bar-label">
-              <span>Connection Health</span>
-              <span class="text-green">Stable</span>
-            </div>
-            <div class="server-bar-track">
-              <div class="server-bar-fill green" style="width:100%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ VCR FLEET ═══ -->
-  <section class="section section-dark" id="vcr">
-    <div class="container">
-      <div class="section-head">
-        <div>
-          <div class="section-eyebrow">Audio Recording Infrastructure</div>
-          <h2 class="section-title">VCR Fleet — 5 Audio Sentinels</h2>
-        </div>
-        <div class="section-badge green" id="vcrSummary">All Sentinels Online</div>
-      </div>
-
-      <div class="vcr-grid" id="vcrGrid">
-        <!-- VCR cards generated by JS -->
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ ACTIVITY & BACKEND LOGS ═══ -->
-  <section class="section" id="activity">
-    <div class="container">
-      <div class="section-head">
-        <div>
-          <div class="section-eyebrow">Real-Time Backend Operations</div>
-          <h2 class="section-title">Latest Actions &amp; System Logs</h2>
-        </div>
-        <div class="activity-live-badge">
-          <span class="pulse-green"></span>
-          <span>Live Event Stream</span>
+  <!-- ══════════════════════════════════════════════════════
+       MAIN APPLICATION SHELL (Authenticated)
+       ══════════════════════════════════════════════════════ -->
+  <div class="app-shell" id="appShell">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <img src="" alt="GX" class="header-logo gx-logo-img" />
+        <div class="header-brand">
+          <div class="brand-title">GX <span>COMMAND</span></div>
+          <div class="brand-sub">ENTERPRISE BOT CONTROLLER</div>
         </div>
       </div>
 
-      <!-- Activity Counter Strip -->
-      <div class="activity-stats-strip">
-        <div class="act-stat-box">
-          <div class="act-stat-icon cyan">⚡</div>
-          <div class="act-stat-info">
-            <span class="act-stat-num" id="statCmdTotal">0</span>
-            <span class="act-stat-lbl">Commands Executed</span>
-          </div>
-        </div>
-        <div class="act-stat-box">
-          <div class="act-stat-icon amber">🛡️</div>
-          <div class="act-stat-info">
-            <span class="act-stat-num" id="statSecAlerts">0</span>
-            <span class="act-stat-lbl">Security Actions</span>
-          </div>
-        </div>
-        <div class="act-stat-box">
-          <div class="act-stat-icon green">⏱️</div>
-          <div class="act-stat-info">
-            <span class="act-stat-num" id="statAutoChecks">0</span>
-            <span class="act-stat-lbl">Auto-Checks Run</span>
-          </div>
-        </div>
-        <div class="act-stat-box">
-          <div class="act-stat-icon purple">🎙️</div>
-          <div class="act-stat-info">
-            <span class="act-stat-num" id="statVcrEvents">0</span>
-            <span class="act-stat-lbl">VCR Operations</span>
-          </div>
-        </div>
+      <div class="header-center">
+        <nav class="nav-tabs" id="navTabs">
+          <button class="nav-tab active" data-tab="overview">📊 Overview</button>
+          <button class="nav-tab" data-tab="appeals">⚖️ Appeals <span class="tab-badge" id="badgePendingAppeals">0</span></button>
+          <button class="nav-tab" data-tab="panels">🎛️ Panels</button>
+          <button class="nav-tab" data-tab="vcr">🎙️ VCR Sentinels</button>
+          <button class="nav-tab" data-tab="security">🛡️ Shield & Sync</button>
+          <button class="nav-tab" data-tab="broadcast">📢 Broadcast</button>
+          <button class="nav-tab" data-tab="logs">📜 Live Console</button>
+        </nav>
       </div>
 
-      <!-- Feed Controls (Filter Tabs + Search) -->
-      <div class="activity-controls">
-        <div class="activity-filters" id="activityFilterTabs">
-          <button class="act-filter-btn active" data-filter="all">All Events</button>
-          <button class="act-filter-btn" data-filter="command">Commands (/)</button>
-          <button class="act-filter-btn" data-filter="security">Security &amp; Shield</button>
-          <button class="act-filter-btn" data-filter="autocheck">Auto-Checks &amp; Guards</button>
-          <button class="act-filter-btn" data-filter="vcr">VCR Fleet</button>
-          <button class="act-filter-btn" data-filter="system">Core System</button>
+      <div class="header-right">
+        <div class="live-pill" id="livePill">
+          <span class="live-dot"></span>
+          <span id="livePillText">Connecting…</span>
         </div>
-        <div class="activity-search-wrap">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          <input type="text" id="activitySearchInput" class="activity-search" placeholder="Search commands, users, logs…">
-        </div>
+        <button class="btn-logout" id="btnLogout" title="Logout">Lock</button>
       </div>
+    </header>
 
-      <!-- Activity Feed Stream -->
-      <div class="activity-feed-container">
-        <div class="activity-feed" id="activityFeedList">
-          <!-- Populated by JS -->
-        </div>
-      </div>
-    </div>
-  </section>
+    <!-- Main Content Area -->
+    <main class="app-main">
 
-  <!-- ═══════════════════════════════════════════ ANALYTICS ═══ -->
-  <section class="section section-dark" id="analytics">
-    <div class="container">
-      <div class="section-head">
-        <div>
-          <div class="section-eyebrow">Live Telemetry</div>
-          <h2 class="section-title">Real-Time Analytics</h2>
-        </div>
-      </div>
-
-      <div class="analytics-grid">
-        <!-- Ping Chart -->
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <div class="chart-card-title">
-              <span class="chart-dot cyan"></span>
-              WebSocket Latency (ms)
-            </div>
-            <div class="chart-card-val" id="chartPingVal">-- ms</div>
+      <!-- ── SECTION 1: OVERVIEW ── -->
+      <section class="tab-content active" id="tab-overview">
+        <!-- KPI Strip -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Gateway Ping</div>
+            <div class="kpi-value"><span id="valPing">--</span><span class="kpi-unit">ms</span></div>
+            <div class="kpi-sub" id="trendPing">Stable Latency</div>
           </div>
-          <canvas id="chartPing" height="90"></canvas>
-        </div>
-
-        <!-- Memory Chart -->
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <div class="chart-card-title">
-              <span class="chart-dot purple"></span>
-              Heap Memory (MB)
-            </div>
-            <div class="chart-card-val" id="chartMemVal">-- MB</div>
+          <div class="kpi-card">
+            <div class="kpi-label">System Uptime</div>
+            <div class="kpi-value"><span id="valUptime">--</span></div>
+            <div class="kpi-sub text-white">99.9% Zero-Downtime SLA</div>
           </div>
-          <canvas id="chartMem" height="90"></canvas>
-        </div>
-
-        <!-- Uptime SLA Gauge -->
-        <div class="chart-card chart-card-gauge">
-          <div class="chart-card-header">
-            <div class="chart-card-title">
-              <span class="chart-dot green"></span>
-              Operational SLA
-            </div>
-            <span class="chart-val-badge green">99.9% Target</span>
+          <div class="kpi-card">
+            <div class="kpi-label">Heap Memory</div>
+            <div class="kpi-value"><span id="valMemory">--</span><span class="kpi-unit">MB</span></div>
+            <div class="kpi-sub">Optimized Garbage Collection</div>
           </div>
-          <div class="gauge-wrap">
-            <svg class="gauge-svg" viewBox="0 0 160 95">
-              <defs>
-                <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#10b981"/>
-                  <stop offset="50%" stop-color="#06b6d4"/>
-                  <stop offset="100%" stop-color="#22c55e"/>
-                </linearGradient>
-                <filter id="gaugeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3" result="blur"/>
-                  <feMerge>
-                    <feMergeNode in="blur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-              <path class="gauge-bg" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="11" stroke-linecap="round" fill="none"/>
-              <path class="gauge-fill" id="gaugeFill" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="11" stroke-linecap="round" fill="none"
-                stroke="url(#gaugeGrad)" filter="url(#gaugeGlow)" stroke-dasharray="188.5" stroke-dashoffset="0"/>
-            </svg>
-            <div class="gauge-center">
-              <div class="gauge-label" id="gaugeLabel">99.9%</div>
-              <div class="gauge-sub">AVAILABILITY</div>
-            </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Protected Members</div>
+            <div class="kpi-value"><span id="valMembers">--</span></div>
+            <div class="kpi-sub text-white">Active Defense Guard</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">VCR Sentinels</div>
+            <div class="kpi-value"><span id="valVcrOnline">5</span><span class="kpi-unit">/ 5</span></div>
+            <div class="kpi-sub text-white">Stationed & Capturing</div>
           </div>
         </div>
 
-        <!-- Event Log -->
-        <div class="chart-card chart-card-log">
-          <div class="chart-card-header">
-            <div class="chart-card-title">
-              <span class="chart-dot amber"></span>
-              Live Event Stream
+        <!-- Charts & Telemetry Grid -->
+        <div class="grid-2col">
+          <!-- SLA Gauge -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">Operational SLA Availability</div>
+              <span class="badge-white">99.9% Target</span>
             </div>
-            <button class="btn-clear" id="clearLog">Clear</button>
+            <div class="gauge-box">
+              <svg class="gauge-svg" viewBox="0 0 160 95">
+                <defs>
+                  <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#ffffff"/>
+                    <stop offset="100%" stop-color="#a1a1aa"/>
+                  </linearGradient>
+                </defs>
+                <path class="gauge-bg" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="10" stroke-linecap="round" fill="none"/>
+                <path class="gauge-fill" id="gaugeFill" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="10" stroke-linecap="round" fill="none"
+                  stroke="url(#gaugeGrad)" stroke-dasharray="188.5" stroke-dashoffset="0"/>
+              </svg>
+              <div class="gauge-center">
+                <div class="gauge-label" id="gaugeLabel">99.9%</div>
+                <div class="gauge-sub">OPERATIONAL</div>
+              </div>
+            </div>
           </div>
-          <ul class="event-log" id="eventLog">
-            <li class="log-item log-info">System initialized — waiting for telemetry…</li>
+
+          <!-- Server Details -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">Production Server Details</div>
+              <span class="badge-white" id="nodeStatusBadge">ONLINE</span>
+            </div>
+            <div class="spec-list">
+              <div class="spec-row">
+                <span class="spec-name">Primary Domain</span>
+                <span class="spec-val mono text-white">gxbot.eshamikh.com</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Port</span>
+                <span class="spec-val mono">3000</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Database Architecture</span>
+                <span class="spec-val mono">Hashed Encrypted JSON</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Bot Core & Commands</span>
+                <span class="spec-val">GX Bot#3131 (42 Slash Commands)</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Guild Target</span>
+                <span class="spec-val">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔 (1537461174222725120)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── SECTION 2: APPEALS CENTER ── -->
+      <section class="tab-content" id="tab-appeals">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-heading">Security Appeals Command</h2>
+            <p class="section-desc">Review submitted member appeals. Decisions immediately unban users and deliver DM notifications.</p>
+          </div>
+          <div class="filter-group">
+            <input type="text" class="input-search" id="searchAppeals" placeholder="Search by User ID or Tag…" />
+            <select class="select-filter" id="filterAppealStatus">
+              <option value="all">All Appeals</option>
+              <option value="pending" selected>Pending Review</option>
+              <option value="approved">Approved & Unbanned</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="appeals-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Applicant</th>
+                <th>User ID</th>
+                <th>Submitted</th>
+                <th>Statement Summary</th>
+                <th>Status</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="appealsTableBody">
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">Loading appeals from encrypted storage…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── SECTION 3: PANELS MANAGER ── -->
+      <section class="tab-content" id="tab-panels">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-heading">Interactive Panels & Channels</h2>
+            <p class="section-desc">Deploy, re-send, or delete live panels from your server channels with instant Discord sync.</p>
+          </div>
+        </div>
+
+        <div class="grid-3col">
+          <!-- Ticket Panel -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">🎫 Ticket Support Panel</div>
+              <span class="status-chip" id="chipTicketStatus">Active</span>
+            </div>
+            <p class="panel-info">Permanent support ticket panel with category selection in `#open-ticket`.</p>
+            <div class="panel-actions">
+              <button class="btn-action primary" onclick="deployPanel('ticket')">🚀 Deploy / Refresh</button>
+              <button class="btn-action danger" onclick="removePanel('ticket')">🗑️ Remove Panel</button>
+            </div>
+          </div>
+
+          <!-- Event Panel -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">🏆 Event & Tournament Panel</div>
+              <span class="status-chip" id="chipEventStatus">Active</span>
+            </div>
+            <p class="panel-info">Live event match and participant registration panel in `#events-announcement`.</p>
+            <div class="panel-actions">
+              <button class="btn-action primary" onclick="deployPanel('event')">🚀 Deploy / Refresh</button>
+              <button class="btn-action danger" onclick="removePanel('event')">🗑️ Remove Panel</button>
+            </div>
+          </div>
+
+          <!-- Status Channel -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">📊 Live System Status Panel</div>
+              <span class="status-chip" id="chipSystemStatus">Active</span>
+            </div>
+            <p class="panel-info">Auto-updating telemetry embed in `#system-status` (10s interval).</p>
+            <div class="panel-actions">
+              <button class="btn-action primary" onclick="deployPanel('status')">🔄 Force Refresh Embed</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── SECTION 4: VCR SENTINELS ── -->
+      <section class="tab-content" id="tab-vcr">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-heading">VCR Audio Sentinel Fleet</h2>
+            <p class="section-desc">Autonomous multi-track voice sentinels with 3-second watchdog auto-healing.</p>
+          </div>
+          <button class="btn-action primary" onclick="forceReStationVCR()">🎙️ Force Re-Station All</button>
+        </div>
+
+        <div class="grid-5col" id="vcrFleetGrid">
+          <!-- Dynamic VCR Cards -->
+        </div>
+      </section>
+
+      <!-- ── SECTION 5: SECURITY & SHIELD ── -->
+      <section class="tab-content" id="tab-security">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-heading">Security Shield & Role Management</h2>
+            <p class="section-desc">Trigger instant server-wide member role audits and manage acoustic defense policies.</p>
+          </div>
+          <button class="btn-action primary" id="btnSyncRoles" onclick="triggerMassSync()">⚡ Mass Role & Member Sync</button>
+        </div>
+
+        <div class="grid-2col">
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">🛡️ Spy Account Auto-Defense</div>
+            </div>
+            <div class="spec-list">
+              <div class="spec-row">
+                <span class="spec-name">Account Cutoff Age</span>
+                <span class="spec-val">16 August 2026</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Default Role on Join</span>
+                <span class="spec-val mono">UNTRUSTED (Protected)</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Executive Notification</span>
+                <span class="spec-val text-white">OWNER / CEO / COO DMs (Alert-only)</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Appeals Destination</span>
+                <span class="spec-val text-white">GX Control Panel</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title">🔊 Acoustic Scream Defense</div>
+            </div>
+            <div class="spec-list">
+              <div class="spec-row">
+                <span class="spec-name">Instant Ear-Rape Threshold</span>
+                <span class="spec-val mono">RMS > 16,000 (Instant Server Mute)</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Sustained Loud Noise</span>
+                <span class="spec-val mono">RMS > 11,000 (for 1.5s)</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Defense Action</span>
+                <span class="spec-val">Automated 30s Voice Mute + Log</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── SECTION 6: BROADCAST COMPOSER ── -->
+      <section class="tab-content" id="tab-broadcast">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-heading">Official Broadcast Composer</h2>
+            <p class="section-desc">Broadcast styled high-command announcements directly into any server channel.</p>
+          </div>
+        </div>
+
+        <div class="panel-card" style="max-width: 750px;">
+          <form id="broadcastForm" onsubmit="return false;">
+            <div class="input-group">
+              <label for="broadcastChannel">Target Channel ID</label>
+              <input type="text" id="broadcastChannel" placeholder="e.g. 1538560876339265667" required />
+            </div>
+            <div class="input-group">
+              <label for="broadcastTitle">Announcement Title</label>
+              <input type="text" id="broadcastTitle" placeholder="Official Notice from High Command" required />
+            </div>
+            <div class="input-group">
+              <label for="broadcastMessage">Message Content</label>
+              <textarea id="broadcastMessage" rows="5" placeholder="Enter announcement body text…" required></textarea>
+            </div>
+            <div class="input-group">
+              <label for="broadcastColor">Embed Accent Color</label>
+              <select id="broadcastColor">
+                <option value="16777215" selected>⚪ Pure White (0xFFFFFF)</option>
+                <option value="5763719">🟢 Neon Green (0x57F287)</option>
+                <option value="15548997">🔴 Security Red (0xED4245)</option>
+                <option value="16705372">🟡 Warning Amber (0xFEE75C)</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-action primary" onclick="sendBroadcast()" style="margin-top: 10px;">
+              📢 Send Official Broadcast
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ── SECTION 7: LIVE CONSOLE LOGS ── -->
+      <section class="tab-content" id="tab-logs">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-heading">Live Telemetry & Activity Stream</h2>
+            <p class="section-desc">Real-time audit log of bot events, slash commands, voice sentinels, and security actions.</p>
+          </div>
+          <button class="btn-action" onclick="clearEventLog()">Clear View</button>
+        </div>
+
+        <div class="log-container">
+          <ul class="event-stream-list" id="eventStreamList">
+            <li class="log-entry">Waiting for realtime SSE stream…</li>
           </ul>
         </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Statement Viewer Modal -->
+  <div class="modal-backdrop" id="statementModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalUserTag">Appeal Statement</h3>
+        <button class="modal-close" onclick="closeStatementModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="meta-row">
+          <span class="meta-label">User ID:</span>
+          <span class="meta-val mono" id="modalUserId">--</span>
+        </div>
+        <div class="statement-box" id="modalStatementText">
+          --
+        </div>
+      </div>
+      <div class="modal-footer" id="modalActions">
+        <!-- Dynamic Approve / Reject Buttons -->
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- ═══════════════════════════════════════════ SECURITY ═══ -->
-  <section class="section" id="security">
-    <div class="container">
-      <div class="section-head">
-        <div>
-          <div class="section-eyebrow">Acoustic Defense Engine</div>
-          <h2 class="section-title">Security Rules &amp; Shield</h2>
-        </div>
-        <div class="section-badge amber">RMS Filter Active</div>
-      </div>
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
 
-      <div class="security-grid">
-        <!-- Thresholds -->
-        <div class="sec-card">
-          <div class="sec-card-title">Detection Thresholds</div>
-          <div class="threshold-list">
-            <div class="thresh-item">
-              <div class="thresh-label">Sustained Scream (3 frames)</div>
-              <div class="thresh-bar-row">
-                <div class="thresh-track"><div class="thresh-fill amber" style="width:65%"></div></div>
-                <span class="thresh-val mono">11,000 RMS</span>
-              </div>
-            </div>
-            <div class="thresh-item">
-              <div class="thresh-label">Instant Ear-Rape Burst</div>
-              <div class="thresh-bar-row">
-                <div class="thresh-track"><div class="thresh-fill red" style="width:88%"></div></div>
-                <span class="thresh-val mono">16,000 RMS</span>
-              </div>
-            </div>
-            <div class="thresh-item">
-              <div class="thresh-label">Peak Audio Spike</div>
-              <div class="thresh-bar-row">
-                <div class="thresh-track"><div class="thresh-fill red" style="width:100%"></div></div>
-                <span class="thresh-val mono">29,000 Peak</span>
-              </div>
-            </div>
-            <div class="thresh-item">
-              <div class="thresh-label">Mute Duration</div>
-              <div class="thresh-bar-row">
-                <div class="thresh-track"><div class="thresh-fill green" style="width:30%"></div></div>
-                <span class="thresh-val mono text-green">30 seconds</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Exemptions -->
-        <div class="sec-card">
-          <div class="sec-card-title">Protected &amp; Exempt</div>
-          <div class="rule-list">
-            <div class="rule-row rule-ok">
-              <div class="rule-icon">👑</div>
-              <div class="rule-body">
-                <div class="rule-name">Leadership Immunity</div>
-                <div class="rule-desc">OWNER, CEO, COO — zero enforcement, absolute protection</div>
-              </div>
-              <div class="rule-badge badge-green">Exempt</div>
-            </div>
-            <div class="rule-row rule-ok">
-              <div class="rule-icon">🏆</div>
-              <div class="rule-body">
-                <div class="rule-name">Tournaments &amp; Matches</div>
-                <div class="rule-desc">Scream detection OFF · Recording continues 100%</div>
-              </div>
-              <div class="rule-badge badge-blue">Bypass</div>
-            </div>
-            <div class="rule-row rule-warn">
-              <div class="rule-icon">🎙️</div>
-              <div class="rule-body">
-                <div class="rule-name">All GX Bots</div>
-                <div class="rule-desc">Never recorded, tracked, or loudness-checked — fully excluded</div>
-              </div>
-              <div class="rule-badge badge-gray">Excluded</div>
-            </div>
-            <div class="rule-row rule-warn">
-              <div class="rule-icon">🔇</div>
-              <div class="rule-body">
-                <div class="rule-name">VCR Cannot Affect Managers</div>
-                <div class="rule-desc">VCR bots have zero ability to mute/deafen OWNER/CEO/COO</div>
-              </div>
-              <div class="rule-badge badge-amber">Blocked</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- API Box -->
-        <div class="sec-card sec-card-api">
-          <div class="sec-card-title">Live API Endpoint</div>
-          <p class="api-desc">Pull real-time telemetry from any external app or monitor:</p>
-          <div class="api-box">
-            <span class="api-method">GET</span>
-            <code class="api-url" id="apiUrlDisplay">/api/status</code>
-            <button class="btn-copy" id="copyApiBtn">Copy</button>
-          </div>
-          <div class="api-sample" id="apiSampleBox">
-            <span class="sample-label">Sample Response</span>
-            <pre id="apiSample">Fetching…</pre>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ FOOTER ═══ -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-inner">
-        <div class="footer-brand">
-          <div class="footer-logo">GX</div>
-          <div>
-            <div class="footer-name">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔</div>
-            <div class="footer-copy">© 2026 · All systems monitored &amp; secured</div>
-          </div>
-        </div>
-        <div class="footer-pills">
-          <span class="f-pill">Military-Grade Security</span>
-          <span class="f-pill">Multi-Bot WebRTC</span>
-          <span class="f-pill">24/7 Cloud Engine</span>
-          <span class="f-pill green">All Systems Operational</span>
-        </div>
-      </div>
-    </div>
-  </footer>
-
-  <script src="./app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
