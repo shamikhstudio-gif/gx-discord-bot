@@ -1,457 +1,537 @@
+import { GX_LOGO_DATA_URI } from './logo.js';
+
 /* ══════════════════════════════════════════════════════
-   GX eSports Operations Center — Real-Time Stream Client
-   Dual Transport: SSE (500ms Push) + Fast Polling Fallback
-   Auto-Target: Railway Cloud 24/7 + Local Dev Auto-Switch
+   GLOBAL STATE & CONSTANTS
    ══════════════════════════════════════════════════════ */
+const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE = IS_LOCAL ? `http://${window.location.hostname}:3000` : 'https://gxbot.eshamikh.com';
 
-const CLOUD_API_BASE = 'https://gxbot.eshamikh.com';
-const LOCAL_API_BASE = 'http://localhost:3000';
+let adminToken = sessionStorage.getItem('gx_admin_token') || null;
+let currentAppeals = [];
+let activeTab = 'overview';
+let activeModalAppealId = null;
 
-let activeApiBase = (location.protocol === 'file:' || location.hostname === '')
-  ? CLOUD_API_BASE
-  : (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? LOCAL_API_BASE : window.location.origin);
+/* ══════════════════════════════════════════════════════
+   DOM HELPERS
+   ══════════════════════════════════════════════════════ */
+const $ = (id) => document.getElementById(id);
 
-let isPollingFallback = false;
-let pollingTimer = null;
-let sseSource = null;
-let reconnectTimer = null;
-
-function getApiStreamUrl() { return activeApiBase + '/api/stream'; }
-function getApiStatusUrl() { return activeApiBase + '/api/status'; }
-
-const VCR_STATIC = [
-  { num: 1, id: '1539231767683137646', channel: '#『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟏', executive: false },
-  { num: 2, id: '1539241189629362246', channel: '#🔒・فويس الإدارة',           executive: true  },
-  { num: 3, id: '1539241414318227466', channel: '#『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟐', executive: false },
-  { num: 4, id: '1539241621328101497', channel: '#『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟑', executive: false },
-  { num: 5, id: '1539241867105927209', channel: '#『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟒', executive: false },
-];
-
-/* ─── Ring buffer for chart history ─── */
-class RingBuffer {
-  constructor(size) { this.size = size; this.buf = []; }
-  push(v) { this.buf.push(v); if (this.buf.length > this.size) this.buf.shift(); }
-  get data() { return this.buf; }
+function showToast(message, type = 'info') {
+  const container = $('toastContainer');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
 }
 
-const pingHistory  = new RingBuffer(30);
-const memHistory   = new RingBuffer(30);
-const pingChart    = new RingBuffer(60);
-const memChart     = new RingBuffer(60);
-
-let prevPing = null;
-let prevMem  = null;
-let frameCount = 0;
-
-/* ─── Uptime counter running client-side (increments every second) ─── */
-let lastKnownUptimeSec = 0;
-let lastUptimeReceivedAt = 0;
-
-/* ─── Activity Log State & Filter ─── */
-let currentActivities = [];
-let activeFilter = 'all';
-let searchQuery  = '';
-
 /* ══════════════════════════════════════════════════════
-   INIT
+   INITIALIZATION & LOGO INJECTION
    ══════════════════════════════════════════════════════ */
-let $;
 document.addEventListener('DOMContentLoaded', () => {
-  $ = id => document.getElementById(id);
+  // Inject official GX logo everywhere
+  document.querySelectorAll('.gx-logo-img').forEach((img) => {
+    img.src = GX_LOGO_DATA_URI;
+  });
 
-  buildVcrGrid();
-  startClock();
-  initNavHighlight();
-  initActivityControls();
-  updateApiUrlDisplay();
+  // Check auth state
+  if (adminToken) {
+    validateSession();
+  } else {
+    showAuthOverlay();
+  }
 
-  $('copyApiBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText(getApiStatusUrl()).then(() => {
-      $('copyApiBtn').textContent = 'Copied!';
-      setTimeout(() => { $('copyApiBtn').textContent = 'Copy'; }, 2000);
+  // Setup tab navigation
+  document.querySelectorAll('.nav-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-tab');
+      switchTab(target);
     });
   });
 
-  $('refreshBtn').addEventListener('click', () => {
-    $('refreshBtn').classList.add('spin');
-    reconnect();
-    setTimeout(() => $('refreshBtn').classList.remove('spin'), 700);
-  });
+  // Setup Auth Events
+  $('authForm')?.addEventListener('submit', handleLogin);
+  $('togglePw')?.addEventListener('click', togglePasswordVisibility);
+  $('btnLogout')?.addEventListener('click', handleLogout);
 
-  $('clearLog').addEventListener('click', () => { $('eventLog').innerHTML = ''; });
+  // Search & Filter Appeals
+  $('searchAppeals')?.addEventListener('input', renderAppealsTable);
+  $('filterAppealStatus')?.addEventListener('change', renderAppealsTable);
 
-  // Probe fastest endpoint and start streaming
-  initConnection();
-
-  /* Client-side uptime ticker — increments every second between server pushes */
-  setInterval(() => {
-    if (lastUptimeReceivedAt === 0) return;
-    const elapsed = Math.floor((Date.now() - lastUptimeReceivedAt) / 1000);
-    const live = lastKnownUptimeSec + elapsed;
-    setEl('valUptime', fmtUptime(live));
-    setEl('cloudUptimeLabel', fmtUptime(live));
-  }, 1000);
-
-  /* Relative time ticker for activity items */
-  setInterval(renderActivityFeed, 3000);
+  // Start Realtime Streams
+  startRealtimeStream();
 });
 
-function updateApiUrlDisplay() {
-  const display = $('apiUrlDisplay');
-  if (display) display.textContent = getApiStatusUrl();
-}
-
 /* ══════════════════════════════════════════════════════
-   CONNECTION RESOLVER & TRANSPORTS
+   AUTHENTICATION LOGIC
    ══════════════════════════════════════════════════════ */
-async function initConnection() {
-  if (location.protocol === 'file:') {
-    addLog(`🌐 Connecting to 24/7 Cloud Cluster (${activeApiBase})...`, 'info');
-  }
-
-  // Attempt initial quick fetch to verify endpoint responsiveness
-  try {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 2000);
-    const r = await fetch(getApiStatusUrl(), { signal: ctrl.signal }).catch(() => null);
-    clearTimeout(tid);
-
-    if (r && r.ok) {
-      const d = await r.json();
-      processData(d);
-      addLog(`⚡ Endpoint verified: ${activeApiBase}`, 'ok');
-    } else if (activeApiBase === LOCAL_API_BASE) {
-      // Local failed, fallback to cloud
-      activeApiBase = CLOUD_API_BASE;
-      updateApiUrlDisplay();
-      addLog(`Switching to Cloud Stream (${CLOUD_API_BASE})...`, 'warn');
-    }
-  } catch {}
-
-  startTransport();
+function showAuthOverlay() {
+  $('authOverlay')?.classList.remove('hidden');
 }
 
-function startTransport() {
-  if (sseSource) { sseSource.close(); sseSource = null; }
-  if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
-  clearTimeout(reconnectTimer);
+function hideAuthOverlay() {
+  $('authOverlay')?.classList.add('hidden');
+}
 
-  setPillState('connecting', 'Connecting…');
+function togglePasswordVisibility() {
+  const input = $('adminPassword');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
 
-  // Try Server-Sent Events first
+async function handleLogin() {
+  const pwInput = $('adminPassword');
+  const errorEl = $('authError');
+  const spinner = $('authSpinner');
+  const btnText = document.querySelector('#btnSubmitAuth .btn-text');
+
+  if (!pwInput || !pwInput.value) return;
+
+  if (errorEl) errorEl.textContent = '';
+  if (spinner) spinner.style.display = 'inline-block';
+  if (btnText) btnText.textContent = 'Verifying…';
+
   try {
-    sseSource = new EventSource(getApiStreamUrl());
+    const res = await fetch(`${API_BASE}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwInput.value.trim() })
+    });
 
-    sseSource.onopen = () => {
-      isPollingFallback = false;
-      setPillState('online', 'Live Stream Active');
-      addLog(`✅ Connected to Real-time Stream (${activeApiBase})`, 'ok');
-    };
-
-    sseSource.onmessage = (event) => {
-      try {
-        const d = JSON.parse(event.data);
-        processData(d);
-      } catch (e) {
-        addLog('Parse error: ' + e.message, 'error');
-      }
-    };
-
-    sseSource.onerror = () => {
-      if (sseSource) { sseSource.close(); sseSource = null; }
-      
-      // If SSE is blocked (common on file:// or network proxies), switch to fast polling
-      if (!isPollingFallback) {
-        isPollingFallback = true;
-        addLog('SSE stream restricted by browser — switching to Ultra-Fast Polling (500ms)...', 'warn');
-        startPollingFallback();
-      } else {
-        setPillState('warning', 'Reconnecting…');
-        reconnectTimer = setTimeout(initConnection, 3000);
-      }
-    };
+    const data = await res.json();
+    if (res.ok && data.success) {
+      adminToken = data.token;
+      sessionStorage.setItem('gx_admin_token', adminToken);
+      hideAuthOverlay();
+      showToast('✅ Authenticated successfully! Welcome to GX Command Center.', 'success');
+      loadAppeals();
+      loadPanels();
+    } else {
+      if (errorEl) errorEl.textContent = data.error || 'Invalid master password.';
+    }
   } catch (err) {
-    isPollingFallback = true;
-    startPollingFallback();
+    if (errorEl) errorEl.textContent = 'Server connection error. Ensure backend is running.';
+  } finally {
+    if (spinner) spinner.style.display = 'none';
+    if (btnText) btnText.textContent = 'Authenticate & Enter';
   }
 }
 
-function startPollingFallback() {
-  if (pollingTimer) clearInterval(pollingTimer);
-  
-  async function poll() {
-    try {
-      const r = await fetch(getApiStatusUrl());
-      if (r.ok) {
-        const d = await r.json();
-        processData(d);
-        setPillState('online', 'Live Polling Active (500ms)');
-      }
-    } catch {
-      // If cloud was unreachable, probe fallback
-      setPillState('warning', 'Reconnecting…');
+async function validateSession() {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/session`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      hideAuthOverlay();
+      loadAppeals();
+      loadPanels();
+    } else {
+      handleLogout();
     }
+  } catch {
+    hideAuthOverlay();
   }
-
-  poll();
-  pollingTimer = setInterval(poll, 500);
 }
 
-function reconnect() {
-  addLog('Manual reconnect requested…', 'info');
-  initConnection();
+function handleLogout() {
+  adminToken = null;
+  sessionStorage.removeItem('gx_admin_token');
+  showAuthOverlay();
+  showToast('Logged out of Command Center.', 'info');
 }
 
 /* ══════════════════════════════════════════════════════
-   DATA PROCESSOR  (called on every SSE message = ~500ms)
+   TAB SWITCHING
    ══════════════════════════════════════════════════════ */
-function processData(d) {
-  frameCount++;
-
-  /* ── Overall pill ── */
-  if (d.status === 'operational') {
-    setPillState('online', 'Live · ' + formatTimestamp(d.timestamp));
-  }
-
-  /* ── Last updated ── */
-  setEl('lastUpdated', 'Updated: ' + new Date().toLocaleTimeString('en-GB', { hour12: false }));
-
-  /* ── Ping ── */
-  const ping = d.ping || 0;
-  setEl('valPing',        ping);
-  setEl('mainPingLabel',  ping + ' ms');
-  setEl('discordWsPing',  ping + ' ms');
-  setEl('chartPingVal',   ping + ' ms');
-
-  const pingPct  = Math.min((ping / 200) * 100, 100);
-  setBarWidth('mainPingBar',       100 - pingPct);
-  setBarWidth('discordLatencyBar', 100 - pingPct);
-  setEl('discordLatencyLabel', ping < 60 ? '⚡ Excellent' : ping < 120 ? '✓ Good' : '⚠ Fair');
-
-  const trendPingEl = $('trendPing');
-  if (trendPingEl && prevPing !== null) {
-    const d2 = ping - prevPing;
-    trendPingEl.textContent = d2 > 0 ? `↑ +${d2}ms` : d2 < 0 ? `↓ ${d2}ms` : '→ Stable';
-    trendPingEl.style.color = d2 > 20 ? '#f59e0b' : d2 < -5 ? '#22c55e' : '#64748b';
-  }
-  prevPing = ping;
-  pingHistory.push(ping);
-  pingChart.push(ping);
-
-  /* ── Uptime ── */
-  lastKnownUptimeSec   = d.uptimeSeconds || 0;
-  lastUptimeReceivedAt = Date.now();
-  setEl('valUptime', fmtUptime(lastKnownUptimeSec));
-  setEl('cloudUptimeLabel', fmtUptime(lastKnownUptimeSec));
-
-  const uptimePct = Math.min((lastKnownUptimeSec / 3600) * 100, 100);
-  setBarWidth('cloudUptimeBar', uptimePct);
-  updateGauge(lastKnownUptimeSec, d.status);
-
-  /* ── Memory ── */
-  if (d.memory) {
-    const heapMB = Math.round(d.memory.heapUsed / 1024 / 1024);
-    setEl('valMemory',    heapMB);
-    setEl('mainMemLabel', heapMB + ' MB');
-    setEl('chartMemVal',  heapMB + ' MB');
-
-    const memPct = Math.min((heapMB / 512) * 100, 100);
-    setBarWidth('mainMemBar', memPct);
-
-    const trendMemEl = $('trendMemory');
-    if (trendMemEl && prevMem !== null) {
-      const delta = heapMB - prevMem;
-      trendMemEl.textContent = delta > 0 ? `↑ +${delta}MB` : delta < 0 ? `↓ ${delta}MB` : '→ Stable';
-      trendMemEl.style.color = delta > 30 ? '#f59e0b' : '#64748b';
-    }
-    prevMem = heapMB;
-    memHistory.push(heapMB);
-    memChart.push(heapMB);
-  }
-
-  /* ── Guild / Members ── */
-  if (d.guild) {
-    setEl('valMembers',    (d.guild.memberCount || 0).toLocaleString());
-    setEl('mainGuildName', d.guild.name || '𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔');
-  }
-
-  /* ── Main Bot ── */
-  if (d.mainBot) {
-    setEl('mainBotTag', d.mainBot.tag || 'GX Bot#3131');
-    setEl('mainBotId',  d.mainBot.id  || '1507671146487742464');
-    setEl('mainVersion', 'v' + (d.mainBot.version || '1.0'));
-    setEl('mainCmdCount', (d.mainBot.commandsCount || 42) + ' Slash');
-  }
-
-  /* ── VCR Fleet ── */
-  let vcrOnline = 0;
-  if (d.vcrFleet && Array.isArray(d.vcrFleet)) {
-    d.vcrFleet.forEach((vcr, i) => {
-      const num = i + 1;
-      const online = vcr.status === 'online';
-      if (online) vcrOnline++;
-      const dot = $(`vcrDot${num}`);
-      if (dot) {
-        dot.style.background = online ? '#22c55e' : '#ef4444';
-        dot.style.boxShadow  = online
-          ? '0 0 0 2px rgba(34,197,94,0.2)'
-          : '0 0 0 2px rgba(239,68,68,0.2)';
-      }
-      const ch = $(`vcrCh${num}`);
-      if (ch && vcr.defaultChannelName) ch.textContent = '#' + vcr.defaultChannelName;
-    });
-  } else { vcrOnline = 5; }
-  setEl('valVcrOnline', vcrOnline);
-  const vcrSummary = $('vcrSummary');
-  if (vcrSummary) {
-    vcrSummary.textContent = vcrOnline === 5 ? 'All Sentinels Online' : `${vcrOnline}/5 Online`;
-    vcrSummary.className   = 'section-badge ' + (vcrOnline === 5 ? 'green' : 'amber');
-  }
-
-  /* ── Activity Stats ── */
-  if (d.activityStats) {
-    setEl('statCmdTotal',   d.activityStats.commandsTotal  || 0);
-    setEl('statSecAlerts',  d.activityStats.securityAlerts || 0);
-    setEl('statAutoChecks', d.activityStats.autoChecksRun  || 0);
-    setEl('statVcrEvents',  d.activityStats.vcrEvents      || 0);
-  }
-
-  /* ── Recent Activity Feed ── */
-  if (d.recentActivity && Array.isArray(d.recentActivity)) {
-    currentActivities = d.recentActivity;
-    renderActivityFeed();
-  }
-
-  /* ── Servers summary ── */
-  setEl('serversSummary', '3 Nodes Online');
-
-  /* ── API Sample (update every 10 frames) ── */
-  if (frameCount % 10 === 0) {
-    const sampleEl = $('apiSample');
-    if (sampleEl) {
-      sampleEl.textContent = JSON.stringify({
-        status: d.status,
-        ping:   d.ping,
-        uptimeSeconds: d.uptimeSeconds,
-        vcrOnline: vcrOnline + '/5',
-        recentEvents: (d.recentActivity || []).length
-      }, null, 2);
-    }
-  }
-
-  /* ── Draw sparklines ── */
-  drawSparkline('sparkPing',    pingHistory.data,  '#00c8ff');
-  drawSparkline('sparkMem',     memHistory.data,   '#8b5cf6');
-  drawSparkline('sparkUptime',  [1, 1, 1, 1],      '#22c55e');
-  drawSparkline('sparkMembers', [1, 1, 1, 1],      '#00c8ff');
-  drawSparkline('sparkVcr',     [1, 1, 1, 1],      '#22c55e');
-
-  /* ── Draw full charts ── */
-  drawFullChart($('chartPing'), pingChart.data, '#00c8ff');
-  drawFullChart($('chartMem'),  memChart.data,  '#8b5cf6');
-}
-
-/* ══════════════════════════════════════════════════════
-   ACTIVITY FEED CONTROLS & RENDERING
-   ══════════════════════════════════════════════════════ */
-function initActivityControls() {
-  const tabs = document.querySelectorAll('.act-filter-btn');
-  tabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      activeFilter = btn.dataset.filter || 'all';
-      renderActivityFeed();
-    });
+function switchTab(tabId) {
+  activeTab = tabId;
+  document.querySelectorAll('.nav-tab').forEach((t) => {
+    t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
+  });
+  document.querySelectorAll('.tab-content').forEach((c) => {
+    c.classList.toggle('active', c.id === `tab-${tabId}`);
   });
 
-  const searchInput = document.getElementById('activitySearchInput');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      searchQuery = (e.target.value || '').trim().toLowerCase();
-      renderActivityFeed();
-    });
+  if (tabId === 'appeals') loadAppeals();
+  if (tabId === 'panels') loadPanels();
+}
+
+/* ══════════════════════════════════════════════════════
+   REALTIME TELEMETRY & SSE STREAM
+   ══════════════════════════════════════════════════════ */
+function startRealtimeStream() {
+  const eventSource = new EventSource(`${API_BASE}/api/stream`);
+
+  eventSource.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      updateTelemetry(data);
+    } catch {}
+  };
+
+  eventSource.onerror = () => {
+    // Fallback to polling if SSE disconnected
+    setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/status`);
+        if (res.ok) {
+          const data = await res.json();
+          updateTelemetry(data);
+        }
+      } catch {}
+    }, 1000);
+  };
+}
+
+function updateTelemetry(d) {
+  // Live Pill
+  const pill = $('livePillText');
+  if (pill) pill.textContent = `Online · ${d.ping || 0}ms`;
+
+  // KPIs
+  if ($('valPing')) $('valPing').textContent = d.ping || 0;
+  if ($('valUptime')) $('valUptime').textContent = formatUptime(d.uptimeSeconds || 0);
+  if ($('valMemory')) $('valMemory').textContent = Math.round((d.memory?.heapUsed || 0) / 1024 / 1024);
+  if ($('valMembers')) $('valMembers').textContent = d.guild?.memberCount || '--';
+
+  // VCR Sentinels KPI & Grid
+  if (d.vcrFleet && Array.isArray(d.vcrFleet)) {
+    const readyCount = d.vcrFleet.filter((w) => w.status === 'online').length;
+    if ($('valVcrOnline')) $('valVcrOnline').textContent = readyCount;
+    renderVcrGrid(d.vcrFleet);
+  }
+
+  // Live Gauge Fill
+  const fill = $('gaugeFill');
+  if (fill) fill.style.strokeDashoffset = '0';
+
+  // Activity stream
+  if (d.recentActivity && Array.isArray(d.recentActivity)) {
+    renderActivityLog(d.recentActivity);
   }
 }
 
-function getActivityIcon(type) {
-  switch (type) {
-    case 'command':   return '⚡';
-    case 'security':  return '🛡️';
-    case 'autocheck': return '⏱️';
-    case 'vcr':       return '🎙️';
-    case 'system':    return '🤖';
-    case 'member':    return '👤';
-    default:          return '📡';
-  }
+function formatUptime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${h}h ${m}m ${s}s`;
 }
 
-function renderActivityFeed() {
-  const listEl = document.getElementById('activityFeedList');
-  if (!listEl) return;
+function renderVcrGrid(fleet) {
+  const grid = $('vcrFleetGrid');
+  if (!grid) return;
+  grid.innerHTML = fleet
+    .map(
+      (w, i) => `
+      <div class="panel-card" style="padding: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+          <span style="font-weight:800; font-size:14px;">VCR #${i + 1}</span>
+          <span class="status-chip ${w.status === 'online' ? '' : 'inactive'}">${w.status}</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom: 12px;">
+          Room: <span class="text-white">${w.defaultChannelName || 'Assigned'}</span>
+        </div>
+        <button class="btn-action" style="width:100%; font-size:11px;" onclick="reconnectSingleVCR('${w.id}')">
+          🔄 Re-Station
+        </button>
+      </div>
+    `
+    )
+    .join('');
+}
 
-  let filtered = currentActivities;
+function renderActivityLog(logs) {
+  const list = $('eventStreamList');
+  if (!list) return;
+  list.innerHTML = logs
+    .slice(0, 30)
+    .map(
+      (l) => `
+    <li class="log-entry ${l.category || 'system'}">
+      <span>[${new Date(l.timestamp || Date.now()).toLocaleTimeString()}] <strong>${l.action}</strong>: ${l.details || ''}</span>
+      <span class="mono text-muted">${l.category || 'SYSTEM'}</span>
+    </li>
+  `
+    )
+    .join('');
+}
 
-  // 1. Filter by category tab
-  if (activeFilter !== 'all') {
-    filtered = filtered.filter(a => a.type === activeFilter);
-  }
-
-  // 2. Filter by search query
-  if (searchQuery) {
-    filtered = filtered.filter(a => {
-      const matchAction = a.action?.toLowerCase().includes(searchQuery);
-      const matchDetail = a.detail?.toLowerCase().includes(searchQuery);
-      const matchUser   = a.user?.tag?.toLowerCase().includes(searchQuery);
-      return matchAction || matchDetail || matchUser;
+/* ══════════════════════════════════════════════════════
+   APPEALS COMMAND CENTER
+   ══════════════════════════════════════════════════════ */
+async function loadAppeals() {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/appeals`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
     });
-  }
+    if (res.ok) {
+      const data = await res.json();
+      currentAppeals = data.appeals || [];
+      const pendingCount = currentAppeals.filter((a) => a.status === 'pending').length;
+      if ($('badgePendingAppeals')) $('badgePendingAppeals').textContent = pendingCount;
+      renderAppealsTable();
+    }
+  } catch {}
+}
+
+function renderAppealsTable() {
+  const tbody = $('appealsTableBody');
+  if (!tbody) return;
+
+  const searchQuery = ($('searchAppeals')?.value || '').toLowerCase();
+  const filterStatus = $('filterAppealStatus')?.value || 'all';
+
+  const filtered = currentAppeals.filter((a) => {
+    const matchSearch =
+      (a.userTag || '').toLowerCase().includes(searchQuery) ||
+      (a.targetId || '').toLowerCase().includes(searchQuery);
+    const matchStatus = filterStatus === 'all' || a.status === filterStatus;
+    return matchSearch && matchStatus;
+  });
 
   if (filtered.length === 0) {
-    listEl.innerHTML = `
-      <div class="act-empty-box">
-        <p>No activity logs match the current filter</p>
-      </div>
-    `;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No appeals found matching criteria.</td></tr>`;
     return;
   }
 
-  listEl.innerHTML = filtered.map(item => {
-    const icon = getActivityIcon(item.type);
-    const timeAgo = formatTimeAgo(item.ts);
-    const userTag = item.user ? item.user.tag : null;
-
-    return `
-      <div class="act-item type-${item.type || 'system'}">
-        <div class="act-left">
-          <div class="act-icon">${icon}</div>
-          <div class="act-body">
-            <div class="act-header-row">
-              <span class="act-title">${escapeHtml(item.action || 'System Event')}</span>
-              <span class="act-type-tag tag-${item.type || 'system'}">${item.type || 'system'}</span>
-            </div>
-            <div class="act-detail">${escapeHtml(item.detail || '')}</div>
-          </div>
-        </div>
-        <div class="act-right">
-          ${userTag ? `<span class="act-user-pill">👤 ${escapeHtml(userTag)}</span>` : ''}
-          <span class="act-time-ago">${timeAgo}</span>
-        </div>
-      </div>
-    `;
-  }).join('');
+  tbody.innerHTML = filtered
+    .map(
+      (a) => `
+    <tr>
+      <td><strong class="text-white">${escapeHtml(a.userTag || 'Unknown')}</strong></td>
+      <td class="mono">${a.targetId}</td>
+      <td class="text-muted">${new Date(a.createdAt || Date.now()).toLocaleDateString()}</td>
+      <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        ${escapeHtml(a.statement || 'No statement provided')}
+      </td>
+      <td>
+        <span class="badge-status ${a.status}">
+          ${a.status === 'approved' ? '✅ Approved' : a.status === 'rejected' ? '❌ Rejected' : '⏳ Pending'}
+        </span>
+      </td>
+      <td style="text-align: right;">
+        <button class="btn-action" onclick="openStatementModal('${a.targetId}')">Review Statement</button>
+        ${
+          a.status === 'pending'
+            ? `
+          <button class="btn-action primary" onclick="resolveAppeal('${a.targetId}', 'approve')">Approve & Unban</button>
+          <button class="btn-action danger" onclick="resolveAppeal('${a.targetId}', 'reject')">Reject</button>
+        `
+            : ''
+        }
+      </td>
+    </tr>
+  `
+    )
+    .join('');
 }
 
-function formatTimeAgo(ts) {
-  if (!ts) return 'just now';
-  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (diffSec < 5) return 'just now';
-  if (diffSec < 60) return `${diffSec}s ago`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  return `${diffHr}h ago`;
+window.openStatementModal = (targetId) => {
+  const appeal = currentAppeals.find((a) => a.targetId === targetId);
+  if (!appeal) return;
+  activeModalAppealId = targetId;
+
+  if ($('modalUserTag')) $('modalUserTag').textContent = `Appeal: ${appeal.userTag}`;
+  if ($('modalUserId')) $('modalUserId').textContent = appeal.targetId;
+  if ($('modalStatementText')) $('modalStatementText').textContent = appeal.statement || 'No statement provided.';
+
+  const footer = $('modalActions');
+  if (footer) {
+    footer.innerHTML =
+      appeal.status === 'pending'
+        ? `
+      <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve'); closeStatementModal();">✅ Approve & Unban</button>
+      <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject'); closeStatementModal();">❌ Reject Appeal</button>
+    `
+        : `<span class="badge-status ${appeal.status}">Resolved: ${appeal.status} by ${appeal.handledByName || 'Admin'}</span>`;
+  }
+
+  $('statementModal')?.classList.add('open');
+};
+
+window.closeStatementModal = () => {
+  $('statementModal')?.classList.remove('open');
+};
+
+window.resolveAppeal = async (targetId, action) => {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/appeals/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ targetId, action })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`Appeal ${action === 'approve' ? 'approved (User Unbanned + DM Sent)' : 'rejected'} successfully!`, 'success');
+      loadAppeals();
+    } else {
+      showToast(data.error || 'Failed to resolve appeal', 'error');
+    }
+  } catch (err) {
+    showToast('Network error while resolving appeal', 'error');
+  }
+};
+
+/* ══════════════════════════════════════════════════════
+   PANELS & BOT OPERATIONS
+   ══════════════════════════════════════════════════════ */
+async function loadPanels() {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/panels`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.panels) {
+        if ($('chipTicketStatus')) {
+          $('chipTicketStatus').textContent = data.panels.ticketPanel?.status === 'active' ? 'Active' : 'Inactive';
+          $('chipTicketStatus').className = `status-chip ${data.panels.ticketPanel?.status === 'active' ? '' : 'inactive'}`;
+        }
+        if ($('chipEventStatus')) {
+          $('chipEventStatus').textContent = data.panels.eventPanel?.status === 'active' ? 'Active' : 'Inactive';
+          $('chipEventStatus').className = `status-chip ${data.panels.eventPanel?.status === 'active' ? '' : 'inactive'}`;
+        }
+      }
+    }
+  } catch {}
 }
+
+window.deployPanel = async (panelType) => {
+  if (!adminToken) return;
+  showToast(`Deploying ${panelType} panel to Discord…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/panels/deploy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ panelType })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Panel deployed successfully!', 'success');
+      loadPanels();
+    } else {
+      showToast(data.error || 'Failed to deploy panel', 'error');
+    }
+  } catch {
+    showToast('Failed to deploy panel due to server error', 'error');
+  }
+};
+
+window.removePanel = async (panelType) => {
+  if (!adminToken) return;
+  showToast(`Removing ${panelType} panel from Discord…`, 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/panels/remove`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ panelType })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Panel removed successfully!', 'success');
+      loadPanels();
+    } else {
+      showToast(data.error || 'Failed to remove panel', 'error');
+    }
+  } catch {
+    showToast('Failed to remove panel', 'error');
+  }
+};
+
+window.triggerMassSync = async () => {
+  if (!adminToken) return;
+  showToast('⚡ Running server-wide member & role sync…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/bot/sync`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('✅ Mass Member & Role Sync Completed!', 'success');
+    }
+  } catch {
+    showToast('Sync request error', 'error');
+  }
+};
+
+window.sendBroadcast = async () => {
+  if (!adminToken) return;
+  const channelId = $('broadcastChannel')?.value.trim();
+  const title = $('broadcastTitle')?.value.trim();
+  const message = $('broadcastMessage')?.value.trim();
+  const color = parseInt($('broadcastColor')?.value || '16777215');
+
+  if (!channelId || !message) {
+    showToast('Please provide channel ID and message content', 'error');
+    return;
+  }
+
+  showToast('Sending official announcement…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/bot/broadcast`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ channelId, title, message, color })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('📢 Official Announcement Broadcasted!', 'success');
+      $('broadcastMessage').value = '';
+    } else {
+      showToast(data.error || 'Failed to send broadcast', 'error');
+    }
+  } catch {
+    showToast('Broadcast request failed', 'error');
+  }
+};
+
+window.forceReStationVCR = async () => {
+  if (!adminToken) return;
+  showToast('Re-stationing all 5 VCR sentinels…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/vcr/reconnect`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (res.ok) showToast(data.message || 'Sentinels re-stationed!', 'success');
+  } catch {
+    showToast('Re-station request error', 'error');
+  }
+};
+
+window.reconnectSingleVCR = async (vcrId) => {
+  window.forceReStationVCR();
+};
+
+window.clearEventLog = () => {
+  const list = $('eventStreamList');
+  if (list) list.innerHTML = `<li class="log-entry">Console cleared.</li>`;
+};
 
 function escapeHtml(str) {
   return String(str)
@@ -459,248 +539,4 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-/* ══════════════════════════════════════════════════════
-   CLOCK
-   ══════════════════════════════════════════════════════ */
-function startClock() {
-  function tick() {
-    const n  = new Date();
-    const hh = n.getUTCHours().toString().padStart(2, '0');
-    const mm = n.getUTCMinutes().toString().padStart(2, '0');
-    const ss = n.getUTCSeconds().toString().padStart(2, '0');
-    $('navClock').textContent = `${hh}:${mm}:${ss} UTC`;
-  }
-  tick();
-  setInterval(tick, 1000);
-}
-
-/* ══════════════════════════════════════════════════════
-   NAV SCROLL HIGHLIGHT
-   ══════════════════════════════════════════════════════ */
-function initNavHighlight() {
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-        const link = document.querySelector(`.nav-link[data-section="${e.target.id}"]`);
-        if (link) link.classList.add('active');
-      }
-    });
-  }, { threshold: 0.3 });
-  ['overview','servers','vcr','activity','analytics','security'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) observer.observe(el);
-  });
-}
-
-/* ══════════════════════════════════════════════════════
-   BUILD VCR GRID
-   ══════════════════════════════════════════════════════ */
-function buildVcrGrid() {
-  const grid = document.getElementById('vcrGrid');
-  if (!grid) return;
-  grid.innerHTML = VCR_STATIC.map(v => `
-    <div class="vcr-card ${v.executive ? 'executive' : ''}" id="vcrCard${v.num}">
-      <div class="vcr-top">
-        <div class="vcr-num">VCR #${v.num}</div>
-        <div class="vcr-status-dot" id="vcrDot${v.num}"></div>
-      </div>
-      <div class="vcr-name">
-        GX VCR #${v.num}
-        ${v.executive ? '<span class="exec-badge">EXEC</span>' : ''}
-      </div>
-      <div class="vcr-id">${v.id}</div>
-      <div class="vcr-channel-label">Assigned Channel</div>
-      <div class="vcr-channel-name" id="vcrCh${v.num}">${v.channel}</div>
-      <div class="vcr-tags">
-        <span class="vtag green">🎙️ Recording</span>
-        ${v.executive ? '<span class="vtag gold">👑 Executive</span>' : '<span class="vtag">OGG Archive</span>'}
-      </div>
-    </div>
-  `).join('');
-}
-
-/* ══════════════════════════════════════════════════════
-   UPTIME GAUGE (Operational SLA Availability %)
-   ══════════════════════════════════════════════════════ */
-function updateGauge(uptimeSec, status = 'operational') {
-  const fill  = document.getElementById('gaugeFill');
-  const label = document.getElementById('gaugeLabel');
-  if (!fill || !label) return;
-
-  const ARC_LENGTH = 188.5; // PI * 60
-
-  let pct = 0.9999;
-  if (status === 'operational' || status === 'online') {
-    pct = 0.9999;
-  } else if (status === 'degraded' || status === 'warning') {
-    pct = 0.9650;
-  } else if (status === 'connecting') {
-    pct = 0.9900;
-  } else {
-    pct = 0.0;
-  }
-
-  const offset = Math.max(0, ARC_LENGTH * (1 - pct));
-  fill.style.strokeDashoffset = offset.toFixed(1);
-
-  if (pct >= 0.999) {
-    label.textContent = '99.9%';
-    label.style.color = '#22c55e';
-    label.style.textShadow = '0 0 20px rgba(34, 197, 94, 0.45)';
-  } else if (pct >= 0.95) {
-    label.textContent = (pct * 100).toFixed(1) + '%';
-    label.style.color = '#f59e0b';
-    label.style.textShadow = '0 0 20px rgba(245, 158, 11, 0.45)';
-  } else {
-    label.textContent = (pct * 100).toFixed(1) + '%';
-    label.style.color = '#ef4444';
-    label.style.textShadow = '0 0 20px rgba(239, 68, 68, 0.45)';
-  }
-}
-
-/* ══════════════════════════════════════════════════════
-   CHARTS
-   ══════════════════════════════════════════════════════ */
-function drawSparkline(canvasId, data, color) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || data.length < 2) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const min = Math.min(...data), max = Math.max(...data) || 1;
-  const pts = data.map((v, i) => ({
-    x: (i / (data.length - 1)) * W,
-    y: H - ((v - min) / (max - min || 1)) * (H - 4) - 2
-  }));
-
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, color + '50');
-  grad.addColorStop(1, color + '00');
-
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    const mx = (pts[i-1].x + pts[i].x) / 2;
-    ctx.bezierCurveTo(mx, pts[i-1].y, mx, pts[i].y, pts[i].x, pts[i].y);
-  }
-  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    const mx = (pts[i-1].x + pts[i].x) / 2;
-    ctx.bezierCurveTo(mx, pts[i-1].y, mx, pts[i].y, pts[i].x, pts[i].y);
-  }
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
-}
-
-function drawFullChart(canvas, data, color) {
-  if (!canvas || data.length < 2) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.offsetWidth || 400;
-  const H = canvas.height || 90;
-  canvas.width = W;
-  ctx.clearRect(0, 0, W, H);
-
-  const min = Math.min(...data), max = Math.max(...data) || 1;
-  const pad = 8;
-  const pts = data.map((v, i) => ({
-    x: pad + (i / (data.length - 1)) * (W - pad * 2),
-    y: pad + (H - pad * 2) - ((v - min) / (max - min || 1)) * (H - pad * 2)
-  }));
-
-  /* Grid */
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = pad + (i / 4) * (H - pad * 2);
-    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
-  }
-
-  /* Fill */
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, color + '35');
-  grad.addColorStop(1, color + '00');
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    const mx = (pts[i-1].x + pts[i].x) / 2;
-    ctx.bezierCurveTo(mx, pts[i-1].y, mx, pts[i].y, pts[i].x, pts[i].y);
-  }
-  ctx.lineTo(pts[pts.length-1].x, H); ctx.lineTo(pts[0].x, H); ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
-
-  /* Line */
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    const mx = (pts[i-1].x + pts[i].x) / 2;
-    ctx.bezierCurveTo(mx, pts[i-1].y, mx, pts[i].y, pts[i].x, pts[i].y);
-  }
-  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-
-  /* Animated end dot */
-  const last = pts[pts.length - 1];
-  ctx.beginPath();
-  ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
-  ctx.fillStyle = color; ctx.fill();
-
-  /* Glow ring on dot */
-  ctx.beginPath();
-  ctx.arc(last.x, last.y, 7, 0, Math.PI * 2);
-  ctx.strokeStyle = color + '40'; ctx.lineWidth = 2; ctx.stroke();
-}
-
-/* ══════════════════════════════════════════════════════
-   EVENT LOG
-   ══════════════════════════════════════════════════════ */
-function addLog(msg, type = 'info') {
-  const log = document.getElementById('eventLog');
-  if (!log) return;
-  const li = document.createElement('li');
-  li.className = `log-item log-${type}`;
-  li.textContent = `[${new Date().toLocaleTimeString('en-GB', { hour12: false })}] ${msg}`;
-  log.prepend(li);
-  while (log.children.length > 50) log.lastChild.remove();
-}
-
-/* ══════════════════════════════════════════════════════
-   PILL STATE
-   ══════════════════════════════════════════════════════ */
-function setPillState(state, text) {
-  const dot  = document.getElementById('pillDot');
-  const txt  = document.getElementById('pillText');
-  if (dot) dot.className = 'pill-dot ' + state;
-  if (txt) txt.textContent = text;
-}
-
-/* ══════════════════════════════════════════════════════
-   HELPERS
-   ══════════════════════════════════════════════════════ */
-function setEl(id, text) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
-}
-function setBarWidth(id, pct) {
-  const el = document.getElementById(id);
-  if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
-}
-function fmtUptime(s) {
-  if (!s && s !== 0) return '--';
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m ${sec}s`;
-}
-function formatTimestamp(ts) {
-  if (!ts) return '';
-  return new Date(ts).toLocaleTimeString('en-GB', { hour12: false });
 }
