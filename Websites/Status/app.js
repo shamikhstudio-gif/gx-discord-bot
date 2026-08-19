@@ -585,23 +585,27 @@ function renderTicketDetailsSidebar(ticket) {
         <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="detail-user-avatar" alt="" />
         <div class="detail-user-titles">
           <h4>${escapeHtml(ticket.realName || ticket.userTag)}</h4>
-          <span class="mono">${ticket.userTag}</span>
+          <span class="mono" style="cursor:pointer;" onclick="copyUserId('${ticket.userId}')" title="انقر للنسخ">${ticket.userTag}</span>
         </div>
       </div>
 
       <div class="detail-key-val-list">
         <div class="detail-row">
           <span class="detail-label">معرف المستخدم:</span>
-          <span class="detail-val mono">${ticket.userId}</span>
+          <span class="detail-val mono" style="cursor:pointer;" onclick="copyUserId('${ticket.userId}')" title="انقر لنسخ المعرف">${ticket.userId} 📋</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">تاريخ الإنشاء:</span>
           <span class="detail-val">${new Date(ticket.openedAt || Date.now()).toLocaleDateString('ar-SA')}</span>
         </div>
         <div class="detail-row">
+          <span class="detail-label">مدة النشاط:</span>
+          <span class="detail-val mono">${durationHours} ساعة</span>
+        </div>
+        <div class="detail-row">
           <span class="detail-label">الحالة الحالية:</span>
-          <span class="detail-val font-weight-bold ${isClosed ? 'text-danger' : 'text-success'}">
-            ${isClosed ? 'مغلقة ومؤرشفة' : 'نشطة ومباشرة'}
+          <span class="detail-val font-weight-bold" style="color: ${isClosed ? 'var(--red)' : 'var(--green)'};">
+            ${isClosed ? 'مغلقة ومؤرشفة 🔒' : 'نشطة ومباشرة 🟢'}
           </span>
         </div>
         <div class="detail-row">
@@ -612,13 +616,16 @@ function renderTicketDetailsSidebar(ticket) {
     </div>
 
     <div class="detail-card-section">
-      <div class="detail-section-title">إجراءات سريعة على العضو</div>
+      <div class="detail-section-title" style="font-size:12.5px; font-weight:800; color:var(--text-muted); margin-bottom:8px;">إجراءات سريعة على التذكرة والعضو</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
-        <button class="btn-action danger" style="width:100%; font-size:12px;" onclick="quickModTimeout('${ticket.userId}')">
-          كتم العضو (10 دقائق)
+        <button class="btn-action" style="width:100%; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="copyTranscript('${ticket.threadId}')">
+          <span>📋 نسخ سجل المحادثة كامل</span>
         </button>
-        <button class="btn-action" style="width:100%; font-size:12px;" onclick="copyUserId('${ticket.userId}')">
-          نسخ معرف العضو (ID)
+        <button class="btn-action warning" style="width:100%; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="quickModWarn('${ticket.userId}')">
+          <span>⚠️ تحذير رسمي للعضو</span>
+        </button>
+        <button class="btn-action danger" style="width:100%; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="quickModTimeout('${ticket.userId}')">
+          <span>🔇 كتم العضو (10 دقائق)</span>
         </button>
       </div>
     </div>
@@ -628,6 +635,40 @@ function renderTicketDetailsSidebar(ticket) {
 window.copyUserId = (id) => {
   navigator.clipboard.writeText(id);
   showToast(`تم نسخ المعرف: ${id}`, 'info');
+};
+
+window.copyTranscript = (threadId) => {
+  const ticket = currentTickets.find((t) => t.threadId === threadId);
+  if (!ticket || !ticket.transcript || ticket.transcript.length === 0) {
+    return showToast('لا توجد رسائل سابقة في سجل هذه التذكرة للنسخ', 'warning');
+  }
+  const text = ticket.transcript
+    .map((m) => `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.authorTag}: ${m.content}`)
+    .join('\n');
+  navigator.clipboard.writeText(text);
+  showToast('تم نسخ سجل المحادثة بالكامل إلى الحافظة بنجاح!', 'success');
+};
+
+window.quickModWarn = async (userId) => {
+  if (!adminToken || !userId) return;
+  const reason = prompt('أدخل سبب التحذير الإداري الرسمي للعضو:');
+  if (!reason || !reason.trim()) return;
+  showToast('جارٍ تسجيل التحذير الإداري…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/mod/warn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: JSON.stringify({ targetId: userId, reason: reason.trim() })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`تم توجيه التحذير بنجاح! إجمالي التحذيرات: ${data.warnCount || 1}`, 'success');
+    } else {
+      showToast(data.error || 'فشل توجيه التحذير', 'error');
+    }
+  } catch {
+    showToast('خطأ في الاتصال أثناء التحذير', 'error');
+  }
 };
 
 window.quickModTimeout = async (userId) => {
@@ -1062,6 +1103,33 @@ function updateTelemetry(d) {
   if ($('valUptime')) $('valUptime').textContent = formatUptime(d.uptimeSeconds || 0);
   if ($('valMemory')) $('valMemory').textContent = Math.round((d.memory?.heapUsed || 0) / 1024 / 1024);
   if ($('valMembers')) $('valMembers').textContent = d.guild?.memberCount || '--';
+
+  // Live Tab Counters & Badges
+  if (d.counts) {
+    if ($('badgeOpenTickets') && typeof d.counts.openTickets === 'number') {
+      $('badgeOpenTickets').textContent = d.counts.openTickets;
+    }
+  }
+
+  // Live Notifications Synchronization
+  if (d.recentNotifications && Array.isArray(d.recentNotifications) && d.recentNotifications.length > 0) {
+    let hasNew = false;
+    d.recentNotifications.forEach((rn) => {
+      if (!notifications.some((n) => n.id === rn.id)) {
+        notifications.unshift(rn);
+        unreadNotifCount++;
+        hasNew = true;
+      }
+    });
+    if (hasNew) {
+      if (notifications.length > 40) notifications = notifications.slice(0, 40);
+      renderNotifications();
+      // If currently on support tab, refresh ticket list seamlessly
+      if (activeTab === 'support') {
+        loadSupportTickets();
+      }
+    }
+  }
 
   if (d.vcrFleet && Array.isArray(d.vcrFleet)) {
     const readyCount = d.vcrFleet.filter((w) => w.status === 'online').length;
