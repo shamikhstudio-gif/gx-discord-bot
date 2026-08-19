@@ -7,8 +7,6 @@ import {
   VCR_ROLE_NAME,
   SECRET_VCR_CHANNEL_NAME,
   SECRET_VCR_CHANNEL_ID,
-  MUTE_COOLDOWN_MS,
-  MUTE_DURATION_MS,
   VCR_BOT_IDS,
   TOP_EXEC_ROLE_IDS,
   TOP_EXEC_ROLE_NAMES,
@@ -23,9 +21,9 @@ export class VCRManager {
     this.botVersion = mainBotVersion;
     this.loggerCallback = loggerCallback;
     this.workers = [];
-    this.activeSessions = new Map(); // channelId -> session
-    this.userMuteCooldowns = new Map(); // userId -> timestamp
-    this.activeMuteTimers = new Map(); // userId -> NodeJS.Timeout
+    this.activeSessions = new Map();
+    this.userMuteCooldowns = new Map();
+    this.activeMuteTimers = new Map();
     this.lastWatchdogRun = 0;
   }
 
@@ -240,116 +238,6 @@ export class VCRManager {
     return session.membersPresence.get(userId);
   }
 
-  /**
-   * 🚨 Full 30s Server Mute, DM Notification & Multi-Channel Incident Logging
-   */
-  async handleLoudSoundViolation(guild, channel, member, speakerInfo, energyValue, detectionType = 'صراخ حاد / تفجير صوتي') {
-    if (!member || !member.voice?.channel) return;
-    if (this.isTournamentOrMatchChannel(channel)) {
-      return;
-    }
-    
-    // Strict COO, CEO, OWNER Immunity
-    if (this.isVCRImmuneExecutive(member)) {
-      return;
-    }
-
-    const userId = member.id;
-    const lastMute = this.userMuteCooldowns.get(userId) || 0;
-    if (Date.now() - lastMute < MUTE_COOLDOWN_MS) return;
-    this.userMuteCooldowns.set(userId, Date.now());
-
-    console.warn(`🚨 [رصد إزعاج صوتي] تم رصد ${detectionType} (${energyValue} RMS) في #${channel.name} من ${member.user.tag}. تطبيق كتم 30 ثانية...`);
-
-    try {
-      const mainGuild = this.mainClient.guilds.cache.get(guild.id) || await this.mainClient.guilds.fetch(guild.id).catch(() => null);
-      const targetMember = mainGuild ? (await mainGuild.members.fetch(userId).catch(() => null)) : member;
-
-      // 1. Apply Server Mute for exactly 30 seconds
-      if (targetMember && targetMember.voice?.channel && mainGuild.members.me?.permissions.has(PermissionFlagsBits.MuteMembers)) {
-        await targetMember.voice.setMute(true, `رصد إزعاج صوتي: ${detectionType} (كتم 30 ثانية)`);
-        console.log(`🔇 [كتم مركزي] تم كتم العضو ${targetMember.user.tag} لمدة 30 ثانية بنجاح.`);
-
-        if (this.activeMuteTimers.has(userId)) {
-          clearTimeout(this.activeMuteTimers.get(userId));
-        }
-
-        const timer = setTimeout(async () => {
-          try {
-            this.activeMuteTimers.delete(userId);
-            const freshMem = await mainGuild.members.fetch(userId).catch(() => null);
-            if (freshMem && freshMem.voice?.serverMute) {
-              await freshMem.voice.setMute(false, 'انتهاء مهلة الكتم الصوتي الـ 30 ثانية');
-              console.log(`🔊 [فك الكتم المركزي] تم فك الكتم تلقائياً عن ${freshMem.user.tag} بعد 30 ثانية.`);
-
-              // Send Unmute Notification in DM
-              const unmuteDMEmbed = new EmbedBuilder()
-                .setColor(0x57F287)
-                .setAuthor({ name: '🔊 انتهاء مدة الكتم الصوتي | GX Voice Defense', iconURL: guild.iconURL() })
-                .setTitle('✅ تم فك الكتم الصوتي عنك تلقائياً')
-                .setDescription(
-                  `مرحباً <@${member.id}>،\n\n` +
-                  `انتهت مهلة الـ **30 ثانية** وتم فك الكتم الصوتي عنك تلقائياً في السيرفر.\n` +
-                  `يمكنك الآن التحدث مجدداً، ونرجو منك الالتزام بالهدوء لتجنب الكتم التلقائي.`
-                )
-                .setFooter({ text: `GX eSports Voice Sentinel • الإصدار ${this.botVersion}` })
-                .setTimestamp();
-
-              await freshMem.send({ embeds: [unmuteDMEmbed] }).catch(() => {});
-            }
-          } catch (err) {}
-        }, MUTE_DURATION_MS);
-
-        this.activeMuteTimers.set(userId, timer);
-      }
-
-      // 2. Send Rich Security Warning in DM to the Violator
-      const userDMEmbed = new EmbedBuilder()
-        .setColor(0xED4245)
-        .setAuthor({ name: '⚠️ إنذار أمني صوتي | GX VCR Acoustic Defense', iconURL: guild.iconURL() })
-        .setTitle('🔇 تم تطبيق كتم صوتي مؤقت (Server Mute - 30s)')
-        .setDescription(
-          `مرحباً <@${member.id}>،\n\n` +
-          `تم رصد **${detectionType}** صادر من المايكروفون الخاص بك في الروم الصوتي <#${channel.id}>.\n\n` +
-          `📊 **مستوى الطاقة الصوتية المرصود:** \`${energyValue} RMS\`\n` +
-          `🛑 **الإجراء المتخذ:** تم تطبيق كتم صوتي إجباري على مستوى السيرفر لمدة **30 ثانية فقط**.\n` +
-          `⏱️ **انتهاء الكتم:** سيتم فك الكتم عنك تلقائياً وبشكل فوري بعد انتهاء الـ 30 ثانية حتى لو انتقلت لروم آخر.\n\n` +
-          `🙏 يرجى ضبط حساسية المايكروفون والالتزام بالهدوء لراحة جميع الأعضاء المتواجدين.`
-        )
-        .setFooter({ text: `GX eSports Voice Sentinel • الإصدار ${this.botVersion}` })
-        .setTimestamp();
-
-      await member.send({ embeds: [userDMEmbed] }).catch(() => {});
-
-      // 3. Post Prominent Incident Alert to Admin Log Channel (#log)
-      const adminAlertEmbed = new EmbedBuilder()
-        .setColor(0xED4245)
-        .setAuthor({ name: '🚨 إنذار رصد إزعاج صوتي | GX VCR Sentinel', iconURL: member.user.displayAvatarURL() })
-        .setTitle(`⚠️ رصد ${detectionType} وكتم المستخدم 30 ثانية`)
-        .setDescription(
-          `تم رصد ارتفاع حاد ومفاجئ في مستوى الصوت في أحد الرومات الصوتية وتم اتخاذ الإجراء التلقائي فوراً.\n\n` +
-          `👤 **العضو المخالف:** <@${member.id}> (\`${member.user.tag}\`)\n` +
-          `🔊 **الروم الصوتي:** <#${channel.id}> (\`#${channel.name}\`)\n` +
-          `📁 **الفئة / Category:** \`${channel.parent?.name || 'عام'}\`\n` +
-          `📊 **شدة الصوت المرصودة:** \`${energyValue} RMS\` (${detectionType})\n` +
-          `⏱️ **الإجراء التلقائي:** تم كتم العضو صوتياً (Server Mute) لمدة \`30 ثانية\` وتم إرسال تنبيه في الخاص له.\n` +
-          `📅 **التوقيت:** <t:${Math.floor(Date.now() / 1000)}:T>`
-        )
-        .setFooter({ text: `GX eSports Management Alert • الإصدار ${this.botVersion}` })
-        .setTimestamp();
-
-      await this.logToAdmin(guild, adminAlertEmbed);
-
-      // 4. Archive Incident in Secret VCR Logs Channel
-      const vcrLogChannel = await this.findOrCreateVCRLogChannel(guild);
-      if (vcrLogChannel) {
-        await vcrLogChannel.send({ embeds: [adminAlertEmbed] }).catch(() => {});
-      }
-
-    } catch (err) {
-      console.error('خطأ في معالجة مخالفة الصوت الصاخب:', err.message);
-    }
-  }
 
   async mixMultiTrackAudioToOgg(userTracksMap) {
     return new Promise((resolve) => {
