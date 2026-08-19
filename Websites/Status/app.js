@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ══════════════════════════════════════════════════════
-   AUTHENTICATION LOGIC
+   AUTHENTICATION LOGIC (ARABIC)
    ══════════════════════════════════════════════════════ */
 function showAuthOverlay() {
   $('authOverlay')?.classList.remove('hidden');
@@ -106,7 +106,7 @@ async function handleLogin() {
 
   if (errorEl) errorEl.textContent = '';
   if (spinner) spinner.style.display = 'inline-block';
-  if (btnText) btnText.textContent = 'Verifying…';
+  if (btnText) btnText.textContent = 'جارٍ التحقق…';
 
   try {
     const res = await fetch(`${API_BASE}/api/admin/login`, {
@@ -120,19 +120,19 @@ async function handleLogin() {
       adminToken = data.token;
       sessionStorage.setItem('gx_admin_token', adminToken);
       hideAuthOverlay();
-      showToast('✅ Authenticated successfully! Welcome to GX Command Center.', 'success');
+      showToast('✅ تم توثيق الدخول بنجاح! مرحباً بك في مركز قيادة GX eSports.', 'success');
       loadAppeals();
       loadPanels();
       loadModData();
       loadSupportTickets();
     } else {
-      if (errorEl) errorEl.textContent = data.error || 'Invalid master password.';
+      if (errorEl) errorEl.textContent = data.error || 'كلمة المرور الرئيسية غير صحيحة.';
     }
   } catch {
-    if (errorEl) errorEl.textContent = 'Server connection error. Ensure backend is running.';
+    if (errorEl) errorEl.textContent = 'تعذر الاتصال بالخادم. يرجى التأكد من تشغيل البوت.';
   } finally {
     if (spinner) spinner.style.display = 'none';
-    if (btnText) btnText.textContent = 'Authenticate & Enter';
+    if (btnText) btnText.textContent = 'توثيق الدخول للنظام';
   }
 }
 
@@ -159,22 +159,22 @@ function handleLogout() {
   adminToken = null;
   sessionStorage.removeItem('gx_admin_token');
   showAuthOverlay();
-  showToast('Session locked.', 'info');
+  showToast('تم قفل الجلسة بنجاح.', 'info');
 }
 
 /* ══════════════════════════════════════════════════════
-   TAB SWITCHING & TITLES
+   TAB SWITCHING & TITLES (ARABIC)
    ══════════════════════════════════════════════════════ */
 const TAB_METAS = {
-  overview: { title: 'System Overview', sub: 'Realtime Telemetry & KPIs' },
-  support: { title: 'Live Support Desk', sub: 'Direct 2-Way Chat Console with Discord Members' },
-  moderation: { title: 'Moderation Center', sub: 'Server Enforcement & Administrative Tools' },
-  appeals: { title: 'Security Appeals Command', sub: 'Review & Resolve Member Untrusted/Ban Appeals' },
-  panels: { title: 'Interactive Panels Manager', sub: 'Deploy & Manage Discord Interactive Embeds' },
-  vcr: { title: 'VCR Audio Sentinel Fleet', sub: '5 Autonomous Multi-Track Recording Sentinels' },
-  security: { title: 'Security Shield & Roles', sub: 'Acoustic Ear-Rape Defense & Member Sync' },
-  broadcast: { title: 'Broadcast Studio', sub: 'Official Announcements to Discord Channels' },
-  logs: { title: 'Live Audit Console', sub: 'Realtime SSE Stream & Security Activity Logs' }
+  overview: { title: 'نظرة عامة على النظام', sub: 'المؤشرات التشغيلية والقياسات الحية اللحظية' },
+  support: { title: 'مركز الدعم الفني المباشر', sub: 'منصة المحادثة المباشرة ثنائية الاتجاه مع أعضاء ديسكورد' },
+  moderation: { title: 'مركز الإشراف والأدوات الإدارية', sub: 'تنفيذ القرارات الإدارية وعمليات العقاب والعزل من الموقع' },
+  appeals: { title: 'مركز مراجعة الطعون والالتماسات', sub: 'مراجعة طلبات فك الحظر والبت الفوري فيها' },
+  panels: { title: 'مدير البانلات والرسائل التفاعلية', sub: 'نشر وإدارة رسائل وإمبدات التفاعل في قنوات ديسكورد' },
+  vcr: { title: 'أسطول مسجلات الصوت (GX VCR Fleet)', sub: '5 مسجلات صوتية ذاتية ومقفولة في روماتها' },
+  security: { title: 'درع الأمان ومزامنة الرتب الشاملة', sub: 'فحص رتب السيرفر وخوارزميات الحماية الصوتية' },
+  broadcast: { title: 'استوديو البث والإعلانات الرسمية', sub: 'إرسال ونشر الإعلانات الرسمية إلى رومات السيرفر' },
+  logs: { title: 'سجل الأحداث والعمليات اللحظي', sub: 'مراقبة حية لكافة عمليات البوت والنشاط الأمني' }
 };
 
 function switchTab(tabId) {
@@ -186,7 +186,7 @@ function switchTab(tabId) {
     c.classList.toggle('active', c.id === `tab-${tabId}`);
   });
 
-  const meta = TAB_METAS[tabId] || { title: 'Control Panel', sub: 'GX Operations' };
+  const meta = TAB_METAS[tabId] || { title: 'لوحة التحكم', sub: 'عمليات GX' };
   if ($('pageTitle')) $('pageTitle').textContent = meta.title;
   if ($('pageSubtitle')) $('pageSubtitle').textContent = meta.sub;
 
@@ -197,7 +197,7 @@ function switchTab(tabId) {
 }
 
 /* ══════════════════════════════════════════════════════
-   REAL-TIME MEMBER AUTOCOMPLETE SEARCH ENGINE
+   REAL-TIME MEMBER AUTOCOMPLETE SEARCH ENGINE (ARABIC)
    ══════════════════════════════════════════════════════ */
 function setupAllMemberSearchDropdowns() {
   const inputs = [
@@ -229,7 +229,7 @@ function setupAllMemberSearchDropdowns() {
         renderMemberDropdownResults(members, dropdownEl, (selected) => {
           inputEl.value = selected.id;
           dropdownEl.classList.remove('open');
-          showToast(`Selected: ${selected.tag} (${selected.id})`, 'info');
+          showToast(`تم تحديد: ${selected.tag} (${selected.id})`, 'info');
         });
       }, 150);
     });
@@ -258,7 +258,7 @@ async function searchMembersRealtime(query) {
 
 function renderMemberDropdownResults(members, container, onSelect) {
   if (!members || members.length === 0) {
-    container.innerHTML = `<div style="padding: 10px; font-size: 12px; color: var(--text-muted); text-align: center;">No matching members found</div>`;
+    container.innerHTML = `<div style="padding: 10px; font-size: 12.5px; color: var(--text-muted); text-align: center;">لم يتم العثور على أعضاء مطابقين</div>`;
     container.classList.add('open');
     return;
   }
@@ -270,7 +270,7 @@ function renderMemberDropdownResults(members, container, onSelect) {
         <img src="${m.avatar || ''}" class="member-avatar-sm" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="" />
         <div class="member-info-col">
           <span class="member-tag-line">${escapeHtml(m.displayName || m.username)} <span style="color:var(--text-muted); font-size:11px;">(${escapeHtml(m.tag)})</span></span>
-          <span class="member-id-line">${m.id} ${m.isBot ? '• 🤖 BOT' : ''}</span>
+          <span class="member-id-line">${m.id} ${m.isBot ? '• 🤖 بوت' : ''}</span>
         </div>
       </div>
     `
@@ -287,7 +287,7 @@ function renderMemberDropdownResults(members, container, onSelect) {
 }
 
 /* ══════════════════════════════════════════════════════
-   LIVE SUPPORT DESK COMMAND CENTER
+   LIVE SUPPORT DESK COMMAND CENTER (ARABIC)
    ══════════════════════════════════════════════════════ */
 window.loadSupportTickets = async () => {
   if (!adminToken) return;
@@ -323,7 +323,7 @@ function renderSupportTicketsList() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="text-center text-muted py-4" style="font-size:12.5px;">No support tickets found.</div>`;
+    container.innerHTML = `<div class="text-center text-muted py-4" style="font-size:12.5px;">لا توجد تذاكر دعم فني حالياً.</div>`;
     return;
   }
 
@@ -339,15 +339,15 @@ function renderSupportTicketsList() {
         <div class="support-ticket-item ${isActive ? 'active' : ''}" onclick="selectSupportTicket('${t.threadId}')">
           <div class="support-ticket-header">
             <span class="support-ticket-code">${escapeHtml(t.ticketId)}</span>
-            <span class="support-ticket-time">${new Date(t.lastActivityAt || t.openedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span class="support-ticket-time">${new Date(t.lastActivityAt || t.openedAt || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
-          <div class="support-ticket-user">${escapeHtml(t.userTag || 'Unknown Member')}</div>
+          <div class="support-ticket-user">${escapeHtml(t.userTag || 'عضو')}</div>
           <div class="support-ticket-snippet">${escapeHtml(lastMsg || '')}</div>
           <div style="margin-top: 4px; display:flex; gap:6px; align-items:center;">
-            <span class="badge-status ${isClosed ? 'rejected' : 'pending'}" style="font-size: 10px; padding: 2px 6px;">
-              ${isClosed ? '🔒 Closed' : '💬 Active'}
+            <span class="badge-status ${isClosed ? 'rejected' : 'pending'}" style="font-size: 10.5px; padding: 2px 6px;">
+              ${isClosed ? '🔒 مغلقة ومؤرشفة' : '💬 نشطة ومفتوحة'}
             </span>
-            ${t.hasUnreadAgent && !isClosed ? `<span class="badge-status" style="background:var(--red); color:#fff; font-size:9px; padding:1px 5px;">NEW</span>` : ''}
+            ${t.hasUnreadAgent && !isClosed ? `<span class="badge-status" style="background:var(--red); color:#fff; font-size:9.5px; padding:1px 6px;">رسالة جديدة</span>` : ''}
           </div>
         </div>
       `;
@@ -367,8 +367,8 @@ window.selectSupportTicket = (threadId, autoScroll = true) => {
     $('chatUserAvatar').src = ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
     $('chatUserAvatar').style.display = 'block';
   }
-  if ($('chatUserTitle')) $('chatUserTitle').textContent = `${ticket.userTag} (${ticket.realName || 'Member'})`;
-  if ($('chatTicketCode')) $('chatTicketCode').textContent = `${ticket.ticketId} • Discord ID: ${ticket.userId}`;
+  if ($('chatUserTitle')) $('chatUserTitle').textContent = `${ticket.userTag} (${ticket.realName || 'صاحب التذكرة'})`;
+  if ($('chatTicketCode')) $('chatTicketCode').textContent = `${ticket.ticketId} • معرف ديسكورد: ${ticket.userId}`;
 
   // Header Actions
   const headerActions = $('chatHeaderActions');
@@ -376,11 +376,11 @@ window.selectSupportTicket = (threadId, autoScroll = true) => {
     if (ticket.stage !== 'CLOSED') {
       headerActions.innerHTML = `
         <button class="btn-action danger" onclick="closeSupportTicket('${ticket.threadId}')">
-          🔒 Close & Archive Ticket
+          🔒 إغلاق وأرشفة التذكرة
         </button>
       `;
     } else {
-      headerActions.innerHTML = `<span class="status-chip inactive">Closed</span>`;
+      headerActions.innerHTML = `<span class="status-chip inactive">مغلقة</span>`;
     }
   }
 
@@ -409,22 +409,22 @@ function renderTranscript(transcript, ticket) {
   if (!stream) return;
 
   if (!transcript || transcript.length === 0) {
-    stream.innerHTML = `<div class="text-center text-muted py-4">No messages yet in this ticket.</div>`;
+    stream.innerHTML = `<div class="text-center text-muted py-4">لا توجد رسائل سابقة في هذه التذكرة.</div>`;
     return;
   }
 
   stream.innerHTML = transcript
     .map((msg) => {
       const isAgent = !!msg.isAgent || msg.authorTag.includes('الدعم');
-      const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
       const imagesHtml = (msg.attachments || [])
-        .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="chat-bubble-image" alt="Attachment" /></a>`)
+        .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="chat-bubble-image" alt="مرفق" /></a>`)
         .join('');
 
       return `
         <div class="chat-bubble-wrap ${isAgent ? 'agent' : 'user'}">
           <div class="chat-bubble-meta">
-            <span>${isAgent ? '🛡️ GX Support Agent' : escapeHtml(msg.authorTag || ticket.userTag)}</span>
+            <span>${isAgent ? '🛡️ وكيل الدعم الفني لـ GX' : escapeHtml(msg.authorTag || ticket.userTag)}</span>
             <span>• ${timeStr}</span>
           </div>
           <div class="chat-bubble">
@@ -444,29 +444,29 @@ function renderTicketDetailsSidebar(ticket) {
   container.innerHTML = `
     <div style="text-align:center; margin-bottom: 16px;">
       <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="member-avatar-sm" style="width:52px; height:52px; margin-bottom:8px;" alt="" />
-      <div style="font-weight:800; font-size:14px;">${escapeHtml(ticket.userTag || 'Unknown')}</div>
+      <div style="font-weight:800; font-size:14.5px;">${escapeHtml(ticket.userTag || 'غير معروف')}</div>
       <div class="mono" style="font-size:11px; color:var(--text-sub);">${ticket.userId}</div>
     </div>
     <div class="spec-row">
-      <span class="spec-name">Ticket ID</span>
+      <span class="spec-name">رقم التذكرة</span>
       <span class="spec-val mono text-white">${ticket.ticketId}</span>
     </div>
     <div class="spec-row">
-      <span class="spec-name">Real Name</span>
-      <span class="spec-val">${escapeHtml(ticket.realName || 'Not specified')}</span>
+      <span class="spec-name">الاسم المسجل</span>
+      <span class="spec-val">${escapeHtml(ticket.realName || 'لم يُحدد')}</span>
     </div>
     <div class="spec-row">
-      <span class="spec-name">Status</span>
-      <span class="spec-val text-white">${ticket.stage || 'ACTIVE'}</span>
+      <span class="spec-name">حالة الجلسة</span>
+      <span class="spec-val text-white">${ticket.stage === 'CLOSED' ? 'مغلقة' : 'قيد المعالجة'}</span>
     </div>
     <div class="spec-row">
-      <span class="spec-name">Opened At</span>
-      <span class="spec-val">${new Date(ticket.openedAt || Date.now()).toLocaleString()}</span>
+      <span class="spec-name">وقت الفتح</span>
+      <span class="spec-val">${new Date(ticket.openedAt || Date.now()).toLocaleDateString('ar-SA')}</span>
     </div>
     <div style="margin-top: 14px;">
-      <div style="font-size: 11px; color: var(--text-sub); font-weight:700; text-transform:uppercase; margin-bottom:4px;">Initial Problem Description</div>
-      <div style="background:var(--bg-dark); border:1px solid var(--border); padding:10px; border-radius:var(--radius-sm); font-size:12px; line-height:1.4;">
-        ${escapeHtml(ticket.reason || 'No description')}
+      <div style="font-size: 11.5px; color: var(--text-sub); font-weight:700; margin-bottom:4px;">وصف المشكلة الأساسي:</div>
+      <div style="background:var(--bg-dark); border:1px solid var(--border); padding:10px; border-radius:var(--radius-sm); font-size:12.5px; line-height:1.5;">
+        ${escapeHtml(ticket.reason || 'لا يوجد وصف')}
       </div>
     </div>
   `;
@@ -487,11 +487,11 @@ window.sendSupportAgentReply = async () => {
   const imageUrl = imageInput?.value.trim() || null;
 
   if (!replyText && !imageUrl) {
-    showToast('Please type a response or provide an image URL', 'error');
+    showToast('يرجى كتابة نص الرد أو وضع رابط الصورة', 'error');
     return;
   }
 
-  showToast('Sending response to Discord thread…', 'info');
+  showToast('جارٍ إرسال الرد إلى ديسكورد…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/tickets/reply`, {
       method: 'POST',
@@ -503,7 +503,7 @@ window.sendSupportAgentReply = async () => {
         threadId: activeTicketThreadId,
         replyText,
         imageUrl,
-        agentName: 'GX Support Agent'
+        agentName: 'وكيل الدعم الفني (GX Support)'
       })
     });
 
@@ -511,21 +511,21 @@ window.sendSupportAgentReply = async () => {
     if (res.ok && data.success) {
       if (replyInput) replyInput.value = '';
       if (imageInput) imageInput.value = '';
-      showToast('✅ Response delivered to user in Discord!', 'success');
+      showToast('✅ تم تسليم الرد للعضو في ديسكورد بنجاح!', 'success');
       loadSupportTickets();
     } else {
-      showToast(data.error || 'Failed to send reply', 'error');
+      showToast(data.error || 'فشل إرسال الرد', 'error');
     }
   } catch {
-    showToast('Network error while sending agent reply', 'error');
+    showToast('خطأ في الشبكة أثناء إرسال الرد', 'error');
   }
 };
 
 window.closeSupportTicket = async (threadId) => {
   if (!adminToken) return;
-  if (!confirm('Are you sure you want to close and archive this ticket?')) return;
+  if (!confirm('هل أنت متأكد من رغبتك في إغلاق وأرشفة هذه التذكرة؟')) return;
 
-  showToast('Closing ticket…', 'info');
+  showToast('جارٍ إغلاق التذكرة…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/tickets/close`, {
       method: 'POST',
@@ -535,24 +535,24 @@ window.closeSupportTicket = async (threadId) => {
       },
       body: JSON.stringify({
         threadId: threadId || activeTicketThreadId,
-        reason: 'Resolved by High Command via Web Support Desk'
+        reason: 'تم الحل والإغلاق عبر مركز الدعم الفني بالموقع'
       })
     });
 
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('🔒 Ticket closed & archived successfully in Discord!', 'success');
+      showToast('🔒 تم إغلاق وأرشفة التذكرة بنجاح في ديسكورد!', 'success');
       loadSupportTickets();
     } else {
-      showToast(data.error || 'Failed to close ticket', 'error');
+      showToast(data.error || 'فشل إغلاق التذكرة', 'error');
     }
   } catch {
-    showToast('Network error during ticket closure', 'error');
+    showToast('خطأ في الشبكة أثناء إغلاق التذكرة', 'error');
   }
 };
 
 /* ══════════════════════════════════════════════════════
-   MODERATION METADATA & SELECTORS
+   MODERATION METADATA & SELECTORS (ARABIC)
    ══════════════════════════════════════════════════════ */
 async function loadModData() {
   if (!adminToken) return;
@@ -587,15 +587,15 @@ function populateModDropdowns() {
 }
 
 /* ══════════════════════════════════════════════════════
-   MODERATION ACTION HANDLERS
+   MODERATION ACTION HANDLERS (ARABIC)
    ══════════════════════════════════════════════════════ */
 window.submitModBan = async () => {
   const targetId = $('banUserId')?.value.trim();
   const reason = $('banReason')?.value.trim();
   const deleteMessageDays = parseInt($('banDeleteDays')?.value || '0');
-  if (!targetId) return showToast('Please enter or select target User ID', 'error');
+  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
 
-  showToast(`Executing permanent ban on ${targetId}…`, 'info');
+  showToast(`جارٍ تنفيذ الحظر النهائي على ${targetId}…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/ban`, {
       method: 'POST',
@@ -604,22 +604,22 @@ window.submitModBan = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم حظر العضو بنجاح', 'success');
       $('banUserId').value = '';
     } else {
-      showToast(data.error || 'Failed to ban user', 'error');
+      showToast(data.error || 'فشل حظر العضو', 'error');
     }
   } catch {
-    showToast('Network error during ban request', 'error');
+    showToast('خطأ في الاتصال أثناء تنفيذ الحظر', 'error');
   }
 };
 
 window.submitModUnban = async () => {
   const targetId = $('unbanUserId')?.value.trim();
   const reason = $('unbanReason')?.value.trim();
-  if (!targetId) return showToast('Please enter target User ID', 'error');
+  if (!targetId) return showToast('يرجى إدخال معرف العضو المحظور', 'error');
 
-  showToast(`Executing unban for ${targetId}…`, 'info');
+  showToast(`جارٍ فك الحظر عن ${targetId}…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/unban`, {
       method: 'POST',
@@ -628,22 +628,22 @@ window.submitModUnban = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم فك الحظر بنجاح', 'success');
       $('unbanUserId').value = '';
     } else {
-      showToast(data.error || 'Failed to unban user', 'error');
+      showToast(data.error || 'فشل فك الحظر', 'error');
     }
   } catch {
-    showToast('Network error during unban request', 'error');
+    showToast('خطأ في الاتصال أثناء فك الحظر', 'error');
   }
 };
 
 window.submitModKick = async () => {
   const targetId = $('kickUserId')?.value.trim();
   const reason = $('kickReason')?.value.trim();
-  if (!targetId) return showToast('Please enter or select target User ID', 'error');
+  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
 
-  showToast(`Executing kick on ${targetId}…`, 'info');
+  showToast(`جارٍ طرد العضو ${targetId}…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/kick`, {
       method: 'POST',
@@ -652,13 +652,13 @@ window.submitModKick = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم طرد العضو بنجاح', 'success');
       $('kickUserId').value = '';
     } else {
-      showToast(data.error || 'Failed to kick user', 'error');
+      showToast(data.error || 'فشل طرد العضو', 'error');
     }
   } catch {
-    showToast('Network error during kick request', 'error');
+    showToast('خطأ في الاتصال أثناء تنفيذ الطرد', 'error');
   }
 };
 
@@ -666,9 +666,9 @@ window.submitModTimeout = async () => {
   const targetId = $('timeoutUserId')?.value.trim();
   const durationMinutes = parseInt($('timeoutDuration')?.value || '10');
   const reason = $('timeoutReason')?.value.trim();
-  if (!targetId) return showToast('Please enter or select target User ID', 'error');
+  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
 
-  showToast(`Applying ${durationMinutes}m timeout on ${targetId}…`, 'info');
+  showToast(`جارٍ تطبيق الكتم لمدة ${durationMinutes} دقيقة على ${targetId}…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
       method: 'POST',
@@ -677,21 +677,21 @@ window.submitModTimeout = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم تطبيق الكتم بنجاح', 'success');
       $('timeoutUserId').value = '';
     } else {
-      showToast(data.error || 'Failed to timeout user', 'error');
+      showToast(data.error || 'فشل تطبيق الكتم', 'error');
     }
   } catch {
-    showToast('Network error during timeout request', 'error');
+    showToast('خطأ في الاتصال أثناء تطبيق الكتم', 'error');
   }
 };
 
 window.submitModUntimeout = async () => {
   const targetId = $('timeoutUserId')?.value.trim();
-  if (!targetId) return showToast('Please enter or select target User ID', 'error');
+  if (!targetId) return showToast('يرجى تحديد أو إدخال معرف العضو', 'error');
 
-  showToast(`Removing timeout from ${targetId}…`, 'info');
+  showToast(`جارٍ إلغاء الكتم عن ${targetId}…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/untimeout`, {
       method: 'POST',
@@ -700,13 +700,13 @@ window.submitModUntimeout = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم إلغاء الكتم بنجاح', 'success');
       $('timeoutUserId').value = '';
     } else {
-      showToast(data.error || 'Failed to remove timeout', 'error');
+      showToast(data.error || 'فشل إلغاء الكتم', 'error');
     }
   } catch {
-    showToast('Network error during untimeout request', 'error');
+    showToast('خطأ في الاتصال أثناء إلغاء الكتم', 'error');
   }
 };
 
@@ -714,9 +714,9 @@ window.submitModPurge = async () => {
   const channelId = $('purgeChannelSelect')?.value;
   const count = parseInt($('purgeCount')?.value || '10');
   const targetUserId = $('purgeFilterUser')?.value.trim() || null;
-  if (!channelId) return showToast('Please select a target channel', 'error');
+  if (!channelId) return showToast('يرجى اختيار الروم المستهدف', 'error');
 
-  showToast(`Purging ${count} messages…`, 'info');
+  showToast(`جارٍ مسح ${count} رسالة…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/purge`, {
       method: 'POST',
@@ -725,20 +725,20 @@ window.submitModPurge = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم مسح الرسائل بنجاح', 'success');
     } else {
-      showToast(data.error || 'Failed to purge messages', 'error');
+      showToast(data.error || 'فشل مسح الرسائل', 'error');
     }
   } catch {
-    showToast('Network error during purge request', 'error');
+    showToast('خطأ في الاتصال أثناء مسح الرسائل', 'error');
   }
 };
 
 window.submitModChannelLock = async (locked) => {
   const channelId = $('lockChannelSelect')?.value;
-  if (!channelId) return showToast('Please select a target channel', 'error');
+  if (!channelId) return showToast('يرجى اختيار الروم المستهدف', 'error');
 
-  showToast(`${locked ? 'Locking' : 'Unlocking'} channel…`, 'info');
+  showToast(`جارٍ ${locked ? 'قفل' : 'فتح'} الروم…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/lock`, {
       method: 'POST',
@@ -747,21 +747,21 @@ window.submitModChannelLock = async (locked) => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم تعديل قفل الروم بنجاح', 'success');
     } else {
-      showToast(data.error || 'Failed to modify channel lock', 'error');
+      showToast(data.error || 'فشل تعديل قفل الروم', 'error');
     }
   } catch {
-    showToast('Network error during channel lock request', 'error');
+    showToast('خطأ في الاتصال أثناء تعديل القفل', 'error');
   }
 };
 
 window.submitModSlowmode = async () => {
   const channelId = $('slowmodeChannelSelect')?.value;
   const seconds = parseInt($('slowmodeSeconds')?.value || '0');
-  if (!channelId) return showToast('Please select a target channel', 'error');
+  if (!channelId) return showToast('يرجى اختيار الروم المستهدف', 'error');
 
-  showToast(`Setting slowmode to ${seconds}s…`, 'info');
+  showToast(`جارٍ ضبط السلو مود على ${seconds} ثانية…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/slowmode`, {
       method: 'POST',
@@ -770,21 +770,21 @@ window.submitModSlowmode = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم تطبيق السلو مود بنجاح', 'success');
     } else {
-      showToast(data.error || 'Failed to set slowmode', 'error');
+      showToast(data.error || 'فشل ضبط السلو مود', 'error');
     }
   } catch {
-    showToast('Network error during slowmode request', 'error');
+    showToast('خطأ في الاتصال أثناء تطبيق السلو مود', 'error');
   }
 };
 
 window.submitModRole = async (action) => {
   const targetId = $('roleUserId')?.value.trim();
   const roleId = $('roleSelect')?.value;
-  if (!targetId || !roleId) return showToast('Please select target User and select a Role', 'error');
+  if (!targetId || !roleId) return showToast('يرجى اختيار العضو وتحديد الرتبة', 'error');
 
-  showToast(`${action === 'add' ? 'Granting' : 'Revoking'} role…`, 'info');
+  showToast(`جارٍ ${action === 'add' ? 'منح' : 'سحب'} الرتبة…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/role`, {
       method: 'POST',
@@ -793,21 +793,21 @@ window.submitModRole = async (action) => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم تعديل الرتبة بنجاح', 'success');
     } else {
-      showToast(data.error || 'Failed to modify role', 'error');
+      showToast(data.error || 'فشل تعديل الرتبة', 'error');
     }
   } catch {
-    showToast('Network error during role request', 'error');
+    showToast('خطأ في الاتصال أثناء تعديل الرتبة', 'error');
   }
 };
 
 window.submitModVoiceAction = async () => {
   const targetId = $('voiceUserId')?.value.trim();
   const action = $('voiceActionSelect')?.value || 'mute';
-  if (!targetId) return showToast('Please select target User in Voice', 'error');
+  if (!targetId) return showToast('يرجى اختيار العضو المتصل بالصوت', 'error');
 
-  showToast(`Executing voice action (${action})…`, 'info');
+  showToast(`جارٍ تنفيذ الإجراء الصوتي (${action})…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/mod/voice-action`, {
       method: 'POST',
@@ -816,17 +816,17 @@ window.submitModVoiceAction = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message, 'success');
+      showToast(data.message || 'تم تنفيذ الإجراء الصوتي بنجاح', 'success');
     } else {
-      showToast(data.error || 'Failed to execute voice action', 'error');
+      showToast(data.error || 'فشل تنفيذ الإجراء الصوتي', 'error');
     }
   } catch {
-    showToast('Network error during voice action request', 'error');
+    showToast('خطأ في الاتصال أثناء تنفيذ الإجراء الصوتي', 'error');
   }
 };
 
 /* ══════════════════════════════════════════════════════
-   REALTIME TELEMETRY & SSE STREAM
+   REALTIME TELEMETRY & SSE STREAM (ARABIC)
    ══════════════════════════════════════════════════════ */
 function startRealtimeStream() {
   const eventSource = new EventSource(`${API_BASE}/api/stream`);
@@ -853,7 +853,7 @@ function startRealtimeStream() {
 
 function updateTelemetry(d) {
   const pill = $('livePillText');
-  if (pill) pill.textContent = `Online · ${d.ping || 0}ms`;
+  if (pill) pill.textContent = `متصل ومباشر · ${d.ping || 0}ms`;
 
   if ($('valPing')) $('valPing').textContent = d.ping || 0;
   if ($('valUptime')) $('valUptime').textContent = formatUptime(d.uptimeSeconds || 0);
@@ -878,7 +878,7 @@ function formatUptime(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return `${h}h ${m}m ${s}s`;
+  return `${h}س ${m}د ${s}ث`;
 }
 
 function renderVcrGrid(fleet) {
@@ -889,14 +889,14 @@ function renderVcrGrid(fleet) {
       (w, i) => `
       <div class="panel-card" style="padding: 16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-          <span style="font-weight:800; font-size:14px;">VCR #${i + 1}</span>
-          <span class="status-chip ${w.status === 'online' ? '' : 'inactive'}">${w.status}</span>
+          <span style="font-weight:800; font-size:14px;">مسجل VCR #${i + 1}</span>
+          <span class="status-chip ${w.status === 'online' ? '' : 'inactive'}">${w.status === 'online' ? 'متصل' : 'غير متصل'}</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-bottom: 12px;">
-          Room: <span class="text-white">${w.defaultChannelName || 'Assigned'}</span>
+          الروم: <span class="text-white">${w.defaultChannelName || 'مخصص'}</span>
         </div>
-        <button class="btn-action" style="width:100%; font-size:11px;" onclick="reconnectSingleVCR('${w.id}')">
-          🔒 Locked & Stationed
+        <button class="btn-action" style="width:100%; font-size:11.5px;" onclick="reconnectSingleVCR('${w.id}')">
+          🔒 مثبت ومقفول بالروم
         </button>
       </div>
     `
@@ -912,8 +912,8 @@ function renderActivityLog(logs) {
     .map(
       (l) => `
     <li class="log-entry ${l.category || l.type || 'system'}">
-      <span>[${new Date(l.timestamp || l.ts || Date.now()).toLocaleTimeString()}] <strong>${escapeHtml(l.action)}</strong>: ${escapeHtml(l.details || l.detail || '')}</span>
-      <span class="mono text-muted">${l.category || l.type || 'SYSTEM'}</span>
+      <span>[${new Date(l.timestamp || l.ts || Date.now()).toLocaleTimeString('ar-SA')}] <strong>${escapeHtml(l.action)}</strong>: ${escapeHtml(l.details || l.detail || '')}</span>
+      <span class="mono text-muted">${l.category || l.type || 'نظام'}</span>
     </li>
   `
     )
@@ -921,7 +921,7 @@ function renderActivityLog(logs) {
 }
 
 /* ══════════════════════════════════════════════════════
-   APPEALS COMMAND CENTER
+   APPEALS COMMAND CENTER (ARABIC)
    ══════════════════════════════════════════════════════ */
 async function loadAppeals() {
   if (!adminToken) return;
@@ -955,7 +955,7 @@ function renderAppealsTable() {
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No appeals found matching criteria.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">لا توجد طعون مطابقة لمعايير البحث.</td></tr>`;
     return;
   }
 
@@ -963,24 +963,24 @@ function renderAppealsTable() {
     .map(
       (a) => `
     <tr>
-      <td><strong class="text-white">${escapeHtml(a.userTag || 'Unknown')}</strong></td>
+      <td><strong class="text-white">${escapeHtml(a.userTag || 'غير معروف')}</strong></td>
       <td class="mono">${a.targetId}</td>
-      <td class="text-muted">${new Date(a.createdAt || Date.now()).toLocaleDateString()}</td>
+      <td class="text-muted">${new Date(a.createdAt || Date.now()).toLocaleDateString('ar-SA')}</td>
       <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-        ${escapeHtml(a.statement || 'No statement provided')}
+        ${escapeHtml(a.statement || 'لم يتم تقديم إفادة')}
       </td>
       <td>
         <span class="badge-status ${a.status}">
-          ${a.status === 'approved' ? '✅ Approved' : a.status === 'rejected' ? '❌ Rejected' : '⏳ Pending'}
+          ${a.status === 'approved' ? '✅ تم القبول وفك الحظر' : a.status === 'rejected' ? '❌ مرفوض' : '⏳ قيد الانتظار'}
         </span>
       </td>
-      <td style="text-align: right;">
-        <button class="btn-action" onclick="openStatementModal('${a.targetId}')">Review Statement</button>
+      <td style="text-align: left;">
+        <button class="btn-action" onclick="openStatementModal('${a.targetId}')">مراجعة الإفادة</button>
         ${
           a.status === 'pending'
             ? `
-          <button class="btn-action primary" onclick="resolveAppeal('${a.targetId}', 'approve')">Approve & Unban</button>
-          <button class="btn-action danger" onclick="resolveAppeal('${a.targetId}', 'reject')">Reject</button>
+          <button class="btn-action primary" onclick="resolveAppeal('${a.targetId}', 'approve')">قبول وفك الحظر</button>
+          <button class="btn-action danger" onclick="resolveAppeal('${a.targetId}', 'reject')">رفض</button>
         `
             : ''
         }
@@ -996,19 +996,19 @@ window.openStatementModal = (targetId) => {
   if (!appeal) return;
   activeModalAppealId = targetId;
 
-  if ($('modalUserTag')) $('modalUserTag').textContent = `Appeal: ${appeal.userTag}`;
+  if ($('modalUserTag')) $('modalUserTag').textContent = `طعن العضو: ${appeal.userTag}`;
   if ($('modalUserId')) $('modalUserId').textContent = appeal.targetId;
-  if ($('modalStatementText')) $('modalStatementText').textContent = appeal.statement || 'No statement provided.';
+  if ($('modalStatementText')) $('modalStatementText').textContent = appeal.statement || 'لا توجد إفادة مكتوبة.';
 
   const footer = $('modalActions');
   if (footer) {
     footer.innerHTML =
       appeal.status === 'pending'
         ? `
-      <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve'); closeStatementModal();">✅ Approve & Unban</button>
-      <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject'); closeStatementModal();">❌ Reject Appeal</button>
+      <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve'); closeStatementModal();">✅ قبول وفك الحظر</button>
+      <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject'); closeStatementModal();">❌ رفض الطعن</button>
     `
-        : `<span class="badge-status ${appeal.status}">Resolved: ${appeal.status} by ${appeal.handledByName || 'Admin'}</span>`;
+        : `<span class="badge-status ${appeal.status}">تمت المعالجة: ${appeal.status === 'approved' ? 'مقبول' : 'مرفوض'} بواسطة ${appeal.handledByName || 'الإدارة'}</span>`;
   }
 
   $('statementModal')?.classList.add('open');
@@ -1032,18 +1032,18 @@ window.resolveAppeal = async (targetId, action) => {
 
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(`Appeal ${action === 'approve' ? 'approved (User Unbanned + DM Sent)' : 'rejected'} successfully!`, 'success');
+      showToast(`تم ${action === 'approve' ? 'قبول الطعن وفك الحظر وإشعار العضو بالخاص' : 'رفض الطعن'} بنجاح!`, 'success');
       loadAppeals();
     } else {
-      showToast(data.error || 'Failed to resolve appeal', 'error');
+      showToast(data.error || 'فشلت معالجة الطعن', 'error');
     }
   } catch {
-    showToast('Network error while resolving appeal', 'error');
+    showToast('خطأ في الشبكة أثناء معالجة الطعن', 'error');
   }
 };
 
 /* ══════════════════════════════════════════════════════
-   PANELS & BOT OPERATIONS
+   PANELS & BOT OPERATIONS (ARABIC)
    ══════════════════════════════════════════════════════ */
 async function loadPanels() {
   if (!adminToken) return;
@@ -1055,11 +1055,11 @@ async function loadPanels() {
       const data = await res.json();
       if (data.panels) {
         if ($('chipTicketStatus')) {
-          $('chipTicketStatus').textContent = data.panels.ticketPanel?.status === 'active' ? 'Active' : 'Inactive';
+          $('chipTicketStatus').textContent = data.panels.ticketPanel?.status === 'active' ? 'نشط' : 'غير نشط';
           $('chipTicketStatus').className = `status-chip ${data.panels.ticketPanel?.status === 'active' ? '' : 'inactive'}`;
         }
         if ($('chipEventStatus')) {
-          $('chipEventStatus').textContent = data.panels.eventPanel?.status === 'active' ? 'Active' : 'Inactive';
+          $('chipEventStatus').textContent = data.panels.eventPanel?.status === 'active' ? 'نشط' : 'غير نشط';
           $('chipEventStatus').className = `status-chip ${data.panels.eventPanel?.status === 'active' ? '' : 'inactive'}`;
         }
       }
@@ -1069,7 +1069,7 @@ async function loadPanels() {
 
 window.deployPanel = async (panelType) => {
   if (!adminToken) return;
-  showToast(`Deploying ${panelType} panel to Discord…`, 'info');
+  showToast(`جارٍ نشر بانل (${panelType}) في ديسكورد…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/panels/deploy`, {
       method: 'POST',
@@ -1081,19 +1081,19 @@ window.deployPanel = async (panelType) => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message || 'Panel deployed successfully!', 'success');
+      showToast(data.message || 'تم نشر البانل بنجاح!', 'success');
       loadPanels();
     } else {
-      showToast(data.error || 'Failed to deploy panel', 'error');
+      showToast(data.error || 'فشل نشر البانل', 'error');
     }
   } catch {
-    showToast('Failed to deploy panel due to server error', 'error');
+    showToast('خطأ في الاتصال بالخادم أثناء نشر البانل', 'error');
   }
 };
 
 window.removePanel = async (panelType) => {
   if (!adminToken) return;
-  showToast(`Removing ${panelType} panel from Discord…`, 'info');
+  showToast(`جارٍ حذف بانل (${panelType}) من ديسكورد…`, 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/panels/remove`, {
       method: 'POST',
@@ -1105,19 +1105,19 @@ window.removePanel = async (panelType) => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(data.message || 'Panel removed successfully!', 'success');
+      showToast(data.message || 'تم حذف البانل بنجاح!', 'success');
       loadPanels();
     } else {
-      showToast(data.error || 'Failed to remove panel', 'error');
+      showToast(data.error || 'فشل حذف البانل', 'error');
     }
   } catch {
-    showToast('Failed to remove panel', 'error');
+    showToast('خطأ أثناء حذف البانل', 'error');
   }
 };
 
 window.triggerMassSync = async () => {
   if (!adminToken) return;
-  showToast('⚡ Running server-wide member & role sync…', 'info');
+  showToast('⚡ جارٍ المزامنة الشاملة لكافة رتب وأعضاء السيرفر…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/bot/sync`, {
       method: 'POST',
@@ -1125,10 +1125,10 @@ window.triggerMassSync = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('✅ Mass Member & Role Sync Completed!', 'success');
+      showToast('✅ تمت المزامنة الشاملة للأعضاء والرتب بنجاح!', 'success');
     }
   } catch {
-    showToast('Sync request error', 'error');
+    showToast('فشلت عملية المزامنة', 'error');
   }
 };
 
@@ -1140,11 +1140,11 @@ window.sendBroadcast = async () => {
   const color = parseInt($('broadcastColor')?.value || '16777215');
 
   if (!channelId || !message) {
-    showToast('Please select channel and enter message content', 'error');
+    showToast('يرجى اختيار الروم وكتابة نص الإعلان', 'error');
     return;
   }
 
-  showToast('Sending official announcement…', 'info');
+  showToast('جارٍ نشر الإعلان الرسمي…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/bot/broadcast`, {
       method: 'POST',
@@ -1156,19 +1156,19 @@ window.sendBroadcast = async () => {
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('📢 Official Announcement Broadcasted!', 'success');
+      showToast('📢 تم نشر الإعلان الرسمي بنجاح في ديسكورد!', 'success');
       $('broadcastMessage').value = '';
     } else {
-      showToast(data.error || 'Failed to send broadcast', 'error');
+      showToast(data.error || 'فشل نشر الإعلان', 'error');
     }
   } catch {
-    showToast('Broadcast request failed', 'error');
+    showToast('خطأ في إرسال الإعلان', 'error');
   }
 };
 
 window.forceReStationVCR = async () => {
   if (!adminToken) return;
-  showToast('Re-stationing all 5 VCR sentinels…', 'info');
+  showToast('جارٍ إعادة تثبيت مسجلات الصوت الخمسة في روماتها…', 'info');
   try {
     const res = await fetch(`${API_BASE}/api/admin/vcr/reconnect`, {
       method: 'POST',
@@ -1176,9 +1176,9 @@ window.forceReStationVCR = async () => {
       body: JSON.stringify({})
     });
     const data = await res.json();
-    if (res.ok) showToast(data.message || 'Sentinels re-stationed!', 'success');
+    if (res.ok) showToast(data.message || 'تمت إعادة تثبيت المسجلات بنجاح!', 'success');
   } catch {
-    showToast('Re-station request error', 'error');
+    showToast('خطأ في طلب إعادة التثبيت', 'error');
   }
 };
 
@@ -1188,7 +1188,7 @@ window.reconnectSingleVCR = async (vcrId) => {
 
 window.clearEventLog = () => {
   const list = $('eventStreamList');
-  if (list) list.innerHTML = `<li class="log-entry">Console cleared.</li>`;
+  if (list) list.innerHTML = `<li class="log-entry">تم مسح سجل الأحداث من الشاشة.</li>`;
 };
 
 function escapeHtml(str) {
