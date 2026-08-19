@@ -12,6 +12,7 @@ let currentTickets = [];
 let activeTicketThreadId = null;
 let activeTab = 'overview';
 let activeModalAppealId = null;
+let ticketFilter = 'all';
 let serverChannels = [];
 let serverRoles = [];
 
@@ -37,7 +38,7 @@ function showToast(message, type = 'info') {
    INITIALIZATION & AUTH CHECK
    ══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Inject official GX logo everywhere
+  // Inject official GX logo
   document.querySelectorAll('.gx-logo-img').forEach((img) => {
     img.src = GX_LOGO_DATA_URI;
   });
@@ -49,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showAuthOverlay();
   }
 
-  // Setup Instagram-style Sidebar Navigation
+  // Setup Sidebar Navigation
   document.querySelectorAll('.nav-item[data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
       const target = tab.getAttribute('data-tab');
@@ -71,6 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $('searchAppeals')?.addEventListener('input', renderAppealsTable);
   $('filterAppealStatus')?.addEventListener('change', renderAppealsTable);
   $('searchSupportTickets')?.addEventListener('input', renderSupportTicketsList);
+
+  // Setup Ticket Filter Chips
+  document.querySelectorAll('.filter-chip[data-filter]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      ticketFilter = chip.getAttribute('data-filter') || 'all';
+      renderSupportTicketsList();
+    });
+  });
 
   // Setup Real-time Member Search Dropdowns across Moderation inputs
   setupAllMemberSearchDropdowns();
@@ -287,7 +298,7 @@ function renderMemberDropdownResults(members, container, onSelect) {
 }
 
 /* ══════════════════════════════════════════════════════
-   LIVE SUPPORT DESK COMMAND CENTER (ARABIC)
+   LIVE SUPPORT DESK COMMAND CENTER (ARABIC REDESIGN)
    ══════════════════════════════════════════════════════ */
 window.loadSupportTickets = async () => {
   if (!adminToken) return;
@@ -313,17 +324,23 @@ function renderSupportTicketsList() {
   if (!container) return;
 
   const searchQuery = ($('searchSupportTickets')?.value || '').toLowerCase();
-  const filtered = currentTickets.filter((t) => {
-    return (
+  
+  let filtered = currentTickets.filter((t) => {
+    const matchSearch =
       (t.ticketId || '').toLowerCase().includes(searchQuery) ||
       (t.userTag || '').toLowerCase().includes(searchQuery) ||
       (t.userId || '').toLowerCase().includes(searchQuery) ||
-      (t.reason || '').toLowerCase().includes(searchQuery)
-    );
+      (t.reason || '').toLowerCase().includes(searchQuery);
+
+    if (!matchSearch) return false;
+
+    if (ticketFilter === 'active') return t.stage !== 'CLOSED';
+    if (ticketFilter === 'closed') return t.stage === 'CLOSED';
+    return true;
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="text-center text-muted py-4" style="font-size:12.5px;">لا توجد تذاكر دعم فني حالياً.</div>`;
+    container.innerHTML = `<div class="tickets-empty-placeholder">لا توجد تذاكر مطابقة.</div>`;
     return;
   }
 
@@ -336,18 +353,21 @@ function renderSupportTicketsList() {
       const isClosed = t.stage === 'CLOSED';
       const lastMsg = (t.transcript && t.transcript.length > 0) ? t.transcript[t.transcript.length - 1].content : t.reason;
       return `
-        <div class="support-ticket-item ${isActive ? 'active' : ''}" onclick="selectSupportTicket('${t.threadId}')">
-          <div class="support-ticket-header">
-            <span class="support-ticket-code">${escapeHtml(t.ticketId)}</span>
-            <span class="support-ticket-time">${new Date(t.lastActivityAt || t.openedAt || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
+        <div class="ticket-card ${isActive ? 'active' : ''}" onclick="selectSupportTicket('${t.threadId}')">
+          <div class="ticket-card-header">
+            <span class="ticket-badge-code">${escapeHtml(t.ticketId)}</span>
+            <span class="ticket-time-stamp">${new Date(t.lastActivityAt || t.openedAt || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
-          <div class="support-ticket-user">${escapeHtml(t.userTag || 'عضو')}</div>
-          <div class="support-ticket-snippet">${escapeHtml(lastMsg || '')}</div>
-          <div style="margin-top: 4px; display:flex; gap:6px; align-items:center;">
-            <span class="badge-status ${isClosed ? 'rejected' : 'pending'}" style="font-size: 10.5px; padding: 2px 6px;">
-              ${isClosed ? '🔒 مغلقة ومؤرشفة' : '💬 نشطة ومفتوحة'}
+          <div class="ticket-user-line">
+            <img src="${t.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="member-avatar-sm" style="width:20px; height:20px;" alt="" />
+            <span>${escapeHtml(t.userTag || 'عضو')}</span>
+          </div>
+          <div class="ticket-preview-text">${escapeHtml(lastMsg || '')}</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+            <span class="ticket-status-pill ${isClosed ? 'closed' : 'open'}">
+              ${isClosed ? '🔒 مغلقة' : '🟢 نشطة'}
             </span>
-            ${t.hasUnreadAgent && !isClosed ? `<span class="badge-status" style="background:var(--red); color:#fff; font-size:9.5px; padding:1px 6px;">رسالة جديدة</span>` : ''}
+            ${t.hasUnreadAgent && !isClosed ? `<span class="unread-dot-badge" title="رسالة جديدة"></span>` : ''}
           </div>
         </div>
       `;
@@ -362,36 +382,28 @@ window.selectSupportTicket = (threadId, autoScroll = true) => {
   const ticket = currentTickets.find((t) => t.threadId === threadId);
   if (!ticket) return;
 
-  // Update Chat Header
-  if ($('chatUserAvatar')) {
-    $('chatUserAvatar').src = ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-    $('chatUserAvatar').style.display = 'block';
-  }
+  // Update Topbar
+  if ($('chatUserAvatar')) $('chatUserAvatar').src = ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
   if ($('chatUserTitle')) $('chatUserTitle').textContent = `${ticket.userTag} (${ticket.realName || 'صاحب التذكرة'})`;
   if ($('chatTicketCode')) $('chatTicketCode').textContent = `${ticket.ticketId} • معرف ديسكورد: ${ticket.userId}`;
 
-  // Header Actions
-  const headerActions = $('chatHeaderActions');
-  if (headerActions) {
-    if (ticket.stage !== 'CLOSED') {
-      headerActions.innerHTML = `
-        <button class="btn-action danger" onclick="closeSupportTicket('${ticket.threadId}')">
-          🔒 إغلاق وأرشفة التذكرة
+  // Quick Action Buttons
+  const quickActions = $('chatQuickActions');
+  if (quickActions) {
+    quickActions.innerHTML = `
+      ${ticket.stage !== 'CLOSED' ? `
+        <button class="btn-chat-action archive" onclick="closeSupportTicket('${ticket.threadId}')" title="أرشفة وإغلاق التذكرة في ديسكورد">
+          <span>🔒 أرشفة وإغلاق</span>
         </button>
-      `;
-    } else {
-      headerActions.innerHTML = `<span class="status-chip inactive">مغلقة</span>`;
-    }
+      ` : ''}
+      <button class="btn-chat-action delete" onclick="deleteSupportTicket('${ticket.threadId}')" title="حذف التذكرة نهائياً من السيرفر والقاعدة">
+        <span>🗑️ حذف نهائي</span>
+      </button>
+    `;
   }
 
   // Render Transcript Messages
   renderTranscript(ticket.transcript || [], ticket);
-
-  // Show/Hide Reply Bar
-  const replyBar = $('supportReplyBar');
-  if (replyBar) {
-    replyBar.style.display = ticket.stage === 'CLOSED' ? 'none' : 'block';
-  }
 
   // Render Details Sidebar
   renderTicketDetailsSidebar(ticket);
@@ -409,7 +421,7 @@ function renderTranscript(transcript, ticket) {
   if (!stream) return;
 
   if (!transcript || transcript.length === 0) {
-    stream.innerHTML = `<div class="text-center text-muted py-4">لا توجد رسائل سابقة في هذه التذكرة.</div>`;
+    stream.innerHTML = `<div class="tickets-empty-placeholder">لا توجد رسائل سابقة في هذه التذكرة.</div>`;
     return;
   }
 
@@ -417,19 +429,24 @@ function renderTranscript(transcript, ticket) {
     .map((msg) => {
       const isAgent = !!msg.isAgent || msg.authorTag.includes('الدعم');
       const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+      const avatarUrl = isAgent ? (GX_LOGO_DATA_URI || 'https://cdn.discordapp.com/embed/avatars/0.png') : (ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png');
       const imagesHtml = (msg.attachments || [])
-        .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="chat-bubble-image" alt="مرفق" /></a>`)
+        .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="msg-attachment-img" alt="مرفق" /></a>`)
         .join('');
 
       return `
-        <div class="chat-bubble-wrap ${isAgent ? 'agent' : 'user'}">
-          <div class="chat-bubble-meta">
-            <span>${isAgent ? '🛡️ وكيل الدعم الفني لـ GX' : escapeHtml(msg.authorTag || ticket.userTag)}</span>
-            <span>• ${timeStr}</span>
-          </div>
-          <div class="chat-bubble">
-            ${escapeHtml(msg.content || '')}
-            ${imagesHtml}
+        <div class="msg-row ${isAgent ? 'agent' : 'user'}">
+          <img src="${avatarUrl}" class="msg-avatar" alt="" />
+          <div class="msg-content-block">
+            <div class="msg-header">
+              <span class="msg-author-name">${isAgent ? 'وكيل الدعم الفني' : escapeHtml(ticket.userTag)}</span>
+              ${isAgent ? '<span class="msg-author-badge">GX SUPPORT</span>' : ''}
+              <span class="msg-time">• ${timeStr}</span>
+            </div>
+            <div class="msg-bubble">
+              ${escapeHtml(msg.content || '')}
+              ${imagesHtml}
+            </div>
           </div>
         </div>
       `;
@@ -442,35 +459,62 @@ function renderTicketDetailsSidebar(ticket) {
   if (!container) return;
 
   container.innerHTML = `
-    <div style="text-align:center; margin-bottom: 16px;">
-      <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="member-avatar-sm" style="width:52px; height:52px; margin-bottom:8px;" alt="" />
-      <div style="font-weight:800; font-size:14.5px;">${escapeHtml(ticket.userTag || 'غير معروف')}</div>
-      <div class="mono" style="font-size:11px; color:var(--text-sub);">${ticket.userId}</div>
+    <div class="profile-card-centered">
+      <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="profile-avatar-lg" alt="" />
+      <div class="profile-user-tag">${escapeHtml(ticket.userTag || 'غير معروف')}</div>
+      <div class="profile-user-id-badge" onclick="copyText('${ticket.userId}')" title="اضغط لنسخ المعرف">
+        🆔 ${ticket.userId} 📋
+      </div>
     </div>
-    <div class="spec-row">
-      <span class="spec-name">رقم التذكرة</span>
-      <span class="spec-val mono text-white">${ticket.ticketId}</span>
+    
+    <div class="detail-row">
+      <span class="detail-label">رقم التذكرة</span>
+      <span class="detail-value mono" style="color:#5865f2;">${ticket.ticketId}</span>
     </div>
-    <div class="spec-row">
-      <span class="spec-name">الاسم المسجل</span>
-      <span class="spec-val">${escapeHtml(ticket.realName || 'لم يُحدد')}</span>
+    <div class="detail-row">
+      <span class="detail-label">الاسم المسجل</span>
+      <span class="detail-value">${escapeHtml(ticket.realName || 'لم يُحدد')}</span>
     </div>
-    <div class="spec-row">
-      <span class="spec-name">حالة الجلسة</span>
-      <span class="spec-val text-white">${ticket.stage === 'CLOSED' ? 'مغلقة' : 'قيد المعالجة'}</span>
+    <div class="detail-row">
+      <span class="detail-label">حالة التذكرة</span>
+      <span class="detail-value">${ticket.stage === 'CLOSED' ? '🔒 مغلقة ومؤرشفة' : '🟢 نشطة ومفتوحة'}</span>
     </div>
-    <div class="spec-row">
-      <span class="spec-name">وقت الفتح</span>
-      <span class="spec-val">${new Date(ticket.openedAt || Date.now()).toLocaleDateString('ar-SA')}</span>
+    <div class="detail-row">
+      <span class="detail-label">وقت الفتح</span>
+      <span class="detail-value">${new Date(ticket.openedAt || Date.now()).toLocaleDateString('ar-SA')}</span>
     </div>
-    <div style="margin-top: 14px;">
-      <div style="font-size: 11.5px; color: var(--text-sub); font-weight:700; margin-bottom:4px;">وصف المشكلة الأساسي:</div>
-      <div style="background:var(--bg-dark); border:1px solid var(--border); padding:10px; border-radius:var(--radius-sm); font-size:12.5px; line-height:1.5;">
+
+    <div style="margin-top: 10px;">
+      <div style="font-size: 11.5px; color: var(--text-sub); font-weight:700; margin-bottom:6px;">وصف المشكلة:</div>
+      <div class="issue-box">
         ${escapeHtml(ticket.reason || 'لا يوجد وصف')}
       </div>
     </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+      ${ticket.stage !== 'CLOSED' ? `
+        <button class="btn-action" style="width:100%; border-color:var(--amber); color:var(--amber);" onclick="closeSupportTicket('${ticket.threadId}')">
+          🔒 أرشفة وإغلاق التذكرة
+        </button>
+      ` : ''}
+      <button class="btn-action danger" style="width:100%;" onclick="deleteSupportTicket('${ticket.threadId}')">
+        🗑️ حذف التذكرة نهائياً
+      </button>
+    </div>
   `;
 }
+
+window.copyText = (text) => {
+  navigator.clipboard.writeText(text);
+  showToast('تم نسخ المعرف إلى الحافظة! 📋', 'success');
+};
+
+window.insertCanned = (text) => {
+  const input = $('agentReplyInput');
+  if (!input) return;
+  input.value = text;
+  input.focus();
+};
 
 window.handleAgentKey = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -523,7 +567,8 @@ window.sendSupportAgentReply = async () => {
 
 window.closeSupportTicket = async (threadId) => {
   if (!adminToken) return;
-  if (!confirm('هل أنت متأكد من رغبتك في إغلاق وأرشفة هذه التذكرة؟')) return;
+  const id = threadId || activeTicketThreadId;
+  if (!confirm('هل تريد أرشفة وإغلاق هذه التذكرة في ديسكورد؟')) return;
 
   showToast('جارٍ إغلاق التذكرة…', 'info');
   try {
@@ -534,7 +579,7 @@ window.closeSupportTicket = async (threadId) => {
         'Authorization': `Bearer ${adminToken}`
       },
       body: JSON.stringify({
-        threadId: threadId || activeTicketThreadId,
+        threadId: id,
         reason: 'تم الحل والإغلاق عبر مركز الدعم الفني بالموقع'
       })
     });
@@ -548,6 +593,51 @@ window.closeSupportTicket = async (threadId) => {
     }
   } catch {
     showToast('خطأ في الشبكة أثناء إغلاق التذكرة', 'error');
+  }
+};
+
+window.deleteSupportTicket = async (threadId) => {
+  if (!adminToken) return;
+  const id = threadId || activeTicketThreadId;
+  if (!confirm('⚠️ تحذير: هل أنت متأكد من حذف التذكرة والقناة نهائياً من ديسكورد وقاعدة البيانات؟')) return;
+
+  showToast('جارٍ حذف التذكرة نهائياً…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/tickets/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ threadId: id })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('🗑️ تم حذف التذكرة والقناة نهائياً!', 'success');
+      if (activeTicketThreadId === id) {
+        activeTicketThreadId = null;
+        const stream = $('supportMessagesStream');
+        if (stream) {
+          stream.innerHTML = `
+            <div class="chat-placeholder-state">
+              <div class="chat-placeholder-icon">💬</div>
+              <h4>تم حذف التذكرة بنجاح</h4>
+              <p>اختر تذكرة أخرى من القائمة للمتابعة</p>
+            </div>
+          `;
+        }
+        if ($('chatUserTitle')) $('chatUserTitle').textContent = 'اختر تذكرة للبدء';
+        if ($('chatTicketCode')) $('chatTicketCode').textContent = 'لم يتم تحديد جلسة دعم فني';
+        if ($('chatQuickActions')) $('chatQuickActions').innerHTML = '';
+        if ($('supportDetailsContent')) $('supportDetailsContent').innerHTML = '<div class="details-empty-placeholder">اختر تذكرة لعرض تفاصيل العضو</div>';
+      }
+      loadSupportTickets();
+    } else {
+      showToast(data.error || 'فشل حذف التذكرة', 'error');
+    }
+  } catch {
+    showToast('خطأ في الشبكة أثناء حذف التذكرة', 'error');
   }
 };
 
