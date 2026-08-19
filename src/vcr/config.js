@@ -5,35 +5,35 @@ export const VCR_CONFIGS = [
   { 
     id: '1539231767683137646', 
     name: 'GX VCR #1', 
-    token: process.env.VCR_TOKEN_1?.trim() || 'MTUzOTIzMTc2NzY4MzEzNzY0Ng.G-ZyYY.x3iA8A6eShq-9aA40_30hrdG5uKhkufQJ9wE34',
+    token: process.env.VCR_TOKEN_1?.trim() || '',
     defaultChannelId: '1537461175908958259',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟏'
   },
   { 
     id: '1539241189629362246', 
     name: 'GX VCR #2', 
-    token: process.env.VCR_TOKEN_2?.trim() || 'MTUzOTI0MTE4OTYyOTM2MjI0Ng.GqMtoI.vQ9iPPK8l1xKOi6_aHaX-RxbRO2Gs7E4hYB4cw',
+    token: process.env.VCR_TOKEN_2?.trim() || '',
     defaultChannelId: '1538568733692530798',
     defaultChannelName: '🔒・فويس الإدارة'
   },
   { 
     id: '1539241414318227466', 
     name: 'GX VCR #3', 
-    token: process.env.VCR_TOKEN_3?.trim() || 'MTUzOTI0MTQxNDMxODIyNzQ2Ng.GmQmdA.up4h9-c0plP9hMM5EiG0Yz96Uk7aZLXgJ3DG9c',
+    token: process.env.VCR_TOKEN_3?.trim() || '',
     defaultChannelId: '1538564154141577276',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟐'
   },
   { 
     id: '1539241621328101497', 
     name: 'GX VCR #4', 
-    token: process.env.VCR_TOKEN_4?.trim() || 'MTUzOTI0MTYyMTMyODEwMTQ5Nw.GVzYka.9c17mlSOI_7VaQR0q06ok0GSvtcrVZa75q7pk8',
+    token: process.env.VCR_TOKEN_4?.trim() || '',
     defaultChannelId: '1538564786680233984',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟑'
   },
   { 
     id: '1539241867105927209', 
     name: 'GX VCR #5', 
-    token: process.env.VCR_TOKEN_5?.trim() || 'MTUzOTI0MTg2NzEwNTkyNzIwOQ.G88qtg.sfomenKJbYA3dOINXg0RomvA33WUo7rx8Uukv8',
+    token: process.env.VCR_TOKEN_5?.trim() || '',
     defaultChannelId: '1538564321905479731',
     defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟒'
   }
