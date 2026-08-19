@@ -8,6 +8,8 @@ const API_BASE = IS_LOCAL ? `http://${window.location.hostname}:3000` : 'https:/
 
 let adminToken = sessionStorage.getItem('gx_admin_token') || null;
 let currentAppeals = [];
+let currentTickets = [];
+let activeTicketThreadId = null;
 let activeTab = 'overview';
 let activeModalAppealId = null;
 let serverChannels = [];
@@ -55,16 +57,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Direct Route Check (/support or #support)
+  if (window.location.pathname.includes('/support') || window.location.hash.includes('support')) {
+    switchTab('support');
+  }
+
   // Setup Auth Events
   $('authForm')?.addEventListener('submit', handleLogin);
   $('togglePw')?.addEventListener('click', togglePasswordVisibility);
   $('btnLogout')?.addEventListener('click', handleLogout);
 
-  // Search & Filter Appeals
+  // Search & Filter Appeals & Support Tickets
   $('searchAppeals')?.addEventListener('input', renderAppealsTable);
   $('filterAppealStatus')?.addEventListener('change', renderAppealsTable);
+  $('searchSupportTickets')?.addEventListener('input', renderSupportTicketsList);
 
-  // Start Realtime Streams
+  // Setup Real-time Member Search Dropdowns across Moderation inputs
+  setupAllMemberSearchDropdowns();
+
+  // Start Realtime Telemetry Streams
   startRealtimeStream();
 });
 
@@ -113,6 +124,7 @@ async function handleLogin() {
       loadAppeals();
       loadPanels();
       loadModData();
+      loadSupportTickets();
     } else {
       if (errorEl) errorEl.textContent = data.error || 'Invalid master password.';
     }
@@ -134,6 +146,7 @@ async function validateSession() {
       loadAppeals();
       loadPanels();
       loadModData();
+      loadSupportTickets();
     } else {
       handleLogout();
     }
@@ -154,6 +167,7 @@ function handleLogout() {
    ══════════════════════════════════════════════════════ */
 const TAB_METAS = {
   overview: { title: 'System Overview', sub: 'Realtime Telemetry & KPIs' },
+  support: { title: 'Live Support Desk', sub: 'Direct 2-Way Chat Console with Discord Members' },
   moderation: { title: 'Moderation Center', sub: 'Server Enforcement & Administrative Tools' },
   appeals: { title: 'Security Appeals Command', sub: 'Review & Resolve Member Untrusted/Ban Appeals' },
   panels: { title: 'Interactive Panels Manager', sub: 'Deploy & Manage Discord Interactive Embeds' },
@@ -176,10 +190,366 @@ function switchTab(tabId) {
   if ($('pageTitle')) $('pageTitle').textContent = meta.title;
   if ($('pageSubtitle')) $('pageSubtitle').textContent = meta.sub;
 
+  if (tabId === 'support') loadSupportTickets();
   if (tabId === 'appeals') loadAppeals();
   if (tabId === 'panels') loadPanels();
   if (tabId === 'moderation') loadModData();
 }
+
+/* ══════════════════════════════════════════════════════
+   REAL-TIME MEMBER AUTOCOMPLETE SEARCH ENGINE
+   ══════════════════════════════════════════════════════ */
+function setupAllMemberSearchDropdowns() {
+  const inputs = [
+    { inputId: 'banUserId', dropdownId: 'dropdown_banUserId' },
+    { inputId: 'kickUserId', dropdownId: 'dropdown_kickUserId' },
+    { inputId: 'timeoutUserId', dropdownId: 'dropdown_timeoutUserId' },
+    { inputId: 'purgeFilterUser', dropdownId: 'dropdown_purgeFilterUser' },
+    { inputId: 'roleUserId', dropdownId: 'dropdown_roleUserId' },
+    { inputId: 'voiceUserId', dropdownId: 'dropdown_voiceUserId' }
+  ];
+
+  inputs.forEach(({ inputId, dropdownId }) => {
+    const inputEl = $(inputId);
+    const dropdownEl = $(dropdownId);
+    if (!inputEl || !dropdownEl) return;
+
+    let debounceTimer;
+    inputEl.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      const q = inputEl.value.trim();
+      if (!q) {
+        dropdownEl.classList.remove('open');
+        dropdownEl.innerHTML = '';
+        return;
+      }
+
+      debounceTimer = setTimeout(async () => {
+        const members = await searchMembersRealtime(q);
+        renderMemberDropdownResults(members, dropdownEl, (selected) => {
+          inputEl.value = selected.id;
+          dropdownEl.classList.remove('open');
+          showToast(`Selected: ${selected.tag} (${selected.id})`, 'info');
+        });
+      }, 150);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!inputEl.contains(e.target) && !dropdownEl.contains(e.target)) {
+        dropdownEl.classList.remove('open');
+      }
+    });
+  });
+}
+
+async function searchMembersRealtime(query) {
+  if (!adminToken) return [];
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/members/search?q=${encodeURIComponent(query)}`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.members || [];
+    }
+  } catch {}
+  return [];
+}
+
+function renderMemberDropdownResults(members, container, onSelect) {
+  if (!members || members.length === 0) {
+    container.innerHTML = `<div style="padding: 10px; font-size: 12px; color: var(--text-muted); text-align: center;">No matching members found</div>`;
+    container.classList.add('open');
+    return;
+  }
+
+  container.innerHTML = members
+    .map(
+      (m) => `
+      <div class="member-autocomplete-item" data-id="${m.id}" data-tag="${escapeHtml(m.tag)}">
+        <img src="${m.avatar || ''}" class="member-avatar-sm" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" alt="" />
+        <div class="member-info-col">
+          <span class="member-tag-line">${escapeHtml(m.displayName || m.username)} <span style="color:var(--text-muted); font-size:11px;">(${escapeHtml(m.tag)})</span></span>
+          <span class="member-id-line">${m.id} ${m.isBot ? '• 🤖 BOT' : ''}</span>
+        </div>
+      </div>
+    `
+    )
+    .join('');
+
+  container.classList.add('open');
+
+  container.querySelectorAll('.member-autocomplete-item').forEach((item, index) => {
+    item.addEventListener('click', () => {
+      onSelect(members[index]);
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   LIVE SUPPORT DESK COMMAND CENTER
+   ══════════════════════════════════════════════════════ */
+window.loadSupportTickets = async () => {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/tickets`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentTickets = data.tickets || [];
+      const openCount = currentTickets.filter((t) => t.stage !== 'CLOSED').length;
+      if ($('badgeOpenTickets')) $('badgeOpenTickets').textContent = openCount;
+      renderSupportTicketsList();
+      if (activeTicketThreadId) {
+        selectSupportTicket(activeTicketThreadId, false);
+      }
+    }
+  } catch {}
+};
+
+function renderSupportTicketsList() {
+  const container = $('supportTicketsList');
+  if (!container) return;
+
+  const searchQuery = ($('searchSupportTickets')?.value || '').toLowerCase();
+  const filtered = currentTickets.filter((t) => {
+    return (
+      (t.ticketId || '').toLowerCase().includes(searchQuery) ||
+      (t.userTag || '').toLowerCase().includes(searchQuery) ||
+      (t.userId || '').toLowerCase().includes(searchQuery) ||
+      (t.reason || '').toLowerCase().includes(searchQuery)
+    );
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="text-center text-muted py-4" style="font-size:12.5px;">No support tickets found.</div>`;
+    return;
+  }
+
+  // Sort by latest activity
+  filtered.sort((a, b) => (b.lastActivityAt || b.openedAt || 0) - (a.lastActivityAt || a.openedAt || 0));
+
+  container.innerHTML = filtered
+    .map((t) => {
+      const isActive = t.threadId === activeTicketThreadId;
+      const isClosed = t.stage === 'CLOSED';
+      const lastMsg = (t.transcript && t.transcript.length > 0) ? t.transcript[t.transcript.length - 1].content : t.reason;
+      return `
+        <div class="support-ticket-item ${isActive ? 'active' : ''}" onclick="selectSupportTicket('${t.threadId}')">
+          <div class="support-ticket-header">
+            <span class="support-ticket-code">${escapeHtml(t.ticketId)}</span>
+            <span class="support-ticket-time">${new Date(t.lastActivityAt || t.openedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+          <div class="support-ticket-user">${escapeHtml(t.userTag || 'Unknown Member')}</div>
+          <div class="support-ticket-snippet">${escapeHtml(lastMsg || '')}</div>
+          <div style="margin-top: 4px; display:flex; gap:6px; align-items:center;">
+            <span class="badge-status ${isClosed ? 'rejected' : 'pending'}" style="font-size: 10px; padding: 2px 6px;">
+              ${isClosed ? '🔒 Closed' : '💬 Active'}
+            </span>
+            ${t.hasUnreadAgent && !isClosed ? `<span class="badge-status" style="background:var(--red); color:#fff; font-size:9px; padding:1px 5px;">NEW</span>` : ''}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+window.selectSupportTicket = (threadId, autoScroll = true) => {
+  activeTicketThreadId = threadId;
+  renderSupportTicketsList();
+
+  const ticket = currentTickets.find((t) => t.threadId === threadId);
+  if (!ticket) return;
+
+  // Update Chat Header
+  if ($('chatUserAvatar')) {
+    $('chatUserAvatar').src = ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+    $('chatUserAvatar').style.display = 'block';
+  }
+  if ($('chatUserTitle')) $('chatUserTitle').textContent = `${ticket.userTag} (${ticket.realName || 'Member'})`;
+  if ($('chatTicketCode')) $('chatTicketCode').textContent = `${ticket.ticketId} • Discord ID: ${ticket.userId}`;
+
+  // Header Actions
+  const headerActions = $('chatHeaderActions');
+  if (headerActions) {
+    if (ticket.stage !== 'CLOSED') {
+      headerActions.innerHTML = `
+        <button class="btn-action danger" onclick="closeSupportTicket('${ticket.threadId}')">
+          🔒 Close & Archive Ticket
+        </button>
+      `;
+    } else {
+      headerActions.innerHTML = `<span class="status-chip inactive">Closed</span>`;
+    }
+  }
+
+  // Render Transcript Messages
+  renderTranscript(ticket.transcript || [], ticket);
+
+  // Show/Hide Reply Bar
+  const replyBar = $('supportReplyBar');
+  if (replyBar) {
+    replyBar.style.display = ticket.stage === 'CLOSED' ? 'none' : 'block';
+  }
+
+  // Render Details Sidebar
+  renderTicketDetailsSidebar(ticket);
+
+  if (autoScroll) {
+    setTimeout(() => {
+      const stream = $('supportMessagesStream');
+      if (stream) stream.scrollTop = stream.scrollHeight;
+    }, 50);
+  }
+};
+
+function renderTranscript(transcript, ticket) {
+  const stream = $('supportMessagesStream');
+  if (!stream) return;
+
+  if (!transcript || transcript.length === 0) {
+    stream.innerHTML = `<div class="text-center text-muted py-4">No messages yet in this ticket.</div>`;
+    return;
+  }
+
+  stream.innerHTML = transcript
+    .map((msg) => {
+      const isAgent = !!msg.isAgent || msg.authorTag.includes('الدعم');
+      const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const imagesHtml = (msg.attachments || [])
+        .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="chat-bubble-image" alt="Attachment" /></a>`)
+        .join('');
+
+      return `
+        <div class="chat-bubble-wrap ${isAgent ? 'agent' : 'user'}">
+          <div class="chat-bubble-meta">
+            <span>${isAgent ? '🛡️ GX Support Agent' : escapeHtml(msg.authorTag || ticket.userTag)}</span>
+            <span>• ${timeStr}</span>
+          </div>
+          <div class="chat-bubble">
+            ${escapeHtml(msg.content || '')}
+            ${imagesHtml}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderTicketDetailsSidebar(ticket) {
+  const container = $('supportDetailsContent');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="text-align:center; margin-bottom: 16px;">
+      <img src="${ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" class="member-avatar-sm" style="width:52px; height:52px; margin-bottom:8px;" alt="" />
+      <div style="font-weight:800; font-size:14px;">${escapeHtml(ticket.userTag || 'Unknown')}</div>
+      <div class="mono" style="font-size:11px; color:var(--text-sub);">${ticket.userId}</div>
+    </div>
+    <div class="spec-row">
+      <span class="spec-name">Ticket ID</span>
+      <span class="spec-val mono text-white">${ticket.ticketId}</span>
+    </div>
+    <div class="spec-row">
+      <span class="spec-name">Real Name</span>
+      <span class="spec-val">${escapeHtml(ticket.realName || 'Not specified')}</span>
+    </div>
+    <div class="spec-row">
+      <span class="spec-name">Status</span>
+      <span class="spec-val text-white">${ticket.stage || 'ACTIVE'}</span>
+    </div>
+    <div class="spec-row">
+      <span class="spec-name">Opened At</span>
+      <span class="spec-val">${new Date(ticket.openedAt || Date.now()).toLocaleString()}</span>
+    </div>
+    <div style="margin-top: 14px;">
+      <div style="font-size: 11px; color: var(--text-sub); font-weight:700; text-transform:uppercase; margin-bottom:4px;">Initial Problem Description</div>
+      <div style="background:var(--bg-dark); border:1px solid var(--border); padding:10px; border-radius:var(--radius-sm); font-size:12px; line-height:1.4;">
+        ${escapeHtml(ticket.reason || 'No description')}
+      </div>
+    </div>
+  `;
+}
+
+window.handleAgentKey = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    window.sendSupportAgentReply();
+  }
+};
+
+window.sendSupportAgentReply = async () => {
+  if (!adminToken || !activeTicketThreadId) return;
+  const replyInput = $('agentReplyInput');
+  const imageInput = $('agentImageInput');
+  const replyText = replyInput?.value.trim() || '';
+  const imageUrl = imageInput?.value.trim() || null;
+
+  if (!replyText && !imageUrl) {
+    showToast('Please type a response or provide an image URL', 'error');
+    return;
+  }
+
+  showToast('Sending response to Discord thread…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/tickets/reply`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        threadId: activeTicketThreadId,
+        replyText,
+        imageUrl,
+        agentName: 'GX Support Agent'
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (replyInput) replyInput.value = '';
+      if (imageInput) imageInput.value = '';
+      showToast('✅ Response delivered to user in Discord!', 'success');
+      loadSupportTickets();
+    } else {
+      showToast(data.error || 'Failed to send reply', 'error');
+    }
+  } catch {
+    showToast('Network error while sending agent reply', 'error');
+  }
+};
+
+window.closeSupportTicket = async (threadId) => {
+  if (!adminToken) return;
+  if (!confirm('Are you sure you want to close and archive this ticket?')) return;
+
+  showToast('Closing ticket…', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/tickets/close`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        threadId: threadId || activeTicketThreadId,
+        reason: 'Resolved by High Command via Web Support Desk'
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('🔒 Ticket closed & archived successfully in Discord!', 'success');
+      loadSupportTickets();
+    } else {
+      showToast(data.error || 'Failed to close ticket', 'error');
+    }
+  } catch {
+    showToast('Network error during ticket closure', 'error');
+  }
+};
 
 /* ══════════════════════════════════════════════════════
    MODERATION METADATA & SELECTORS
@@ -223,7 +593,7 @@ window.submitModBan = async () => {
   const targetId = $('banUserId')?.value.trim();
   const reason = $('banReason')?.value.trim();
   const deleteMessageDays = parseInt($('banDeleteDays')?.value || '0');
-  if (!targetId) return showToast('Please enter target User ID', 'error');
+  if (!targetId) return showToast('Please enter or select target User ID', 'error');
 
   showToast(`Executing permanent ban on ${targetId}…`, 'info');
   try {
@@ -271,7 +641,7 @@ window.submitModUnban = async () => {
 window.submitModKick = async () => {
   const targetId = $('kickUserId')?.value.trim();
   const reason = $('kickReason')?.value.trim();
-  if (!targetId) return showToast('Please enter target User ID', 'error');
+  if (!targetId) return showToast('Please enter or select target User ID', 'error');
 
   showToast(`Executing kick on ${targetId}…`, 'info');
   try {
@@ -296,7 +666,7 @@ window.submitModTimeout = async () => {
   const targetId = $('timeoutUserId')?.value.trim();
   const durationMinutes = parseInt($('timeoutDuration')?.value || '10');
   const reason = $('timeoutReason')?.value.trim();
-  if (!targetId) return showToast('Please enter target User ID', 'error');
+  if (!targetId) return showToast('Please enter or select target User ID', 'error');
 
   showToast(`Applying ${durationMinutes}m timeout on ${targetId}…`, 'info');
   try {
@@ -319,7 +689,7 @@ window.submitModTimeout = async () => {
 
 window.submitModUntimeout = async () => {
   const targetId = $('timeoutUserId')?.value.trim();
-  if (!targetId) return showToast('Please enter target User ID', 'error');
+  if (!targetId) return showToast('Please enter or select target User ID', 'error');
 
   showToast(`Removing timeout from ${targetId}…`, 'info');
   try {
@@ -412,7 +782,7 @@ window.submitModSlowmode = async () => {
 window.submitModRole = async (action) => {
   const targetId = $('roleUserId')?.value.trim();
   const roleId = $('roleSelect')?.value;
-  if (!targetId || !roleId) return showToast('Please provide target User ID and select a Role', 'error');
+  if (!targetId || !roleId) return showToast('Please select target User and select a Role', 'error');
 
   showToast(`${action === 'add' ? 'Granting' : 'Revoking'} role…`, 'info');
   try {
@@ -435,7 +805,7 @@ window.submitModRole = async (action) => {
 window.submitModVoiceAction = async () => {
   const targetId = $('voiceUserId')?.value.trim();
   const action = $('voiceActionSelect')?.value || 'mute';
-  if (!targetId) return showToast('Please enter target User ID in Voice', 'error');
+  if (!targetId) return showToast('Please select target User in Voice', 'error');
 
   showToast(`Executing voice action (${action})…`, 'info');
   try {
