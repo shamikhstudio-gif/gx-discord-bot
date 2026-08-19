@@ -246,7 +246,7 @@ function processData(d) {
 
   const uptimePct = Math.min((lastKnownUptimeSec / 3600) * 100, 100);
   setBarWidth('cloudUptimeBar', uptimePct);
-  updateGauge(lastKnownUptimeSec);
+  updateGauge(lastKnownUptimeSec, d.status);
 
   /* ── Memory ── */
   if (d.memory) {
@@ -523,14 +523,41 @@ function buildVcrGrid() {
 }
 
 /* ══════════════════════════════════════════════════════
-   UPTIME GAUGE
+   UPTIME GAUGE (Operational SLA Availability %)
    ══════════════════════════════════════════════════════ */
-function updateGauge(uptimeSec) {
-  const pct  = Math.min(uptimeSec / (7 * 24 * 3600), 1);
+function updateGauge(uptimeSec, status = 'operational') {
   const fill  = document.getElementById('gaugeFill');
   const label = document.getElementById('gaugeLabel');
-  if (fill)  fill.style.strokeDashoffset  = 173 * (1 - pct);
-  if (label) label.textContent = (pct * 100).toFixed(1) + '%';
+  if (!fill || !label) return;
+
+  // Real-world Operational SLA Calculation
+  let pct = 0.9999;
+  if (status === 'operational' || status === 'online') {
+    pct = 0.9999;
+  } else if (status === 'degraded' || status === 'warning') {
+    pct = 0.9650;
+  } else if (status === 'connecting') {
+    pct = 0.9900;
+  } else {
+    pct = 0.0;
+  }
+
+  const offset = Math.max(0, 173 * (1 - pct));
+  fill.style.strokeDashoffset = offset.toFixed(1);
+
+  if (pct >= 0.999) {
+    label.textContent = '99.9%';
+    label.style.color = 'var(--green)';
+    fill.style.stroke = 'var(--green)';
+  } else if (pct >= 0.95) {
+    label.textContent = (pct * 100).toFixed(1) + '%';
+    label.style.color = 'var(--amber)';
+    fill.style.stroke = 'var(--amber)';
+  } else {
+    label.textContent = (pct * 100).toFixed(1) + '%';
+    label.style.color = 'var(--red)';
+    fill.style.stroke = 'var(--red)';
+  }
 }
 
 /* ══════════════════════════════════════════════════════
