@@ -27,17 +27,17 @@
   --red-glow: rgba(239, 68, 68, 0.2);
   --amber: #f59e0b;
 
-  --sidebar-w-collapsed: 72px;
-  --sidebar-w-expanded: 250px;
+  --sidebar-w-collapsed: 82px;
+  --sidebar-w-expanded: 295px;
 
   --font-main: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   
   --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --transition-fast: 160ms ease;
-  --transition-sidebar: width 240ms cubic-bezier(0.2, 0, 0, 1);
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --transition-fast: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-sidebar: width 340ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 340ms ease;
 }
 
 *, *::before, *::after {
@@ -213,7 +213,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════
-   APP LAYOUT & SIDEBAR (RTL RIGHT SIDE)
+   APP LAYOUT & SIDEBAR (INSTAGRAM-STYLE OBSIDIAN GLASSS)
    ══════════════════════════════════════════════════════ */
 .app-layout {
   display: flex;
@@ -226,17 +226,17 @@ body {
   right: 0;
   bottom: 0;
   width: var(--sidebar-w-collapsed);
-  background: rgba(11, 11, 15, 0.95);
-  backdrop-filter: blur(20px);
+  background: rgba(8, 8, 12, 0.96);
+  backdrop-filter: blur(28px) saturate(180%);
   border-left: 1px solid var(--border);
   z-index: 1000;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 16px 10px;
+  padding: 20px 12px;
   transition: var(--transition-sidebar);
   overflow-x: hidden;
-  box-shadow: -4px 0 25px rgba(0, 0, 0, 0.6);
+  box-shadow: -8px 0 35px rgba(0, 0, 0, 0.7);
 }
 
 .insta-sidebar:hover {
@@ -244,33 +244,39 @@ body {
 }
 
 .sidebar-top {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px;
-  border-radius: var(--radius-sm);
+  gap: 16px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  transition: background 200ms ease;
 }
 
 .sidebar-logo {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
   object-fit: cover;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.insta-sidebar:hover .sidebar-logo {
+  transform: scale(1.05);
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   opacity: 0;
-  transform: translateX(10px);
-  transition: opacity 180ms ease, transform 180ms ease;
+  transform: translateX(12px);
+  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
 }
 
@@ -280,9 +286,9 @@ body {
 }
 
 .brand-name {
-  font-size: 15px;
+  font-size: 16.5px;
   font-weight: 900;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .brand-name span {
@@ -291,60 +297,76 @@ body {
 }
 
 .brand-tag {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-sub);
   font-family: var(--font-mono);
+  margin-top: 1px;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding-left: 2px;
+  scrollbar-width: none;
 }
 
-/* Accordion Nav Groups */
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* Accordion Nav Groups (Instagram Smooth Physics) */
 .nav-group {
   display: flex;
   flex-direction: column;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  padding-bottom: 6px;
+}
+
+.nav-group:last-child {
+  border-bottom: none;
 }
 
 .nav-group-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   color: var(--text-sub);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
   cursor: pointer;
   user-select: none;
-  transition: var(--transition-fast);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
 }
 
 .nav-group-header:hover {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .nav-group-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+}
+
+.nav-group-title svg {
+  min-width: 20px;
 }
 
 .nav-group-title span {
   opacity: 0;
-  transform: translateX(10px);
-  transition: opacity 180ms ease, transform 180ms ease;
+  transform: translateX(12px);
+  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .insta-sidebar:hover .nav-group-title span {
@@ -353,12 +375,12 @@ body {
 }
 
 .group-chevron {
-  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease;
   opacity: 0;
 }
 
 .insta-sidebar:hover .group-chevron {
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .nav-group.expanded .group-chevron {
@@ -368,31 +390,33 @@ body {
 .nav-sub-items {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
   overflow: hidden;
-  max-height: 500px;
-  transition: max-height 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease;
+  max-height: 600px;
+  transition: max-height 340ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease, transform 240ms ease;
+  padding-top: 4px;
 }
 
 .nav-group:not(.expanded) .nav-sub-items {
   max-height: 0;
   opacity: 0;
   pointer-events: none;
+  transform: translateY(-6px);
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  height: 42px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
+  height: 48px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
   text-align: right;
   white-space: nowrap;
   position: relative;
@@ -400,32 +424,50 @@ body {
 }
 
 .nav-item:hover {
-  background: var(--bg-card);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-main);
+  transform: translateX(-3px);
+}
+
+.nav-item:active {
+  transform: scale(0.97);
 }
 
 .nav-item.active {
   background: #ffffff;
   color: #050507;
   font-weight: 800;
-  box-shadow: 0 4px 15px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 22px rgba(255, 255, 255, 0.2);
+  transform: translateX(0);
+}
+
+.nav-item.active .nav-icon svg {
+  stroke: #050507;
 }
 
 .nav-icon {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
+.nav-icon svg {
+  transition: stroke 200ms ease, transform 200ms ease;
+}
+
+.nav-item:hover .nav-icon svg {
+  transform: scale(1.1);
+}
+
 .nav-label {
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 700;
   opacity: 0;
-  transform: translateX(10px);
-  transition: opacity 180ms ease, transform 180ms ease;
+  transform: translateX(12px);
+  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .insta-sidebar:hover .nav-label {
@@ -437,12 +479,12 @@ body {
   margin-right: auto;
   background: var(--discord-blurple);
   color: #fff;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 2px 7px;
+  padding: 3px 9px;
   border-radius: 99px;
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity 200ms ease;
 }
 
 .insta-sidebar:hover .nav-badge {
@@ -460,11 +502,11 @@ body {
 }
 
 .status-indicator {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 8px var(--green);
+  box-shadow: 0 0 10px var(--green);
   margin-right: auto;
   opacity: 0;
 }
@@ -475,7 +517,7 @@ body {
 
 .sidebar-bottom {
   border-top: 1px solid var(--border);
-  padding-top: 12px;
+  padding-top: 14px;
 }
 
 .btn-lock-sidebar {
@@ -496,7 +538,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  transition: margin-right 240ms cubic-bezier(0.2, 0, 0, 1);
+  transition: margin-right 340ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .top-bar {
