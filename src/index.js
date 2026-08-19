@@ -90,25 +90,55 @@ const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
 const COMMANDS_CONFIG_FILE = path.resolve('src', 'commands.json');
+const ACTIVITY_RING_FILE = path.join(DATA_DIR, 'activity_ring.json');
+const NOTIFICATIONS_RING_FILE = path.join(DATA_DIR, 'notifications_ring.json');
+
+function safeWriteJson(filePath, data) {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const content = JSON.stringify(data, null, 2);
+    const tmpPath = path.join(os.tmpdir(), `gx_${Date.now()}_${path.basename(filePath)}`);
+    fs.writeFileSync(tmpPath, content, 'utf-8');
+    fs.copyFileSync(tmpPath, filePath);
+    try { fs.unlinkSync(tmpPath); } catch {}
+  } catch {
+    try {
+      const content = JSON.stringify(data, null, 2);
+      fs.writeFileSync(filePath, content, { encoding: 'utf-8', flag: 'w' });
+    } catch {}
+  }
+}
 
 // ─────────────────────────────────────────────────────
 // 📡 LIVE ACTIVITY LOG — Ring buffer (max 60 events)
 //    Shown on the Operations Center dashboard
 // ─────────────────────────────────────────────────────
-const ACTIVITY_RING = [
-  { ts: Date.now() - 15000, type: 'system', action: 'Core Engine Online', detail: 'GX Operations Engine v1.0 initialized on US-West cluster' },
-  { ts: Date.now() - 12000, type: 'system', action: 'Commands Registered', detail: '42 Slash Commands synced with Discord API' },
-  { ts: Date.now() - 9000,  type: 'vcr',    action: 'VCR Fleet Linked', detail: '5 Independent Audio Sentinels assigned to Voice channels' },
-  { ts: Date.now() - 6000,  type: 'security', action: 'Acoustic Shield Engaged', detail: 'Military-grade RMS threshold (11k) & VIP immunity active' },
-  { ts: Date.now() - 2000,  type: 'autocheck', action: 'Background Guard Started', detail: 'Relentless voice watchdog & 60s role synchronization loop active' }
-];
+let ACTIVITY_RING = [];
+let ACTIVITY_STATS = { commandsTotal: 0, securityAlerts: 0, autoChecksRun: 0, vcrEvents: 0 };
+
+try {
+  if (fs.existsSync(ACTIVITY_RING_FILE)) {
+    const data = JSON.parse(fs.readFileSync(ACTIVITY_RING_FILE, 'utf-8'));
+    if (data.ring) ACTIVITY_RING = data.ring;
+    if (data.stats) ACTIVITY_STATS = data.stats;
+  }
+} catch (e) {}
+
+if (ACTIVITY_RING.length === 0) {
+  ACTIVITY_RING = [
+    { ts: Date.now() - 15000, type: 'system', action: 'Core Engine Online', detail: 'GX Operations Engine v1.0 initialized on US-West cluster' },
+    { ts: Date.now() - 12000, type: 'system', action: 'Commands Registered', detail: '42 Slash Commands synced with Discord API' },
+    { ts: Date.now() - 9000,  type: 'vcr',    action: 'VCR Fleet Linked', detail: '5 Independent Audio Sentinels assigned to Voice channels' },
+    { ts: Date.now() - 6000,  type: 'security', action: 'Acoustic Shield Engaged', detail: 'Military-grade RMS threshold (11k) & VIP immunity active' },
+    { ts: Date.now() - 2000,  type: 'autocheck', action: 'Background Guard Started', detail: 'Relentless voice watchdog & 60s role synchronization loop active' }
+  ];
+}
 const ACTIVITY_MAX  = 100;
-const ACTIVITY_STATS = {
-  commandsTotal: 0,
-  securityAlerts: 0,
-  autoChecksRun: 0,
-  vcrEvents: 0
-};
+
+function saveActivityRing() {
+  safeWriteJson(ACTIVITY_RING_FILE, { ring: ACTIVITY_RING, stats: ACTIVITY_STATS });
+}
 
 function logActivity(type, action, detail = '', user = null) {
   const entry = {
@@ -126,23 +156,7 @@ function logActivity(type, action, detail = '', user = null) {
 
   ACTIVITY_RING.unshift(entry);
   if (ACTIVITY_RING.length > ACTIVITY_MAX) ACTIVITY_RING.pop();
-}
-
-function safeWriteJson(filePath, data) {
-  try {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const content = JSON.stringify(data, null, 2);
-    const tmpPath = path.join(os.tmpdir(), `gx_${Date.now()}_${path.basename(filePath)}`);
-    fs.writeFileSync(tmpPath, content, 'utf-8');
-    fs.copyFileSync(tmpPath, filePath);
-    try { fs.unlinkSync(tmpPath); } catch {}
-  } catch {
-    try {
-      const content = JSON.stringify(data, null, 2);
-      fs.writeFileSync(filePath, content, { encoding: 'utf-8', flag: 'w' });
-    } catch {}
-  }
+  saveActivityRing();
 }
 
 function loadWelcomedMembers() {
@@ -7540,7 +7554,13 @@ function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '127.0.0.1';
 }
 
-const NOTIFICATIONS_RING = [];
+let NOTIFICATIONS_RING = [];
+try {
+  if (fs.existsSync(NOTIFICATIONS_RING_FILE)) {
+    NOTIFICATIONS_RING = JSON.parse(fs.readFileSync(NOTIFICATIONS_RING_FILE, 'utf-8'));
+  }
+} catch (e) {}
+
 function pushNotification(type, title, desc, linkTab = null) {
   const notif = {
     id: Date.now() + Math.random().toString(36).substr(2, 4),
@@ -7553,6 +7573,7 @@ function pushNotification(type, title, desc, linkTab = null) {
   };
   NOTIFICATIONS_RING.unshift(notif);
   if (NOTIFICATIONS_RING.length > 50) NOTIFICATIONS_RING.pop();
+  safeWriteJson(NOTIFICATIONS_RING_FILE, NOTIFICATIONS_RING);
 }
 
 function authenticateAdmin(req) {
