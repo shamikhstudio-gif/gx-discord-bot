@@ -93,6 +93,15 @@
           </div>
           <span class="nav-label">مركز الإشراف</span>
           <span class="nav-badge text-white">شامل</span>
+        <button class="nav-item" data-tab="verifications" title="طلبات التوثيق (Gatekeeper)">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <polyline points="9 12 11 14 15 10"></polyline>
+            </svg>
+          </div>
+          <span class="nav-label">طلبات التوثيق</span>
+          <span class="nav-badge" id="badgePendingVerifications">0</span>
         </button>
 
         <button class="nav-item" data-tab="appeals" title="إدارة الطعون">
@@ -626,6 +635,47 @@
               <tbody id="appealsTableBody">
                 <tr>
                   <td colspan="6" class="text-center text-muted py-4">جارٍ تحميل الطعون من الخزانة المشفرة…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ── التبويب: مركز توثيق الوافدين (Gatekeeper) ── -->
+        <section class="tab-content" id="tab-verifications">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">مركز مراجعة وتوثيق الوافدين (Gatekeeper)</h2>
+              <p class="section-desc">مراجعة طلبات الأعضاء برتبة UNTRUSTED وقبول ترقيتهم إلى MEMBER أو طردهم/حظرهم مباشرة عبر الموقع.</p>
+            </div>
+            <div class="filter-group">
+              <input type="text" class="input-search" id="searchVerifications" placeholder="بحث بالاسم أو المعرف (User ID)…" oninput="renderVerificationsTable()" />
+              <select class="select-filter" id="filterVerificationStatus" onchange="renderVerificationsTable()">
+                <option value="all">جميع الطلبات</option>
+                <option value="pending" selected>⏳ قيد الانتظار (Pending)</option>
+                <option value="approved">✅ تم التوثيق (Approved)</option>
+                <option value="rejected">❌ مرفوضة (Rejected)</option>
+              </select>
+              <button class="btn-action primary" onclick="loadVerifications()" title="تحديث القائمة">🔄 تحديث</button>
+            </div>
+          </div>
+
+          <div class="appeals-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>العضو الوافد</th>
+                  <th>المعرف (ID)</th>
+                  <th>عمر الحساب</th>
+                  <th>مرات الانضمام</th>
+                  <th>تاريخ الطلب</th>
+                  <th>الحالة</th>
+                  <th style="text-align: left;">الإجراءات والقرار</th>
+                </tr>
+              </thead>
+              <tbody id="verificationsTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted py-4">جارٍ جلب طلبات التوثيق من النظام…</td>
                 </tr>
               </tbody>
             </table>
