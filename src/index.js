@@ -1348,28 +1348,16 @@ async function sendVerificationRequestToExecutives(guild, member) {
       `🌐 **المراجعة والموافقة المباشرة عبر الموقع:**\n` +
       `### 🔗 [اضغط هنا للدخول إلى مركز التوثيق بالموقع (gxbot.eshamikh.com/#verifications)](https://gxbot.eshamikh.com/#verifications)\n\n` +
       `⚡ **صلاحية الموافقة:** مخصصة لكم كرتبة **OWNER / CEO / COO**.\n` +
-      `👉 **أول مسؤول فقط يوافق على الطلب (سواء عبر الموقع أو الزر)**، سيتم فوراً منح العضو رتبة **MEMBER** وتحديث الرسائل تلقائياً لدى باقي المسؤولين.`
+      `👉 **التوثيق والقبول يتم حصرياً عبر لوحة تحكم الموقع.**`
     )
     .setFooter({ text: `GX eSports Security Engine • المعرف: ${member.id}` })
     .setTimestamp();
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`verify_approve_${member.id}`)
-      .setLabel('✅ موافقة ومنح MEMBER')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`verify_reject_${member.id}`)
-      .setLabel('❌ رفض الطلب')
-      .setStyle(ButtonStyle.Danger)
-  );
-
   for (const [, execMember] of executives) {
     try {
       const dmMsg = await execMember.send({
-        content: `🔔 **طلب توثيق عضو ${isRejoin ? 'أعاد الانضمام' : 'جديد'}:** \`${member.user.tag}\`\n🌐 يمكنك اتخاذ الإجراء عبر لوحة التحكم بالموقع: https://gxbot.eshamikh.com/#verifications أو عبر الأزرار أدناه (لأول موافق فقط):`,
-        embeds: [embed],
-        components: [row]
+        content: `🔔 **طلب توثيق عضو ${isRejoin ? 'أعاد الانضمام' : 'جديد'}:** \`${member.user.tag}\`\n🌐 يرجى التوجه إلى لوحة التحكم للقبول أو الرفض: https://gxbot.eshamikh.com/#verifications`,
+        embeds: [embed]
       }).catch(() => null);
 
       if (dmMsg) {
@@ -7650,12 +7638,7 @@ const healthServer = http.createServer(async (req, res) => {
         pendingAppeals: pendingAppealsCount
       },
       recentNotifications: NOTIFICATIONS_RING.slice(0, 25),
-      acousticShield: {
-        sustainedThreshold: 11000,
-        instantThreshold: 16000,
-        muteDurationSeconds: 30,
-        tournamentCategoryId: '1538979258863587328'
-      },
+
       recentActivity: ACTIVITY_RING.slice(0, 50),
       activityStats: ACTIVITY_STATS
     });
