@@ -1,14 +1,23 @@
 /* ══════════════════════════════════════════════════════
-   GX eSports Operations Center — Real-Time SSE Client
-   Server pushes data every 500ms via EventSource
+   GX eSports Operations Center — Real-Time Stream Client
+   Dual Transport: SSE (500ms Push) + Fast Polling Fallback
+   Auto-Target: Railway Cloud 24/7 + Local Dev Auto-Switch
    ══════════════════════════════════════════════════════ */
 
-/* Auto-detect API base: if opened as file:// → use localhost:3000 */
-const API_BASE = (location.protocol === 'file:' || location.hostname === '')
-  ? 'http://localhost:3000'
-  : window.location.origin;
-const API_STREAM = API_BASE + '/api/stream';
-const API_STATUS = API_BASE + '/api/status';
+const CLOUD_API_BASE = 'https://gx-bot-production-production.up.railway.app';
+const LOCAL_API_BASE = 'http://localhost:3000';
+
+let activeApiBase = (location.protocol === 'file:' || location.hostname === '')
+  ? CLOUD_API_BASE
+  : (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? LOCAL_API_BASE : window.location.origin);
+
+let isPollingFallback = false;
+let pollingTimer = null;
+let sseSource = null;
+let reconnectTimer = null;
+
+function getApiStreamUrl() { return activeApiBase + '/api/stream'; }
+function getApiStatusUrl() { return activeApiBase + '/api/status'; }
 
 const VCR_STATIC = [
   { num: 1, id: '1539231767683137646', channel: '#『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟏', executive: false },
@@ -54,11 +63,10 @@ document.addEventListener('DOMContentLoaded', () => {
   startClock();
   initNavHighlight();
   initActivityControls();
-
-  $('apiUrlDisplay').textContent = API_STATUS;
+  updateApiUrlDisplay();
 
   $('copyApiBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText(API_STATUS).then(() => {
+    navigator.clipboard.writeText(getApiStatusUrl()).then(() => {
       $('copyApiBtn').textContent = 'Copied!';
       setTimeout(() => { $('copyApiBtn').textContent = 'Copy'; }, 2000);
     });
@@ -72,7 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('clearLog').addEventListener('click', () => { $('eventLog').innerHTML = ''; });
 
-  connectSSE();
+  // Probe fastest endpoint and start streaming
+  initConnection();
 
   /* Client-side uptime ticker — increments every second between server pushes */
   setInterval(() => {
@@ -87,47 +96,110 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(renderActivityFeed, 3000);
 });
 
-/* ══════════════════════════════════════════════════════
-   SSE CONNECTION
-   ══════════════════════════════════════════════════════ */
-let sseSource = null;
-let reconnectTimer = null;
+function updateApiUrlDisplay() {
+  const display = $('apiUrlDisplay');
+  if (display) display.textContent = getApiStatusUrl();
+}
 
-function connectSSE() {
+/* ══════════════════════════════════════════════════════
+   CONNECTION RESOLVER & TRANSPORTS
+   ══════════════════════════════════════════════════════ */
+async function initConnection() {
+  if (location.protocol === 'file:') {
+    addLog(`🌐 Connecting to 24/7 Cloud Cluster (${activeApiBase})...`, 'info');
+  }
+
+  // Attempt initial quick fetch to verify endpoint responsiveness
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetch(getApiStatusUrl(), { signal: ctrl.signal }).catch(() => null);
+    clearTimeout(tid);
+
+    if (r && r.ok) {
+      const d = await r.json();
+      processData(d);
+      addLog(`⚡ Endpoint verified: ${activeApiBase}`, 'ok');
+    } else if (activeApiBase === LOCAL_API_BASE) {
+      // Local failed, fallback to cloud
+      activeApiBase = CLOUD_API_BASE;
+      updateApiUrlDisplay();
+      addLog(`Switching to Cloud Stream (${CLOUD_API_BASE})...`, 'warn');
+    }
+  } catch {}
+
+  startTransport();
+}
+
+function startTransport() {
   if (sseSource) { sseSource.close(); sseSource = null; }
+  if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
   clearTimeout(reconnectTimer);
 
   setPillState('connecting', 'Connecting…');
-  addLog('Opening real-time stream (SSE)…', 'info');
 
-  sseSource = new EventSource(API_STREAM);
+  // Try Server-Sent Events first
+  try {
+    sseSource = new EventSource(getApiStreamUrl());
 
-  sseSource.onopen = () => {
-    setPillState('online', 'Live Stream Active');
-    addLog('✅ Real-time stream connected — updates every 500ms', 'ok');
-  };
+    sseSource.onopen = () => {
+      isPollingFallback = false;
+      setPillState('online', 'Live Stream Active');
+      addLog(`✅ Connected to Real-time Stream (${activeApiBase})`, 'ok');
+    };
 
-  sseSource.onmessage = (event) => {
+    sseSource.onmessage = (event) => {
+      try {
+        const d = JSON.parse(event.data);
+        processData(d);
+      } catch (e) {
+        addLog('Parse error: ' + e.message, 'error');
+      }
+    };
+
+    sseSource.onerror = () => {
+      if (sseSource) { sseSource.close(); sseSource = null; }
+      
+      // If SSE is blocked (common on file:// or network proxies), switch to fast polling
+      if (!isPollingFallback) {
+        isPollingFallback = true;
+        addLog('SSE stream restricted by browser — switching to Ultra-Fast Polling (500ms)...', 'warn');
+        startPollingFallback();
+      } else {
+        setPillState('warning', 'Reconnecting…');
+        reconnectTimer = setTimeout(initConnection, 3000);
+      }
+    };
+  } catch (err) {
+    isPollingFallback = true;
+    startPollingFallback();
+  }
+}
+
+function startPollingFallback() {
+  if (pollingTimer) clearInterval(pollingTimer);
+  
+  async function poll() {
     try {
-      const d = JSON.parse(event.data);
-      processData(d);
-    } catch (e) {
-      addLog('Parse error: ' + e.message, 'error');
+      const r = await fetch(getApiStatusUrl());
+      if (r.ok) {
+        const d = await r.json();
+        processData(d);
+        setPillState('online', 'Live Polling Active (500ms)');
+      }
+    } catch {
+      // If cloud was unreachable, probe fallback
+      setPillState('warning', 'Reconnecting…');
     }
-  };
+  }
 
-  sseSource.onerror = () => {
-    sseSource.close();
-    sseSource = null;
-    setPillState('warning', 'Reconnecting…');
-    addLog('Stream interrupted — retrying in 3s…', 'warn');
-    reconnectTimer = setTimeout(connectSSE, 3000);
-  };
+  poll();
+  pollingTimer = setInterval(poll, 500);
 }
 
 function reconnect() {
   addLog('Manual reconnect requested…', 'info');
-  connectSSE();
+  initConnection();
 }
 
 /* ══════════════════════════════════════════════════════
