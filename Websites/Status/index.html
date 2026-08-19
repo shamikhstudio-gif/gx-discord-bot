@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GX eSports — Command Center & Control Panel</title>
+  <title>GX eSports — High Command Control Panel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -46,352 +46,669 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════════
-       MAIN APPLICATION SHELL (Authenticated)
+       MAIN APPLICATION LAYOUT WITH INSTAGRAM-STYLE SIDEBAR
        ══════════════════════════════════════════════════════ -->
-  <div class="app-shell" id="appShell">
+  <div class="app-layout" id="appLayout">
     
-    <!-- Top Header -->
-    <header class="app-header">
-      <div class="header-left">
-        <img src="" alt="GX" class="header-logo gx-logo-img" />
-        <div class="header-brand">
-          <div class="brand-title">GX <span>COMMAND</span></div>
-          <div class="brand-sub">ENTERPRISE BOT CONTROLLER</div>
+    <!-- Instagram-Style Collapsible Sidebar -->
+    <aside class="insta-sidebar" id="instaSidebar">
+      <div class="sidebar-top">
+        <div class="sidebar-brand">
+          <img src="" alt="GX" class="sidebar-logo gx-logo-img" />
+          <div class="brand-text">
+            <span class="brand-name">GX <span>COMMAND</span></span>
+            <span class="brand-tag">v2.0 Flash</span>
+          </div>
         </div>
       </div>
 
-      <div class="header-center">
-        <nav class="nav-tabs" id="navTabs">
-          <button class="nav-tab active" data-tab="overview">📊 Overview</button>
-          <button class="nav-tab" data-tab="appeals">⚖️ Appeals <span class="tab-badge" id="badgePendingAppeals">0</span></button>
-          <button class="nav-tab" data-tab="panels">🎛️ Panels</button>
-          <button class="nav-tab" data-tab="vcr">🎙️ VCR Sentinels</button>
-          <button class="nav-tab" data-tab="security">🛡️ Shield & Sync</button>
-          <button class="nav-tab" data-tab="broadcast">📢 Broadcast</button>
-          <button class="nav-tab" data-tab="logs">📜 Live Console</button>
-        </nav>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="overview" title="Overview">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </div>
+          <span class="nav-label">Overview</span>
+        </button>
+
+        <button class="nav-item" data-tab="moderation" title="Moderation Center">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+          <span class="nav-label">Moderation</span>
+          <span class="nav-badge text-white">Full</span>
+        </button>
+
+        <button class="nav-item" data-tab="appeals" title="Appeals Center">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </div>
+          <span class="nav-label">Appeals</span>
+          <span class="nav-badge" id="badgePendingAppeals">0</span>
+        </button>
+
+        <button class="nav-item" data-tab="panels" title="Panels Manager">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+          </div>
+          <span class="nav-label">Panels</span>
+        </button>
+
+        <button class="nav-item" data-tab="vcr" title="VCR Sentinels">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+          </div>
+          <span class="nav-label">VCR Sentinels</span>
+          <span class="status-indicator"></span>
+        </button>
+
+        <button class="nav-item" data-tab="security" title="Shield & Roles">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </div>
+          <span class="nav-label">Shield & Sync</span>
+        </button>
+
+        <button class="nav-item" data-tab="broadcast" title="Broadcast Composer">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </div>
+          <span class="nav-label">Broadcast</span>
+        </button>
+
+        <button class="nav-item" data-tab="logs" title="Live Console">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </div>
+          <span class="nav-label">Live Console</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button class="nav-item btn-lock-sidebar" id="btnLogout" title="Lock Session">
+          <div class="nav-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <span class="nav-label">Lock Session</span>
+        </button>
       </div>
+    </aside>
 
-      <div class="header-right">
-        <div class="live-pill" id="livePill">
-          <span class="live-dot"></span>
-          <span id="livePillText">Connecting…</span>
-        </div>
-        <button class="btn-logout" id="btnLogout" title="Logout">Lock</button>
-      </div>
-    </header>
-
-    <!-- Main Content Area -->
-    <main class="app-main">
-
-      <!-- ── SECTION 1: OVERVIEW ── -->
-      <section class="tab-content active" id="tab-overview">
-        <!-- KPI Strip -->
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-label">Gateway Ping</div>
-            <div class="kpi-value"><span id="valPing">--</span><span class="kpi-unit">ms</span></div>
-            <div class="kpi-sub" id="trendPing">Stable Latency</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">System Uptime</div>
-            <div class="kpi-value"><span id="valUptime">--</span></div>
-            <div class="kpi-sub text-white">99.9% Zero-Downtime SLA</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Heap Memory</div>
-            <div class="kpi-value"><span id="valMemory">--</span><span class="kpi-unit">MB</span></div>
-            <div class="kpi-sub">Optimized Garbage Collection</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Protected Members</div>
-            <div class="kpi-value"><span id="valMembers">--</span></div>
-            <div class="kpi-sub text-white">Active Defense Guard</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">VCR Sentinels</div>
-            <div class="kpi-value"><span id="valVcrOnline">5</span><span class="kpi-unit">/ 5</span></div>
-            <div class="kpi-sub text-white">Stationed & Capturing</div>
-          </div>
+    <!-- Main Content Shell -->
+    <div class="content-shell">
+      
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="top-left">
+          <h1 class="page-title" id="pageTitle">System Overview</h1>
+          <span class="page-subtitle" id="pageSubtitle">Realtime Telemetry & KPIs</span>
         </div>
 
-        <!-- Charts & Telemetry Grid -->
-        <div class="grid-2col">
-          <!-- SLA Gauge -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">Operational SLA Availability</div>
-              <span class="badge-white">99.9% Target</span>
-            </div>
-            <div class="gauge-box">
-              <svg class="gauge-svg" viewBox="0 0 160 95">
-                <defs>
-                  <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="#ffffff"/>
-                    <stop offset="100%" stop-color="#a1a1aa"/>
-                  </linearGradient>
-                </defs>
-                <path class="gauge-bg" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="10" stroke-linecap="round" fill="none"/>
-                <path class="gauge-fill" id="gaugeFill" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="10" stroke-linecap="round" fill="none"
-                  stroke="url(#gaugeGrad)" stroke-dasharray="188.5" stroke-dashoffset="0"/>
-              </svg>
-              <div class="gauge-center">
-                <div class="gauge-label" id="gaugeLabel">99.9%</div>
-                <div class="gauge-sub">OPERATIONAL</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Server Details -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">Production Server Details</div>
-              <span class="badge-white" id="nodeStatusBadge">ONLINE</span>
-            </div>
-            <div class="spec-list">
-              <div class="spec-row">
-                <span class="spec-name">Primary Domain</span>
-                <span class="spec-val mono text-white">gxbot.eshamikh.com</span>
-              </div>
-              <div class="spec-row">
-                <span class="spec-name">Port</span>
-                <span class="spec-val mono">3000</span>
-              </div>
-              <div class="spec-row">
-                <span class="spec-name">Database Architecture</span>
-                <span class="spec-val mono">Hashed Encrypted JSON</span>
-              </div>
-              <div class="spec-row">
-                <span class="spec-name">Bot Core Version</span>
-                <span class="spec-val text-white mono">GX Core v2.0 Flash</span>
-              </div>
-              <div class="spec-row">
-                <span class="spec-name">Guild Target</span>
-                <span class="spec-val">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔 (1537461174222725120)</span>
-              </div>
-            </div>
+        <div class="top-right">
+          <div class="live-pill" id="livePill">
+            <span class="live-dot"></span>
+            <span id="livePillText">Online · Connecting…</span>
           </div>
         </div>
-      </section>
+      </header>
 
-      <!-- ── SECTION 2: APPEALS CENTER ── -->
-      <section class="tab-content" id="tab-appeals">
-        <div class="section-bar">
-          <div>
-            <h2 class="section-heading">Security Appeals Command</h2>
-            <p class="section-desc">Review submitted member appeals. Decisions immediately unban users and deliver DM notifications.</p>
-          </div>
-          <div class="filter-group">
-            <input type="text" class="input-search" id="searchAppeals" placeholder="Search by User ID or Tag…" />
-            <select class="select-filter" id="filterAppealStatus">
-              <option value="all">All Appeals</option>
-              <option value="pending" selected>Pending Review</option>
-              <option value="approved">Approved & Unbanned</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
-        </div>
+      <!-- Main Content Area -->
+      <main class="page-content">
 
-        <div class="appeals-table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Applicant</th>
-                <th>User ID</th>
-                <th>Submitted</th>
-                <th>Statement Summary</th>
-                <th>Status</th>
-                <th style="text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="appealsTableBody">
-              <tr>
-                <td colspan="6" class="text-center text-muted py-4">Loading appeals from encrypted storage…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- ── SECTION 3: PANELS MANAGER ── -->
-      <section class="tab-content" id="tab-panels">
-        <div class="section-bar">
-          <div>
-            <h2 class="section-heading">Interactive Panels & Channels</h2>
-            <p class="section-desc">Deploy, re-send, or delete live panels from your server channels with instant Discord sync.</p>
-          </div>
-        </div>
-
-        <div class="grid-3col">
-          <!-- Ticket Panel -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">🎫 Ticket Support Panel</div>
-              <span class="status-chip" id="chipTicketStatus">Active</span>
+        <!-- ── SECTION 1: OVERVIEW ── -->
+        <section class="tab-content active" id="tab-overview">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Gateway Ping</div>
+              <div class="kpi-value"><span id="valPing">--</span><span class="kpi-unit">ms</span></div>
+              <div class="kpi-sub" id="trendPing">Stable Latency</div>
             </div>
-            <p class="panel-info">Permanent support ticket panel with category selection in `#open-ticket`.</p>
-            <div class="panel-actions">
-              <button class="btn-action primary" onclick="deployPanel('ticket')">🚀 Deploy / Refresh</button>
-              <button class="btn-action danger" onclick="removePanel('ticket')">🗑️ Remove Panel</button>
+            <div class="kpi-card">
+              <div class="kpi-label">System Uptime</div>
+              <div class="kpi-value"><span id="valUptime">--</span></div>
+              <div class="kpi-sub text-white">99.9% Operational SLA</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Heap Memory</div>
+              <div class="kpi-value"><span id="valMemory">--</span><span class="kpi-unit">MB</span></div>
+              <div class="kpi-sub">Optimized Garbage Collection</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Protected Members</div>
+              <div class="kpi-value"><span id="valMembers">--</span></div>
+              <div class="kpi-sub text-white">Active Defense Guard</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">VCR Sentinels</div>
+              <div class="kpi-value"><span id="valVcrOnline">5</span><span class="kpi-unit">/ 5</span></div>
+              <div class="kpi-sub text-white">Locked & Capturing</div>
             </div>
           </div>
 
-          <!-- Event Panel -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">🏆 Event & Tournament Panel</div>
-              <span class="status-chip" id="chipEventStatus">Active</span>
-            </div>
-            <p class="panel-info">Live event match and participant registration panel in `#events-announcement`.</p>
-            <div class="panel-actions">
-              <button class="btn-action primary" onclick="deployPanel('event')">🚀 Deploy / Refresh</button>
-              <button class="btn-action danger" onclick="removePanel('event')">🗑️ Remove Panel</button>
-            </div>
-          </div>
-
-          <!-- Status Channel -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">📊 Live System Status Panel</div>
-              <span class="status-chip" id="chipSystemStatus">Active</span>
-            </div>
-            <p class="panel-info">Auto-updating telemetry embed in `#system-status` (10s interval).</p>
-            <div class="panel-actions">
-              <button class="btn-action primary" onclick="deployPanel('status')">🔄 Force Refresh Embed</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ── SECTION 4: VCR SENTINELS ── -->
-      <section class="tab-content" id="tab-vcr">
-        <div class="section-bar">
-          <div>
-            <h2 class="section-heading">VCR Audio Sentinel Fleet</h2>
-            <p class="section-desc">Autonomous multi-track voice sentinels with 3-second watchdog auto-healing.</p>
-          </div>
-          <button class="btn-action primary" onclick="forceReStationVCR()">🎙️ Force Re-Station All</button>
-        </div>
-
-        <div class="grid-5col" id="vcrFleetGrid">
-          <!-- Dynamic VCR Cards -->
-        </div>
-      </section>
-
-      <!-- ── SECTION 5: SECURITY & SHIELD ── -->
-      <section class="tab-content" id="tab-security">
-        <div class="section-bar">
-          <div>
-            <h2 class="section-heading">Security Shield & Role Management</h2>
-            <p class="section-desc">Trigger instant server-wide member role audits and manage acoustic defense policies.</p>
-          </div>
-          <button class="btn-action primary" id="btnSyncRoles" onclick="triggerMassSync()">⚡ Mass Role & Member Sync</button>
-        </div>
-
-        <div class="grid-2col">
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">🛡️ Spy Account Auto-Defense</div>
-            </div>
-            <div class="spec-list">
-              <div class="spec-row">
-                <span class="spec-name">Account Cutoff Age</span>
-                <span class="spec-val">16 August 2026</span>
+          <div class="grid-2col">
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Operational SLA Availability</div>
+                <span class="badge-white">99.9% Target</span>
               </div>
-              <div class="spec-row">
-                <span class="spec-name">Default Role on Join</span>
-                <span class="spec-val mono">UNTRUSTED (Protected)</span>
+              <div class="gauge-box">
+                <svg class="gauge-svg" viewBox="0 0 160 95">
+                  <defs>
+                    <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stop-color="#ffffff"/>
+                      <stop offset="100%" stop-color="#a1a1aa"/>
+                    </linearGradient>
+                  </defs>
+                  <path class="gauge-bg" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="10" stroke-linecap="round" fill="none"/>
+                  <path class="gauge-fill" id="gaugeFill" d="M 20,85 A 60,60 0 0,1 140,85" stroke-width="10" stroke-linecap="round" fill="none"
+                    stroke="url(#gaugeGrad)" stroke-dasharray="188.5" stroke-dashoffset="0"/>
+                </svg>
+                <div class="gauge-center">
+                  <div class="gauge-label" id="gaugeLabel">99.9%</div>
+                  <div class="gauge-sub">OPERATIONAL</div>
+                </div>
               </div>
-              <div class="spec-row">
-                <span class="spec-name">Executive Notification</span>
-                <span class="spec-val text-white">OWNER / CEO / COO DMs (Alert-only)</span>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Production Server Details</div>
+                <span class="badge-white" id="nodeStatusBadge">ONLINE</span>
               </div>
-              <div class="spec-row">
-                <span class="spec-name">Appeals Destination</span>
-                <span class="spec-val text-white">GX Control Panel</span>
+              <div class="spec-list">
+                <div class="spec-row">
+                  <span class="spec-name">Primary Host</span>
+                  <span class="spec-val mono text-white">gxbot.eshamikh.com</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Port</span>
+                  <span class="spec-val mono">3000</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Security Architecture</span>
+                  <span class="spec-val mono">SHA-512 Encrypted Vault</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Bot Core Version</span>
+                  <span class="spec-val text-white mono">GX Core v2.0 Flash</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Guild Target</span>
+                  <span class="spec-val">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔 (1537461174222725120)</span>
+                </div>
               </div>
             </div>
           </div>
+        </section>
 
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title">🔊 Acoustic Scream Defense</div>
-            </div>
-            <div class="spec-list">
-              <div class="spec-row">
-                <span class="spec-name">Instant Ear-Rape Threshold</span>
-                <span class="spec-val mono">RMS > 16,000 (Instant Server Mute)</span>
-              </div>
-              <div class="spec-row">
-                <span class="spec-name">Sustained Loud Noise</span>
-                <span class="spec-val mono">RMS > 11,000 (for 1.5s)</span>
-              </div>
-              <div class="spec-row">
-                <span class="spec-name">Defense Action</span>
-                <span class="spec-val">Automated 30s Voice Mute + Log</span>
-              </div>
+        <!-- ── SECTION 2: WEB MODERATION CENTER ── -->
+        <section class="tab-content" id="tab-moderation">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Web-Based Moderation Suite</h2>
+              <p class="section-desc">Execute instant administrative enforcement without cluttering Discord with mod commands.</p>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- ── SECTION 6: BROADCAST COMPOSER ── -->
-      <section class="tab-content" id="tab-broadcast">
-        <div class="section-bar">
-          <div>
-            <h2 class="section-heading">Official Broadcast Composer</h2>
-            <p class="section-desc">Broadcast styled high-command announcements directly into any server channel.</p>
+          <div class="mod-grid">
+            <!-- Ban Member Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🔨 Ban Member</div>
+              </div>
+              <form onsubmit="return false;" id="formModBan">
+                <div class="input-group">
+                  <label>Target User ID</label>
+                  <input type="text" id="banUserId" placeholder="e.g. 1152686277255237663" required />
+                </div>
+                <div class="input-group">
+                  <label>Reason</label>
+                  <input type="text" id="banReason" placeholder="Violation of server rules" />
+                </div>
+                <div class="input-group">
+                  <label>Delete Message History</label>
+                  <select id="banDeleteDays">
+                    <option value="0">Don't delete messages</option>
+                    <option value="1">Previous 24 Hours</option>
+                    <option value="7">Previous 7 Days</option>
+                  </select>
+                </div>
+                <button class="btn-action danger w-100" onclick="submitModBan()">Execute Permanent Ban</button>
+              </form>
+            </div>
+
+            <!-- Unban Member Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🔓 Unban Member</div>
+              </div>
+              <form onsubmit="return false;" id="formModUnban">
+                <div class="input-group">
+                  <label>Banned User ID</label>
+                  <input type="text" id="unbanUserId" placeholder="e.g. 1152686277255237663" required />
+                </div>
+                <div class="input-group">
+                  <label>Reason</label>
+                  <input type="text" id="unbanReason" placeholder="Pardon granted by High Command" />
+                </div>
+                <button class="btn-action primary w-100" onclick="submitModUnban()">Pardon & Unban</button>
+              </form>
+            </div>
+
+            <!-- Kick Member Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">👢 Kick Member</div>
+              </div>
+              <form onsubmit="return false;" id="formModKick">
+                <div class="input-group">
+                  <label>Target User ID</label>
+                  <input type="text" id="kickUserId" placeholder="e.g. 1152686277255237663" required />
+                </div>
+                <div class="input-group">
+                  <label>Reason</label>
+                  <input type="text" id="kickReason" placeholder="Disruptive behavior" />
+                </div>
+                <button class="btn-action danger w-100" onclick="submitModKick()">Execute Kick</button>
+              </form>
+            </div>
+
+            <!-- Timeout / Mute Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">⏳ Timeout / Mute Member</div>
+              </div>
+              <form onsubmit="return false;" id="formModTimeout">
+                <div class="input-group">
+                  <label>Target User ID</label>
+                  <input type="text" id="timeoutUserId" placeholder="e.g. 1152686277255237663" required />
+                </div>
+                <div class="input-group">
+                  <label>Duration</label>
+                  <select id="timeoutDuration">
+                    <option value="5">5 Minutes</option>
+                    <option value="10" selected>10 Minutes</option>
+                    <option value="60">1 Hour</option>
+                    <option value="1440">24 Hours</option>
+                    <option value="10080">1 Week</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label>Reason</label>
+                  <input type="text" id="timeoutReason" placeholder="Spamming or loud audio" />
+                </div>
+                <div class="btn-group-row">
+                  <button class="btn-action danger" style="flex:1;" onclick="submitModTimeout()">Apply Timeout</button>
+                  <button class="btn-action" style="flex:1;" onclick="submitModUntimeout()">Remove Timeout</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Purge Messages Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🧹 Purge / Clear Messages</div>
+              </div>
+              <form onsubmit="return false;" id="formModPurge">
+                <div class="input-group">
+                  <label>Target Channel</label>
+                  <select id="purgeChannelSelect" required>
+                    <option value="">Loading channels…</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label>Number of Messages (1 - 100)</label>
+                  <input type="number" id="purgeCount" min="1" max="100" value="10" required />
+                </div>
+                <div class="input-group">
+                  <label>Filter Specific User ID (Optional)</label>
+                  <input type="text" id="purgeFilterUser" placeholder="Leave empty for all users" />
+                </div>
+                <button class="btn-action danger w-100" onclick="submitModPurge()">Purge Messages</button>
+              </form>
+            </div>
+
+            <!-- Lock / Unlock Channel Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🔒 Channel Lock Controller</div>
+              </div>
+              <form onsubmit="return false;">
+                <div class="input-group">
+                  <label>Target Channel</label>
+                  <select id="lockChannelSelect" required>
+                    <option value="">Loading channels…</option>
+                  </select>
+                </div>
+                <div class="btn-group-row">
+                  <button class="btn-action danger" style="flex:1;" onclick="submitModChannelLock(true)">🔒 Lock Channel</button>
+                  <button class="btn-action primary" style="flex:1;" onclick="submitModChannelLock(false)">🔓 Unlock Channel</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Slowmode Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🐢 Slowmode Controller</div>
+              </div>
+              <form onsubmit="return false;">
+                <div class="input-group">
+                  <label>Target Channel</label>
+                  <select id="slowmodeChannelSelect" required>
+                    <option value="">Loading channels…</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label>Rate Limit Duration</label>
+                  <select id="slowmodeSeconds">
+                    <option value="0">Disabled (0s)</option>
+                    <option value="5">5 Seconds</option>
+                    <option value="15">15 Seconds</option>
+                    <option value="60">1 Minute</option>
+                    <option value="300">5 Minutes</option>
+                  </select>
+                </div>
+                <button class="btn-action primary w-100" onclick="submitModSlowmode()">Apply Slowmode</button>
+              </form>
+            </div>
+
+            <!-- Role Assignment Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">👑 Role Management</div>
+              </div>
+              <form onsubmit="return false;">
+                <div class="input-group">
+                  <label>Target User ID</label>
+                  <input type="text" id="roleUserId" placeholder="e.g. 1152686277255237663" required />
+                </div>
+                <div class="input-group">
+                  <label>Role</label>
+                  <select id="roleSelect" required>
+                    <option value="">Loading roles…</option>
+                  </select>
+                </div>
+                <div class="btn-group-row">
+                  <button class="btn-action primary" style="flex:1;" onclick="submitModRole('add')">➕ Grant Role</button>
+                  <button class="btn-action danger" style="flex:1;" onclick="submitModRole('remove')">➖ Revoke Role</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Voice Action Card -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🎙️ Voice Moderation</div>
+              </div>
+              <form onsubmit="return false;">
+                <div class="input-group">
+                  <label>Target User ID in Voice</label>
+                  <input type="text" id="voiceUserId" placeholder="e.g. 1152686277255237663" required />
+                </div>
+                <div class="input-group">
+                  <label>Voice Action</label>
+                  <select id="voiceActionSelect">
+                    <option value="mute">Server Mute</option>
+                    <option value="unmute">Server Unmute</option>
+                    <option value="deafen">Server Deafen</option>
+                    <option value="undeafen">Server Undeafen</option>
+                    <option value="disconnect">Disconnect from Voice</option>
+                  </select>
+                </div>
+                <button class="btn-action danger w-100" onclick="submitModVoiceAction()">Execute Voice Action</button>
+              </form>
+            </div>
+
           </div>
-        </div>
+        </section>
 
-        <div class="panel-card" style="max-width: 750px;">
-          <form id="broadcastForm" onsubmit="return false;">
-            <div class="input-group">
-              <label for="broadcastChannel">Target Channel ID</label>
-              <input type="text" id="broadcastChannel" placeholder="e.g. 1538560876339265667" required />
+        <!-- ── SECTION 3: APPEALS CENTER ── -->
+        <section class="tab-content" id="tab-appeals">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Security Appeals Command</h2>
+              <p class="section-desc">Review submitted member appeals. Decisions immediately unban users and deliver DM notifications.</p>
             </div>
-            <div class="input-group">
-              <label for="broadcastTitle">Announcement Title</label>
-              <input type="text" id="broadcastTitle" placeholder="Official Notice from High Command" required />
-            </div>
-            <div class="input-group">
-              <label for="broadcastMessage">Message Content</label>
-              <textarea id="broadcastMessage" rows="5" placeholder="Enter announcement body text…" required></textarea>
-            </div>
-            <div class="input-group">
-              <label for="broadcastColor">Embed Accent Color</label>
-              <select id="broadcastColor">
-                <option value="16777215" selected>⚪ Pure White (0xFFFFFF)</option>
-                <option value="5763719">🟢 Neon Green (0x57F287)</option>
-                <option value="15548997">🔴 Security Red (0xED4245)</option>
-                <option value="16705372">🟡 Warning Amber (0xFEE75C)</option>
+            <div class="filter-group">
+              <input type="text" class="input-search" id="searchAppeals" placeholder="Search by User ID or Tag…" />
+              <select class="select-filter" id="filterAppealStatus">
+                <option value="all">All Appeals</option>
+                <option value="pending" selected>Pending Review</option>
+                <option value="approved">Approved & Unbanned</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
-            <button type="submit" class="btn-action primary" onclick="sendBroadcast()" style="margin-top: 10px;">
-              📢 Send Official Broadcast
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <!-- ── SECTION 7: LIVE CONSOLE LOGS ── -->
-      <section class="tab-content" id="tab-logs">
-        <div class="section-bar">
-          <div>
-            <h2 class="section-heading">Live Telemetry & Activity Stream</h2>
-            <p class="section-desc">Real-time audit log of bot events, slash commands, voice sentinels, and security actions.</p>
           </div>
-          <button class="btn-action" onclick="clearEventLog()">Clear View</button>
-        </div>
 
-        <div class="log-container">
-          <ul class="event-stream-list" id="eventStreamList">
-            <li class="log-entry">Waiting for realtime SSE stream…</li>
-          </ul>
-        </div>
-      </section>
+          <div class="appeals-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Applicant</th>
+                  <th>User ID</th>
+                  <th>Submitted</th>
+                  <th>Statement Summary</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="appealsTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">Loading appeals from encrypted storage…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-    </main>
+        <!-- ── SECTION 4: PANELS MANAGER ── -->
+        <section class="tab-content" id="tab-panels">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Interactive Panels & Channels</h2>
+              <p class="section-desc">Deploy, re-send, or delete live panels from your server channels with instant Discord sync.</p>
+            </div>
+          </div>
+
+          <div class="grid-3col">
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🎫 Ticket Support Panel</div>
+                <span class="status-chip" id="chipTicketStatus">Active</span>
+              </div>
+              <p class="panel-info">Permanent support ticket panel with category selection in `#open-ticket`.</p>
+              <div class="panel-actions">
+                <button class="btn-action primary" onclick="deployPanel('ticket')">🚀 Deploy / Refresh</button>
+                <button class="btn-action danger" onclick="removePanel('ticket')">🗑️ Remove Panel</button>
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🏆 Event & Tournament Panel</div>
+                <span class="status-chip" id="chipEventStatus">Active</span>
+              </div>
+              <p class="panel-info">Live event match and participant registration panel in `#events-announcement`.</p>
+              <div class="panel-actions">
+                <button class="btn-action primary" onclick="deployPanel('event')">🚀 Deploy / Refresh</button>
+                <button class="btn-action danger" onclick="removePanel('event')">🗑️ Remove Panel</button>
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">📊 Live System Status Panel</div>
+                <span class="status-chip" id="chipSystemStatus">Active</span>
+              </div>
+              <p class="panel-info">Auto-updating telemetry embed in `#system-status` (10s interval).</p>
+              <div class="panel-actions">
+                <button class="btn-action primary" onclick="deployPanel('status')">🔄 Force Refresh Embed</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── SECTION 5: VCR SENTINELS ── -->
+        <section class="tab-content" id="tab-vcr">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">VCR Audio Sentinel Fleet</h2>
+              <p class="section-desc">Autonomous multi-track voice sentinels permanently locked to designated rooms.</p>
+            </div>
+            <button class="btn-action primary" onclick="forceReStationVCR()">🎙️ Force Re-Station All</button>
+          </div>
+
+          <div class="grid-5col" id="vcrFleetGrid">
+            <!-- Dynamic VCR Cards -->
+          </div>
+        </section>
+
+        <!-- ── SECTION 6: SECURITY & SHIELD ── -->
+        <section class="tab-content" id="tab-security">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Security Shield & Role Management</h2>
+              <p class="section-desc">Trigger instant server-wide member role audits and manage acoustic defense policies.</p>
+            </div>
+            <button class="btn-action primary" id="btnSyncRoles" onclick="triggerMassSync()">⚡ Mass Role & Member Sync</button>
+          </div>
+
+          <div class="grid-2col">
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🛡️ Spy Account Auto-Defense</div>
+              </div>
+              <div class="spec-list">
+                <div class="spec-row">
+                  <span class="spec-name">Account Cutoff Age</span>
+                  <span class="spec-val">16 August 2026</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Default Role on Join</span>
+                  <span class="spec-val mono">UNTRUSTED (Protected)</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Executive Notification</span>
+                  <span class="spec-val text-white">OWNER / CEO / COO DMs (Alert-only)</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Appeals Destination</span>
+                  <span class="spec-val text-white">GX Control Panel</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">🔊 Acoustic Scream Defense</div>
+              </div>
+              <div class="spec-list">
+                <div class="spec-row">
+                  <span class="spec-name">Instant Ear-Rape Threshold</span>
+                  <span class="spec-val mono">RMS > 16,000 (Instant Server Mute)</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Sustained Loud Noise</span>
+                  <span class="spec-val mono">RMS > 11,000 (for 1.5s)</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-name">Defense Action</span>
+                  <span class="spec-val">Automated 30s Voice Mute + Log</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── SECTION 7: BROADCAST COMPOSER ── -->
+        <section class="tab-content" id="tab-broadcast">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Official Broadcast Composer</h2>
+              <p class="section-desc">Broadcast styled high-command announcements directly into any server channel.</p>
+            </div>
+          </div>
+
+          <div class="panel-card" style="max-width: 750px;">
+            <form id="broadcastForm" onsubmit="return false;">
+              <div class="input-group">
+                <label for="broadcastChannel">Target Channel</label>
+                <select id="broadcastChannelSelect" required>
+                  <option value="">Loading channels…</option>
+                </select>
+              </div>
+              <div class="input-group">
+                <label for="broadcastTitle">Announcement Title</label>
+                <input type="text" id="broadcastTitle" placeholder="Official Notice from High Command" required />
+              </div>
+              <div class="input-group">
+                <label for="broadcastMessage">Message Content</label>
+                <textarea id="broadcastMessage" rows="5" placeholder="Enter announcement body text…" required></textarea>
+              </div>
+              <div class="input-group">
+                <label for="broadcastColor">Embed Accent Color</label>
+                <select id="broadcastColor">
+                  <option value="16777215" selected>⚪ Pure White (0xFFFFFF)</option>
+                  <option value="5763719">🟢 Neon Green (0x57F287)</option>
+                  <option value="15548997">🔴 Security Red (0xED4245)</option>
+                  <option value="16705372">🟡 Warning Amber (0xFEE75C)</option>
+                </select>
+              </div>
+              <button type="submit" class="btn-action primary" onclick="sendBroadcast()" style="margin-top: 10px;">
+                📢 Send Official Broadcast
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ── SECTION 8: LIVE CONSOLE LOGS ── -->
+        <section class="tab-content" id="tab-logs">
+          <div class="section-bar">
+            <div>
+              <h2 class="section-heading">Live Telemetry & Activity Stream</h2>
+              <p class="section-desc">Real-time audit log of bot events, security actions, and control panel executions.</p>
+            </div>
+            <button class="btn-action" onclick="clearEventLog()">Clear View</button>
+          </div>
+
+          <div class="log-container">
+            <ul class="event-stream-list" id="eventStreamList">
+              <li class="log-entry">Waiting for realtime SSE stream…</li>
+            </ul>
+          </div>
+        </section>
+
+      </main>
+    </div>
   </div>
 
   <!-- Statement Viewer Modal -->
@@ -406,13 +723,9 @@
           <span class="meta-label">User ID:</span>
           <span class="meta-val mono" id="modalUserId">--</span>
         </div>
-        <div class="statement-box" id="modalStatementText">
-          --
-        </div>
+        <div class="statement-box" id="modalStatementText">--</div>
       </div>
-      <div class="modal-footer" id="modalActions">
-        <!-- Dynamic Approve / Reject Buttons -->
-      </div>
+      <div class="modal-footer" id="modalActions"></div>
     </div>
   </div>
 
