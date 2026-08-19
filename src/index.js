@@ -1,4 +1,20 @@
-import { enforceSuspiciousAccountBan, handleAppealButton, handleAppealModalSubmit, SPY_ACCOUNT_CUTOFF_TIMESTAMP } from './security/spyDefense.js';
+import {
+  enforceSuspiciousAccountBan,
+  handleAppealButton,
+  handleAppealModalSubmit,
+  executeAppealApproval,
+  executeAppealRejection,
+  loadAppealsData,
+  SPY_ACCOUNT_CUTOFF_TIMESTAMP
+} from './security/spyDefense.js';
+import {
+  verifyMasterPassword,
+  checkRateLimit,
+  recordFailedLogin,
+  clearFailedLogin,
+  createAdminSessionToken,
+  verifyAdminSession
+} from './security/adminAuth.js';
 import {
   Client,
   GatewayIntentBits,
@@ -7382,15 +7398,58 @@ if (!TOKEN) {
 }
 
 // ----------------------------------------------------
-// 🌐 24/7 Cloud Hosting & Live Status Dashboard Web Server
+// 🌐 GX Control Panel & Command Center Backend Server
 // ----------------------------------------------------
 const PORT = process.env.PORT || 3000;
 const STATUS_DIR = path.resolve('Websites', 'Status');
 
-const healthServer = http.createServer((req, res) => {
-  const url = req.url.split('?')[0].toLowerCase();
+function parseJsonBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try { resolve(JSON.parse(body || '{}')); }
+      catch { resolve({}); }
+    });
+  });
+}
 
-  // 1. Live Telemetry API Endpoint
+function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '127.0.0.1';
+}
+
+function authenticateAdmin(req) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7);
+  return verifyAdminSession(token);
+}
+
+function sendJsonResponse(res, statusCode, data) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  });
+  res.end(JSON.stringify(data));
+}
+
+const healthServer = http.createServer(async (req, res) => {
+  const url = req.url.split('?')[0];
+  const method = req.method.toUpperCase();
+
+  // 1. CORS Preflight
+  if (method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    });
+    return res.end();
+  }
+
+  // 2. Public Telemetry API Endpoint
   if (url === '/api/status' || url === '/status.json') {
     const targetGuild = client.guilds.cache.get(ALLOWED_GUILD_ID);
     const vcrFleetData = vcrManager.workers.map(w => ({
@@ -7402,11 +7461,7 @@ const healthServer = http.createServer((req, res) => {
       assignedChannelId: w.assignedChannelId
     }));
 
-    res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*'
-    });
-    return res.end(JSON.stringify({
+    return sendJsonResponse(res, 200, {
       status: 'operational',
       uptimeSeconds: Math.floor(process.uptime()),
       ping: Math.max(1, Math.round(client.ws.ping || 0)),
@@ -7430,17 +7485,12 @@ const healthServer = http.createServer((req, res) => {
         muteDurationSeconds: 30,
         tournamentCategoryId: '1538979258863587328'
       },
-      loadBalancer: {
-        workerPool: 'non-blocking',
-        flashCommandCache: true,
-        isolatedAudioGroups: true
-      },
       recentActivity: ACTIVITY_RING.slice(0, 50),
       activityStats: ACTIVITY_STATS
-    }));
+    });
   }
 
-  // 1b. Server-Sent Events (SSE) — real-time push every 500ms
+  // 3. Server-Sent Events (SSE) Real-time Stream
   if (url === '/api/stream') {
     res.writeHead(200, {
       'Content-Type':                'text/event-stream',
@@ -7478,43 +7528,277 @@ const healthServer = http.createServer((req, res) => {
       };
     }
 
-    // Send immediately
     res.write(`data: ${JSON.stringify(buildPayload())}\n\n`);
-
-    // Then push every 500ms
     const sseInterval = setInterval(() => {
-      try {
-        res.write(`data: ${JSON.stringify(buildPayload())}\n\n`);
-      } catch {
-        clearInterval(sseInterval);
-      }
+      try { res.write(`data: ${JSON.stringify(buildPayload())}\n\n`); }
+      catch { clearInterval(sseInterval); }
     }, 500);
 
-    // Cleanup when client disconnects
     req.on('close', () => clearInterval(sseInterval));
     return;
   }
 
-  // 2. Serve Static Website Files (Websites/Status)
-  let filePath = path.join(STATUS_DIR, 'index.html');
-  let contentType = 'text/html; charset=utf-8';
+  // 4. Admin Auth: POST /api/admin/login
+  if (url === '/api/admin/login' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rateCheck = checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      return sendJsonResponse(res, 429, { success: false, error: rateCheck.error });
+    }
 
-  if (url.endsWith('.css') || url.includes('style.css')) {
-    filePath = path.join(STATUS_DIR, 'style.css');
-    contentType = 'text/css; charset=utf-8';
-  } else if (url.endsWith('.js') || url.includes('app.js')) {
-    filePath = path.join(STATUS_DIR, 'app.js');
-    contentType = 'application/javascript; charset=utf-8';
+    const body = await parseJsonBody(req);
+    const isValid = verifyMasterPassword(body.password);
+
+    if (!isValid) {
+      recordFailedLogin(ip);
+      logActivity('security', 'Failed Admin Login', `IP: ${ip} provided incorrect password`);
+      return sendJsonResponse(res, 401, { success: false, error: 'كلمة المرور غير صحيحة.' });
+    }
+
+    clearFailedLogin(ip);
+    const token = createAdminSessionToken('HIGH_COMMAND');
+    logActivity('admin', 'Admin Login Successful', `Command Center authenticated from IP: ${ip}`);
+    return sendJsonResponse(res, 200, {
+      success: true,
+      token,
+      role: 'HIGH_COMMAND',
+      message: 'تم تسجيل الدخول بنجاح إلى لوحة التحكم'
+    });
   }
+
+  // 5. Admin Session Validation: GET /api/admin/session
+  if (url === '/api/admin/session' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) {
+      return sendJsonResponse(res, 401, { authenticated: false, error: 'جلسة غير صالحة أو منتهية' });
+    }
+    return sendJsonResponse(res, 200, { authenticated: true, role: session.role, exp: session.exp });
+  }
+
+  // 6. Admin Appeals: GET /api/admin/appeals
+  if (url === '/api/admin/appeals' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const rawAppeals = loadAppealsData();
+    const list = Object.values(rawAppeals).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return sendJsonResponse(res, 200, { success: true, appeals: list });
+  }
+
+  // 7. Admin Resolve Appeal: POST /api/admin/appeals/resolve
+  if (url === '/api/admin/appeals/resolve' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, action, notes } = body;
+
+    if (!targetId || !['approve', 'reject'].includes(action)) {
+      return sendJsonResponse(res, 400, { error: 'بيانات غير صالحة' });
+    }
+
+    let result;
+    if (action === 'approve') {
+      result = await executeAppealApproval(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
+      logActivity('admin', 'Appeal Approved', `Unbanned member ${targetId} via Control Panel`);
+    } else {
+      result = await executeAppealRejection(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
+      logActivity('admin', 'Appeal Rejected', `Rejected appeal for member ${targetId} via Control Panel`);
+    }
+
+    return sendJsonResponse(res, 200, { success: true, result });
+  }
+
+  // 8. Admin Panels: GET /api/admin/panels
+  if (url === '/api/admin/panels' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const ticketPanelData = loadTicketPanelData();
+    const eventData = loadActiveEventData();
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      panels: {
+        ticketPanel: {
+          exists: !!ticketPanelData.messageId,
+          channelId: ticketPanelData.channelId || null,
+          messageId: ticketPanelData.messageId || null,
+          status: ticketPanelData.messageId ? 'active' : 'inactive'
+        },
+        eventPanel: {
+          exists: !!eventData.messageId,
+          channelId: eventData.channelId || null,
+          messageId: eventData.messageId || null,
+          title: eventData.title || 'بطولة GX',
+          status: eventData.messageId ? 'active' : 'inactive'
+        },
+        statusChannel: {
+          exists: true,
+          channelName: 'system-status',
+          status: 'active'
+        }
+      }
+    });
+  }
+
+  // 9. Admin Deploy Panel: POST /api/admin/panels/deploy
+  if (url === '/api/admin/panels/deploy' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { panelType } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول لسيرفر الديسكورد' });
+
+    if (panelType === 'ticket') {
+      await ensurePermanentTicketPanel(guild);
+      logActivity('admin', 'Panel Deployed', 'Deployed Ticket Panel via Control Panel');
+      return sendJsonResponse(res, 200, { success: true, message: 'تم نشر بانل التذاكر بنجاح' });
+    } else if (panelType === 'event') {
+      await ensureEventPanel(guild);
+      logActivity('admin', 'Panel Deployed', 'Deployed Event Panel via Control Panel');
+      return sendJsonResponse(res, 200, { success: true, message: 'تم نشر بانل الفعاليات بنجاح' });
+    } else {
+      return sendJsonResponse(res, 400, { error: 'نوع البانل غير معروف' });
+    }
+  }
+
+  // 10. Admin Remove Panel: POST /api/admin/panels/remove
+  if (url === '/api/admin/panels/remove' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { panelType } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    if (panelType === 'ticket') {
+      const p = loadTicketPanelData();
+      if (p.channelId && p.messageId) {
+        const ch = guild.channels.cache.get(p.channelId);
+        if (ch) {
+          const msg = await ch.messages.fetch(p.messageId).catch(() => null);
+          if (msg) await msg.delete().catch(() => {});
+        }
+      }
+      saveTicketPanelData({ channelId: null, messageId: null });
+      logActivity('admin', 'Panel Removed', 'Removed Ticket Panel via Control Panel');
+      return sendJsonResponse(res, 200, { success: true, message: 'تم حذف بانل التذاكر بنجاح' });
+    } else if (panelType === 'event') {
+      const e = loadActiveEventData();
+      if (e.channelId && e.messageId) {
+        const ch = guild.channels.cache.get(e.channelId);
+        if (ch) {
+          const msg = await ch.messages.fetch(e.messageId).catch(() => null);
+          if (msg) await msg.delete().catch(() => {});
+        }
+      }
+      saveActiveEventData({ channelId: null, messageId: null, active: false });
+      logActivity('admin', 'Panel Removed', 'Removed Event Panel via Control Panel');
+      return sendJsonResponse(res, 200, { success: true, message: 'تم حذف بانل الفعاليات بنجاح' });
+    } else {
+      return sendJsonResponse(res, 400, { error: 'نوع البانل غير معروف' });
+    }
+  }
+
+  // 11. Admin Role & Member Sync: POST /api/admin/bot/sync
+  if (url === '/api/admin/bot/sync' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    if (!guild) return sendJsonResponse(res, 500, { error: 'تعذر الوصول للسيرفر' });
+
+    const syncResult = await syncAllMembersRole(guild, true);
+    logActivity('admin', 'Mass Role Sync', 'Triggered full member & manager role sync from Control Panel');
+    return sendJsonResponse(res, 200, { success: true, result: syncResult });
+  }
+
+  // 12. Admin Broadcast: POST /api/admin/bot/broadcast
+  if (url === '/api/admin/bot/broadcast' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { channelId, title, message: broadcastMsg, color = 0xffffff } = body;
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const targetChannel = guild?.channels.cache.get(channelId);
+    if (!targetChannel) return sendJsonResponse(res, 400, { error: 'الروم المحدد غير موجود' });
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setAuthor({ name: '📢 إشعار إداري رسمي | GX High Command', iconURL: guild.iconURL() })
+      .setTitle(title || 'إشعار من الإدارة العليا')
+      .setDescription(broadcastMsg || '')
+      .setFooter({ text: `GX eSports Broadcast • ${new Date().toLocaleTimeString('ar-SA')}` })
+      .setTimestamp();
+
+    await targetChannel.send({ embeds: [embed] }).catch(() => {});
+    logActivity('admin', 'Broadcast Sent', `Sent announcement to #${targetChannel.name} via Control Panel`);
+    return sendJsonResponse(res, 200, { success: true, message: 'تم إرسال الإشعار بنجاح' });
+  }
+
+  // 13. Admin VCR Force Reconnect: POST /api/admin/vcr/reconnect
+  if (url === '/api/admin/vcr/reconnect' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { vcrId } = body;
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+
+    if (guild) {
+      await vcrManager.forceStationAll(guild);
+      logActivity('admin', 'VCR Reconnect', `Forced re-stationing of VCR audio sentinels via Control Panel`);
+    }
+    return sendJsonResponse(res, 200, { success: true, message: 'تمت إعادة تثبيت وربط المسجلات الصوتية' });
+  }
+
+  // 14. Admin Audit Logs: GET /api/admin/audit-logs
+  if (url === '/api/admin/audit-logs' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      logs: ACTIVITY_RING.slice(0, 100),
+      stats: ACTIVITY_STATS
+    });
+  }
+
+  // 15. Serve Static Website Files (Websites/Status)
+  let cleanUrl = url === '/' ? '/index.html' : url;
+  let filePath = path.join(STATUS_DIR, cleanUrl.replace(/^\//, ''));
+  
+  let contentType = 'text/html; charset=utf-8';
+  if (cleanUrl.endsWith('.css')) contentType = 'text/css; charset=utf-8';
+  else if (cleanUrl.endsWith('.js')) contentType = 'application/javascript; charset=utf-8';
+  else if (cleanUrl.endsWith('.png')) contentType = 'image/png';
+  else if (cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg')) contentType = 'image/jpeg';
+  else if (cleanUrl.endsWith('.svg')) contentType = 'image/svg+xml';
+  else if (cleanUrl.endsWith('.json')) contentType = 'application/json; charset=utf-8';
 
   fs.readFile(filePath, (err, content) => {
     if (err) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({
-        status: 'online',
-        bot: client.user ? client.user.tag : 'connecting',
-        uptimeSeconds: Math.floor(process.uptime())
-      }));
+      // Fallback to index.html for SPA routes
+      fs.readFile(path.join(STATUS_DIR, 'index.html'), (err2, fallbackContent) => {
+        if (err2) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            status: 'online',
+            bot: client.user ? client.user.tag : 'GX Bot',
+            uptimeSeconds: Math.floor(process.uptime())
+          }));
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+        res.end(fallbackContent);
+      });
+      return;
     }
     res.writeHead(200, {
       'Content-Type': contentType,
