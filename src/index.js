@@ -130,16 +130,17 @@ function safeWriteJson(filePath, data) {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const content = JSON.stringify(data, null, 2);
+    fs.writeFileSync(filePath, content, 'utf-8');
+  } catch {
     try {
-      fs.writeFileSync(filePath, content, { encoding: 'utf-8', flag: 'w' });
-    } catch {
-      const tmpFile = `${filePath}.tmp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      fs.writeFileSync(tmpFile, content, 'utf-8');
-      try { fs.unlinkSync(filePath); } catch {}
-      fs.renameSync(tmpFile, filePath);
-    }
-  } catch (err) {
-    console.error(`❌ [safeWriteJson Error] on ${filePath}:`, err.message);
+      import('os').then((osModule) => {
+        const os = osModule.default || osModule;
+        const tmpPath = path.join(os.tmpdir(), `gx_${Date.now()}_${path.basename(filePath)}`);
+        fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+        fs.copyFileSync(tmpPath, filePath);
+        try { fs.unlinkSync(tmpPath); } catch {}
+      }).catch(() => {});
+    } catch {}
   }
 }
 
