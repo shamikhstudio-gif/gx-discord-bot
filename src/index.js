@@ -7777,6 +7777,10 @@ const healthServer = http.createServer(async (req, res) => {
       await ensureEventPanel(guild);
       logActivity('admin', 'Panel Deployed', 'Deployed Event Panel via Control Panel');
       return sendJsonResponse(res, 200, { success: true, message: 'تم نشر بانل الفعاليات بنجاح' });
+    } else if (panelType === 'status') {
+      await updateLiveSystemStatus(guild);
+      logActivity('admin', 'Panel Deployed', 'Updated Live System Status Panel via Control Panel');
+      return sendJsonResponse(res, 200, { success: true, message: 'تم تحديث ونشر إمبد حالة النظام بنجاح' });
     } else {
       return sendJsonResponse(res, 400, { error: 'نوع البانل غير معروف' });
     }
@@ -7816,6 +7820,19 @@ const healthServer = http.createServer(async (req, res) => {
       saveActiveEvent({ ...e, channelId: null, messageId: null, status: 'inactive' });
       logActivity('admin', 'Panel Removed', 'Removed Event Panel via Control Panel');
       return sendJsonResponse(res, 200, { success: true, message: 'تم حذف بانل الفعاليات بنجاح' });
+    } else if (panelType === 'status') {
+      const statusChannel = await getOrCreateSystemStatusChannel(guild);
+      if (statusChannel) {
+        const savedMsgId = loadStatusMessageId();
+        if (savedMsgId) {
+          const msg = await statusChannel.messages.fetch(savedMsgId).catch(() => null);
+          if (msg) await msg.delete().catch(() => {});
+        }
+      }
+      saveStatusMessageId(null);
+      statusMessageRef = null;
+      logActivity('admin', 'Panel Removed', 'Removed Status Panel via Control Panel');
+      return sendJsonResponse(res, 200, { success: true, message: 'تم حذف إمبد حالة النظام بنجاح' });
     } else {
       return sendJsonResponse(res, 400, { error: 'نوع البانل غير معروف' });
     }
