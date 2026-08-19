@@ -1,69 +1,69 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GX eSports — High Command Control Panel & Live Support Desk</title>
+  <title>GX eSports — مركز القيادة والتحكم والدعم الفني المباشر</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <!-- ══════════════════════════════════════════════════════
-       AUTH OVERLAY (Obsidian Lock Screen)
+       AUTH OVERLAY (شاشة القفل والحماية العسكرية)
        ══════════════════════════════════════════════════════ -->
   <div class="auth-overlay" id="authOverlay">
     <div class="auth-card">
       <div class="auth-glow"></div>
       <div class="auth-header">
-        <img src="" alt="GX Logo" class="auth-logo gx-logo-img" />
-        <h1 class="auth-title">GX COMMAND CENTER</h1>
-        <p class="auth-subtitle">Executive Authorization Required • High Command Access</p>
+        <img src="" alt="شعار GX" class="auth-logo gx-logo-img" />
+        <h1 class="auth-title">مركز قيادة GX eSports</h1>
+        <p class="auth-subtitle">مطلوب تصريح القيادة العليا • وصول الإدارة المشفر</p>
       </div>
 
       <form id="authForm" class="auth-form" onsubmit="return false;">
         <div class="input-group">
-          <label for="adminPassword">Master Security Key</label>
+          <label for="adminPassword">مفتاح الأمان الرئيسي</label>
           <div class="input-wrap">
-            <input type="password" id="adminPassword" placeholder="Enter master password…" autocomplete="current-password" required />
-            <button type="button" class="btn-toggle-pw" id="togglePw" aria-label="Toggle password visibility">👁️</button>
+            <input type="password" id="adminPassword" placeholder="أدخل كلمة المرور الرئيسية للوحة التحكم…" autocomplete="current-password" required />
+            <button type="button" class="btn-toggle-pw" id="togglePw" aria-label="إظهار/إخفاء كلمة المرور">👁️</button>
           </div>
         </div>
         <div class="auth-error" id="authError"></div>
         <button type="submit" class="btn-auth" id="btnSubmitAuth">
-          <span class="btn-text">Authenticate & Enter</span>
+          <span class="btn-text">توثيق الدخول للنظام</span>
           <div class="btn-spinner" id="authSpinner"></div>
         </button>
       </form>
 
       <div class="auth-footer">
-        <span class="auth-badge">🔒 AES-256 Encrypted DB</span>
-        <span class="auth-badge">⚡ PBKDF2/SHA-512 Auth</span>
+        <span class="auth-badge">🔒 تشفير عسكري AES-256</span>
+        <span class="auth-badge">⚡ توثيق PBKDF2 / SHA-512</span>
       </div>
     </div>
   </div>
 
   <!-- ══════════════════════════════════════════════════════
-       MAIN APPLICATION LAYOUT WITH INSTAGRAM-STYLE SIDEBAR
+       MAIN APPLICATION LAYOUT WITH INSTAGRAM-STYLE SIDEBAR (RTL)
        ══════════════════════════════════════════════════════ -->
   <div class="app-layout" id="appLayout">
     
-    <!-- Instagram-Style Collapsible Sidebar -->
+    <!-- الشريط الجانبي بنمط إنستغرام القابل للتمدد -->
     <aside class="insta-sidebar" id="instaSidebar">
       <div class="sidebar-top">
         <div class="sidebar-brand">
           <img src="" alt="GX" class="sidebar-logo gx-logo-img" />
           <div class="brand-text">
-            <span class="brand-name">GX <span>COMMAND</span></span>
+            <span class="brand-name">مركز <span>قيادة GX</span></span>
             <span class="brand-tag">v2.0 Flash</span>
           </div>
         </div>
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-tab="overview" title="Overview">
+        <button class="nav-item active" data-tab="overview" title="نظرة عامة">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="7" height="7"></rect>
@@ -72,40 +72,40 @@
               <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
           </div>
-          <span class="nav-label">Overview</span>
+          <span class="nav-label">نظرة عامة</span>
         </button>
 
-        <button class="nav-item" data-tab="support" title="Live Support Desk">
+        <button class="nav-item" data-tab="support" title="مركز الدعم المباشر">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
             </svg>
           </div>
-          <span class="nav-label">Support Desk</span>
+          <span class="nav-label">مركز الدعم</span>
           <span class="nav-badge" id="badgeOpenTickets">0</span>
         </button>
 
-        <button class="nav-item" data-tab="moderation" title="Moderation Center">
+        <button class="nav-item" data-tab="moderation" title="مركز الإشراف">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
           </div>
-          <span class="nav-label">Moderation</span>
-          <span class="nav-badge text-white">Full</span>
+          <span class="nav-label">مركز الإشراف</span>
+          <span class="nav-badge text-white">شامل</span>
         </button>
 
-        <button class="nav-item" data-tab="appeals" title="Appeals Center">
+        <button class="nav-item" data-tab="appeals" title="مركز مراجعة الطعون">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
             </svg>
           </div>
-          <span class="nav-label">Appeals</span>
+          <span class="nav-label">إدارة الطعون</span>
           <span class="nav-badge" id="badgePendingAppeals">0</span>
         </button>
 
-        <button class="nav-item" data-tab="panels" title="Panels Manager">
+        <button class="nav-item" data-tab="panels" title="مدير البانلات">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -113,10 +113,10 @@
               <line x1="12" y1="17" x2="12" y2="21"></line>
             </svg>
           </div>
-          <span class="nav-label">Panels</span>
+          <span class="nav-label">البانلات التفاعلية</span>
         </button>
 
-        <button class="nav-item" data-tab="vcr" title="VCR Sentinels">
+        <button class="nav-item" data-tab="vcr" title="مسجلات الصوت VCR">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -125,109 +125,109 @@
               <line x1="8" y1="23" x2="16" y2="23"></line>
             </svg>
           </div>
-          <span class="nav-label">VCR Sentinels</span>
+          <span class="nav-label">مسجلات VCR</span>
           <span class="status-indicator"></span>
         </button>
 
-        <button class="nav-item" data-tab="security" title="Shield & Roles">
+        <button class="nav-item" data-tab="security" title="درع الأمان والرتب">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
           </div>
-          <span class="nav-label">Shield & Sync</span>
+          <span class="nav-label">الدرع والمزامنة</span>
         </button>
 
-        <button class="nav-item" data-tab="broadcast" title="Broadcast Composer">
+        <button class="nav-item" data-tab="broadcast" title="استوديو البث والإشعارات">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"></path>
             </svg>
           </div>
-          <span class="nav-label">Broadcast</span>
+          <span class="nav-label">استوديو البث</span>
         </button>
 
-        <button class="nav-item" data-tab="logs" title="Live Console">
+        <button class="nav-item" data-tab="logs" title="سجل الأحداث اللحظي">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="4 17 10 11 4 5"></polyline>
               <line x1="12" y1="19" x2="20" y2="19"></line>
             </svg>
           </div>
-          <span class="nav-label">Live Console</span>
+          <span class="nav-label">السجل اللحظي</span>
         </button>
       </nav>
 
       <div class="sidebar-bottom">
-        <button class="nav-item btn-lock-sidebar" id="btnLogout" title="Lock Session">
+        <button class="nav-item btn-lock-sidebar" id="btnLogout" title="قفل الجلسة">
           <div class="nav-icon">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
           </div>
-          <span class="nav-label">Lock Session</span>
+          <span class="nav-label">قفل الجلسة</span>
         </button>
       </div>
     </aside>
 
-    <!-- Main Content Shell -->
+    <!-- مساحة المحتوى الرئيسية -->
     <div class="content-shell">
       
-      <!-- Top Bar -->
+      <!-- الشريط العلوي -->
       <header class="top-bar">
         <div class="top-left">
-          <h1 class="page-title" id="pageTitle">System Overview</h1>
-          <span class="page-subtitle" id="pageSubtitle">Realtime Telemetry & KPIs</span>
+          <h1 class="page-title" id="pageTitle">نظرة عامة على النظام</h1>
+          <span class="page-subtitle" id="pageSubtitle">المؤشرات التشغيلية والقياسات الحية اللحظية</span>
         </div>
 
         <div class="top-right">
           <div class="live-pill" id="livePill">
             <span class="live-dot"></span>
-            <span id="livePillText">Online · Connecting…</span>
+            <span id="livePillText">متصل · جارٍ المزامنة…</span>
           </div>
         </div>
       </header>
 
-      <!-- Main Content Area -->
+      <!-- محتوى الصفحات والتبويبات -->
       <main class="page-content">
 
-        <!-- ── SECTION 1: OVERVIEW ── -->
+        <!-- ── التبويب 1: نظرة عامة ── -->
         <section class="tab-content active" id="tab-overview">
           <div class="kpi-grid">
             <div class="kpi-card">
-              <div class="kpi-label">Gateway Ping</div>
+              <div class="kpi-label">بينغ البوابة (Ping)</div>
               <div class="kpi-value"><span id="valPing">--</span><span class="kpi-unit">ms</span></div>
-              <div class="kpi-sub" id="trendPing">Stable Latency</div>
+              <div class="kpi-sub" id="trendPing">استجابة فائقة السرعة</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-label">System Uptime</div>
+              <div class="kpi-label">مدة التشغيل المستمر</div>
               <div class="kpi-value"><span id="valUptime">--</span></div>
-              <div class="kpi-sub text-white">99.9% Operational SLA</div>
+              <div class="kpi-sub text-white">99.9% استقرار تشغيلي</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-label">Heap Memory</div>
+              <div class="kpi-label">استهلاك الذاكرة (RAM)</div>
               <div class="kpi-value"><span id="valMemory">--</span><span class="kpi-unit">MB</span></div>
-              <div class="kpi-sub">Optimized Garbage Collection</div>
+              <div class="kpi-sub">تنظيف تلقائي فوري</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-label">Protected Members</div>
+              <div class="kpi-label">الأعضاء المحميون</div>
               <div class="kpi-value"><span id="valMembers">--</span></div>
-              <div class="kpi-sub text-white">Active Defense Guard</div>
+              <div class="kpi-sub text-white">درع الحماية الأوتوماتيكي</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-label">VCR Sentinels</div>
+              <div class="kpi-label">مسجلات الصوت VCR</div>
               <div class="kpi-value"><span id="valVcrOnline">5</span><span class="kpi-unit">/ 5</span></div>
-              <div class="kpi-sub text-white">Locked & Capturing</div>
+              <div class="kpi-sub text-white">مثبتة وتسجل مباشرة</div>
             </div>
           </div>
 
           <div class="grid-2col">
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">Operational SLA Availability</div>
-                <span class="badge-white">99.9% Target</span>
+                <div class="panel-title">مؤشر الجاهزية التشغيلية (SLA)</div>
+                <span class="badge-white">الهدف 99.9%</span>
               </div>
               <div class="gauge-box">
                 <svg class="gauge-svg" viewBox="0 0 160 95">
@@ -243,35 +243,35 @@
                 </svg>
                 <div class="gauge-center">
                   <div class="gauge-label" id="gaugeLabel">99.9%</div>
-                  <div class="gauge-sub">OPERATIONAL</div>
+                  <div class="gauge-sub">جاهزية تشغيلية</div>
                 </div>
               </div>
             </div>
 
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">Production Server Details</div>
-                <span class="badge-white" id="nodeStatusBadge">ONLINE</span>
+                <div class="panel-title">بيانات خادم الإنتاج الأساسي</div>
+                <span class="badge-white" id="nodeStatusBadge">متصل (ONLINE)</span>
               </div>
               <div class="spec-list">
                 <div class="spec-row">
-                  <span class="spec-name">Primary Host</span>
+                  <span class="spec-name">النطاق الأساسي</span>
                   <span class="spec-val mono text-white">gxbot.eshamikh.com</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Port</span>
+                  <span class="spec-name">المنفذ النشط (Port)</span>
                   <span class="spec-val mono">3000</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Security Architecture</span>
-                  <span class="spec-val mono">SHA-512 Encrypted Vault</span>
+                  <span class="spec-name">بنية التشفير</span>
+                  <span class="spec-val mono">خزانة SHA-512 المشفرة</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Bot Core Version</span>
+                  <span class="spec-name">إصدار محرك البوت</span>
                   <span class="spec-val text-white mono">GX Core v2.0 Flash</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Guild Target</span>
+                  <span class="spec-name">السيرفر المعتمد</span>
                   <span class="spec-val">𝑮𝑿 𝒆𝑺𝒑𝒐𝒓𝒕𝒔 (1537461174222725120)</span>
                 </div>
               </div>
@@ -279,320 +279,320 @@
           </div>
         </section>
 
-        <!-- ── SECTION 2: LIVE SUPPORT DESK (NEW) ── -->
+        <!-- ── التبويب 2: مركز الدعم الفني المباشر ── -->
         <section class="tab-content" id="tab-support">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Live Support Desk Command</h2>
-              <p class="section-desc">Real-time 2-way conversation console with Discord members. Reply as official GX Support Agent.</p>
+              <h2 class="section-heading">مركز الدعم الفني المباشر</h2>
+              <p class="section-desc">منصة المحادثة المباشرة ثنائية الاتجاه مع أعضاء ديسكورد والرد الرسمي باسم وكيل الدعم.</p>
             </div>
             <div style="display:flex; gap:10px;">
-              <button class="btn-action primary" onclick="loadSupportTickets()">🔄 Refresh Tickets</button>
+              <button class="btn-action primary" onclick="loadSupportTickets()">🔄 تحديث التذاكر</button>
             </div>
           </div>
 
           <div class="support-desk-layout">
-            <!-- Left: Ticket List -->
+            <!-- العمود الأيمن: قائمة التذاكر -->
             <div class="support-ticket-list-panel">
               <div class="support-list-header">
-                <input type="text" id="searchSupportTickets" class="input-search w-100" placeholder="Search by Ticket ID, User, or Tag…" />
+                <input type="text" id="searchSupportTickets" class="input-search w-100" placeholder="بحث برقم التذكرة، العضو، أو السبب…" />
               </div>
               <div class="support-tickets-scroll" id="supportTicketsList">
-                <div class="text-center text-muted py-4" style="font-size: 13px;">Loading support tickets…</div>
+                <div class="text-center text-muted py-4" style="font-size: 13px;">جارٍ تحميل تذاكر الدعم الفني…</div>
               </div>
             </div>
 
-            <!-- Center: Active Chat Stream -->
+            <!-- العمود الأوسط: شاشة المحادثة المباشرة -->
             <div class="support-chat-panel">
               <div class="support-chat-header" id="chatHeaderInfo">
                 <div style="display:flex; align-items:center; gap:12px;">
                   <img id="chatUserAvatar" src="" class="member-avatar-sm" alt="" style="display:none;" />
                   <div>
-                    <div style="font-weight: 800; font-size: 15px;" id="chatUserTitle">Select a Ticket</div>
-                    <div style="font-size: 11px; color: var(--text-muted);" id="chatTicketCode">No active session selected</div>
+                    <div style="font-weight: 800; font-size: 15px;" id="chatUserTitle">اختر تذكرة للبدء</div>
+                    <div style="font-size: 11px; color: var(--text-muted);" id="chatTicketCode">لم يتم تحديد جلسة محادثة</div>
                   </div>
                 </div>
                 <div id="chatHeaderActions"></div>
               </div>
 
-              <!-- Message Stream -->
+              <!-- مسار الرسائل -->
               <div class="support-messages-stream" id="supportMessagesStream">
                 <div class="support-empty-state">
                   <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-sub);">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                   </svg>
-                  <p style="margin-top: 12px; font-weight: 600; color: var(--text-muted);">Select a ticket from the left panel to begin live chat</p>
+                  <p style="margin-top: 12px; font-weight: 600; color: var(--text-muted);">اختر تذكرة من القائمة الجانبية لبدء المحادثة المباشرة مع العضو</p>
                 </div>
               </div>
 
-              <!-- Reply Box -->
+              <!-- صندوق كتابة الرد -->
               <div class="support-reply-bar" id="supportReplyBar" style="display: none;">
                 <div class="support-reply-input-wrap">
-                  <textarea id="agentReplyInput" rows="2" placeholder="Type official response to user in Discord… (Press Enter to send)" onkeydown="handleAgentKey(event)"></textarea>
+                  <textarea id="agentReplyInput" rows="2" placeholder="اكتب ردك الرسمي للعضو في ديسكورد… (اضغط Enter للإرسال)" onkeydown="handleAgentKey(event)"></textarea>
                   <div class="support-reply-extras">
-                    <input type="text" id="agentImageInput" placeholder="Optional Image URL (https://…)" class="input-search" style="flex:1; font-size: 12px;" />
+                    <input type="text" id="agentImageInput" placeholder="رابط صورة اختياري مع الرد (https://…)" class="input-search" style="flex:1; font-size: 12px;" />
                     <button class="btn-action primary" onclick="sendSupportAgentReply()">
-                      <span>🚀 Send as GX Support</span>
+                      <span>🚀 إرسال كرد رسمي من الدعم</span>
                     </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Right: Member Profile & Context Sidebar -->
+            <!-- العمود الأيسر: بطاقة بيانات العضو -->
             <div class="support-sidebar-panel" id="supportDetailsSidebar">
               <div class="panel-header">
-                <div class="panel-title">Ticket Information</div>
+                <div class="panel-title">تفاصيل التذكرة والعضو</div>
               </div>
               <div id="supportDetailsContent" class="spec-list">
-                <p class="text-muted" style="font-size: 12px;">Select a ticket to view member intelligence and logs.</p>
+                <p class="text-muted" style="font-size: 12px;">اختر تذكرة لعرض معلومات العضو وسجلاته وتفاصيل طلبه.</p>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- ── SECTION 3: WEB MODERATION CENTER ── -->
+        <!-- ── التبويب 3: مركز الإشراف الشامل ── -->
         <section class="tab-content" id="tab-moderation">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Web-Based Moderation Suite</h2>
-              <p class="section-desc">Execute instant administrative enforcement without cluttering Discord with mod commands.</p>
+              <h2 class="section-heading">مركز الإشراف والأدوات الإدارية</h2>
+              <p class="section-desc">تنفيذ جميع القرارات الإدارية وعمليات العقاب والعزل مباشرة من الموقع بدون أوامر داخل ديسكورد.</p>
             </div>
           </div>
 
           <div class="mod-grid">
-            <!-- Ban Member Card -->
+            <!-- بطاقة حظر عضو -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🔨 Ban Member</div>
+                <div class="panel-title">🔨 حظر عضو (Ban)</div>
               </div>
               <form onsubmit="return false;" id="formModBan">
                 <div class="input-group search-autocomplete-wrap">
-                  <label>Search Member / Target ID</label>
-                  <input type="text" id="banUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <label>ابحث عن العضو / المعرف (ID)</label>
+                  <input type="text" id="banUserId" class="member-search-input" placeholder="اكتب اسم العضو أو اليوزر أو الآيدي…" autocomplete="off" required />
                   <div class="member-autocomplete-dropdown" id="dropdown_banUserId"></div>
                 </div>
                 <div class="input-group">
-                  <label>Reason</label>
-                  <input type="text" id="banReason" placeholder="Violation of server rules" />
+                  <label>سبب الحظر</label>
+                  <input type="text" id="banReason" placeholder="مخالفة قوانين السيرفر ونظام المجتمع" />
                 </div>
                 <div class="input-group">
-                  <label>Delete Message History</label>
+                  <label>حذف تاريخ الرسائل السابقة</label>
                   <select id="banDeleteDays">
-                    <option value="0">Don't delete messages</option>
-                    <option value="1">Previous 24 Hours</option>
-                    <option value="7">Previous 7 Days</option>
+                    <option value="0">عدم حذف الرسائل</option>
+                    <option value="1">آخر 24 ساعة</option>
+                    <option value="7">آخر 7 أيام</option>
                   </select>
                 </div>
-                <button class="btn-action danger w-100" onclick="submitModBan()">Execute Permanent Ban</button>
+                <button class="btn-action danger w-100" onclick="submitModBan()">تنفيذ الحظر النهائي</button>
               </form>
             </div>
 
-            <!-- Unban Member Card -->
+            <!-- بطاقة فك الحظر -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🔓 Unban Member</div>
+                <div class="panel-title">🔓 فك الحظر (Unban)</div>
               </div>
               <form onsubmit="return false;" id="formModUnban">
                 <div class="input-group">
-                  <label>Banned User ID</label>
-                  <input type="text" id="unbanUserId" placeholder="e.g. 1152686277255237663" required />
+                  <label>معرف العضو المحظور (User ID)</label>
+                  <input type="text" id="unbanUserId" placeholder="مثال: 1152686277255237663" required />
                 </div>
                 <div class="input-group">
-                  <label>Reason</label>
-                  <input type="text" id="unbanReason" placeholder="Pardon granted by High Command" />
+                  <label>سبب العفو وفك الحظر</label>
+                  <input type="text" id="unbanReason" placeholder="قبول الطعن بواسطة الإدارة العليا" />
                 </div>
-                <button class="btn-action primary w-100" onclick="submitModUnban()">Pardon & Unban</button>
+                <button class="btn-action primary w-100" onclick="submitModUnban()">العفو وفك الحظر</button>
               </form>
             </div>
 
-            <!-- Kick Member Card -->
+            <!-- بطاقة طرد عضو -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">👢 Kick Member</div>
+                <div class="panel-title">👢 طرد عضو (Kick)</div>
               </div>
               <form onsubmit="return false;" id="formModKick">
                 <div class="input-group search-autocomplete-wrap">
-                  <label>Search Member / Target ID</label>
-                  <input type="text" id="kickUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <label>ابحث عن العضو / المعرف (ID)</label>
+                  <input type="text" id="kickUserId" class="member-search-input" placeholder="اكتب اسم العضو أو اليوزر أو الآيدي…" autocomplete="off" required />
                   <div class="member-autocomplete-dropdown" id="dropdown_kickUserId"></div>
                 </div>
                 <div class="input-group">
-                  <label>Reason</label>
-                  <input type="text" id="kickReason" placeholder="Disruptive behavior" />
+                  <label>سبب الطرد</label>
+                  <input type="text" id="kickReason" placeholder="سلوك غير ملائم أو إزعاج" />
                 </div>
-                <button class="btn-action danger w-100" onclick="submitModKick()">Execute Kick</button>
+                <button class="btn-action danger w-100" onclick="submitModKick()">تنفيذ الطرد</button>
               </form>
             </div>
 
-            <!-- Timeout / Mute Card -->
+            <!-- بطاقة الكتم والتايم أوت -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">⏳ Timeout / Mute Member</div>
+                <div class="panel-title">⏳ الكتم والتايم أوت (Timeout)</div>
               </div>
               <form onsubmit="return false;" id="formModTimeout">
                 <div class="input-group search-autocomplete-wrap">
-                  <label>Search Member / Target ID</label>
-                  <input type="text" id="timeoutUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <label>ابحث عن العضو / المعرف (ID)</label>
+                  <input type="text" id="timeoutUserId" class="member-search-input" placeholder="اكتب اسم العضو أو اليوزر أو الآيدي…" autocomplete="off" required />
                   <div class="member-autocomplete-dropdown" id="dropdown_timeoutUserId"></div>
                 </div>
                 <div class="input-group">
-                  <label>Duration</label>
+                  <label>مدة الكتم</label>
                   <select id="timeoutDuration">
-                    <option value="5">5 Minutes</option>
-                    <option value="10" selected>10 Minutes</option>
-                    <option value="60">1 Hour</option>
-                    <option value="1440">24 Hours</option>
-                    <option value="10080">1 Week</option>
+                    <option value="5">5 دقائق</option>
+                    <option value="10" selected>10 دقائق</option>
+                    <option value="60">ساعة واحدة</option>
+                    <option value="1440">24 ساعة (يوم كامل)</option>
+                    <option value="10080">أسبوع كامل</option>
                   </select>
                 </div>
                 <div class="input-group">
-                  <label>Reason</label>
-                  <input type="text" id="timeoutReason" placeholder="Spamming or loud audio" />
+                  <label>السبب</label>
+                  <input type="text" id="timeoutReason" placeholder="سبام أو صراخ وإزعاج بالفويس" />
                 </div>
                 <div class="btn-group-row">
-                  <button class="btn-action danger" style="flex:1;" onclick="submitModTimeout()">Apply Timeout</button>
-                  <button class="btn-action" style="flex:1;" onclick="submitModUntimeout()">Remove Timeout</button>
+                  <button class="btn-action danger" style="flex:1;" onclick="submitModTimeout()">تطبيق الكتم</button>
+                  <button class="btn-action" style="flex:1;" onclick="submitModUntimeout()">إلغاء الكتم</button>
                 </div>
               </form>
             </div>
 
-            <!-- Purge Messages Card -->
+            <!-- بطاقة مسح الرسائل -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🧹 Purge / Clear Messages</div>
+                <div class="panel-title">🧹 مسح الرسائل (Purge)</div>
               </div>
               <form onsubmit="return false;" id="formModPurge">
                 <div class="input-group">
-                  <label>Target Channel</label>
+                  <label>الروم المستهدف</label>
                   <select id="purgeChannelSelect" required>
-                    <option value="">Loading channels…</option>
+                    <option value="">جارٍ جلب الرومات…</option>
                   </select>
                 </div>
                 <div class="input-group">
-                  <label>Number of Messages (1 - 100)</label>
+                  <label>عدد الرسائل (من 1 إلى 100)</label>
                   <input type="number" id="purgeCount" min="1" max="100" value="10" required />
                 </div>
                 <div class="input-group search-autocomplete-wrap">
-                  <label>Filter Specific User (Optional)</label>
-                  <input type="text" id="purgeFilterUser" class="member-search-input" placeholder="Leave empty for all users" autocomplete="off" />
+                  <label>تصفية رسائل عضو محدد (اختياري)</label>
+                  <input type="text" id="purgeFilterUser" class="member-search-input" placeholder="اتركه فارغاً لمسح رسائل الجميع" autocomplete="off" />
                   <div class="member-autocomplete-dropdown" id="dropdown_purgeFilterUser"></div>
                 </div>
-                <button class="btn-action danger w-100" onclick="submitModPurge()">Purge Messages</button>
+                <button class="btn-action danger w-100" onclick="submitModPurge()">مسح الرسائل فوراً</button>
               </form>
             </div>
 
-            <!-- Lock / Unlock Channel Card -->
+            <!-- بطاقة قفل وفتح الرومات -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🔒 Channel Lock Controller</div>
+                <div class="panel-title">🔒 التحكم بقفل الرومات</div>
               </div>
               <form onsubmit="return false;">
                 <div class="input-group">
-                  <label>Target Channel</label>
+                  <label>الروم المستهدف</label>
                   <select id="lockChannelSelect" required>
-                    <option value="">Loading channels…</option>
+                    <option value="">جارٍ جلب الرومات…</option>
                   </select>
                 </div>
                 <div class="btn-group-row">
-                  <button class="btn-action danger" style="flex:1;" onclick="submitModChannelLock(true)">🔒 Lock Channel</button>
-                  <button class="btn-action primary" style="flex:1;" onclick="submitModChannelLock(false)">🔓 Unlock Channel</button>
+                  <button class="btn-action danger" style="flex:1;" onclick="submitModChannelLock(true)">🔒 قفل الروم</button>
+                  <button class="btn-action primary" style="flex:1;" onclick="submitModChannelLock(false)">🔓 فتح الروم</button>
                 </div>
               </form>
             </div>
 
-            <!-- Slowmode Card -->
+            <!-- بطاقة السلو مود -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🐢 Slowmode Controller</div>
+                <div class="panel-title">🐢 التحكم ببطء الدردشة (Slowmode)</div>
               </div>
               <form onsubmit="return false;">
                 <div class="input-group">
-                  <label>Target Channel</label>
+                  <label>الروم المستهدف</label>
                   <select id="slowmodeChannelSelect" required>
-                    <option value="">Loading channels…</option>
+                    <option value="">جارٍ جلب الرومات…</option>
                   </select>
                 </div>
                 <div class="input-group">
-                  <label>Rate Limit Duration</label>
+                  <label>المدة الزمنية بين الرسائل</label>
                   <select id="slowmodeSeconds">
-                    <option value="0">Disabled (0s)</option>
-                    <option value="5">5 Seconds</option>
-                    <option value="15">15 Seconds</option>
-                    <option value="60">1 Minute</option>
-                    <option value="300">5 Minutes</option>
+                    <option value="0">معطل (0 ثانية)</option>
+                    <option value="5">5 ثوانٍ</option>
+                    <option value="15">15 ثانية</option>
+                    <option value="60">دقيقة واحدة</option>
+                    <option value="300">5 دقائق</option>
                   </select>
                 </div>
-                <button class="btn-action primary w-100" onclick="submitModSlowmode()">Apply Slowmode</button>
+                <button class="btn-action primary w-100" onclick="submitModSlowmode()">تطبيق السلو مود</button>
               </form>
             </div>
 
-            <!-- Role Assignment Card -->
+            <!-- بطاقة إدارة الرتب -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">👑 Role Management</div>
+                <div class="panel-title">👑 إدارة ومنح الرتب</div>
               </div>
               <form onsubmit="return false;">
                 <div class="input-group search-autocomplete-wrap">
-                  <label>Search Member / Target ID</label>
-                  <input type="text" id="roleUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <label>ابحث عن العضو / المعرف (ID)</label>
+                  <input type="text" id="roleUserId" class="member-search-input" placeholder="اكتب اسم العضو أو اليوزر أو الآيدي…" autocomplete="off" required />
                   <div class="member-autocomplete-dropdown" id="dropdown_roleUserId"></div>
                 </div>
                 <div class="input-group">
-                  <label>Role</label>
+                  <label>الرتبة</label>
                   <select id="roleSelect" required>
-                    <option value="">Loading roles…</option>
+                    <option value="">جارٍ جلب الرتب…</option>
                   </select>
                 </div>
                 <div class="btn-group-row">
-                  <button class="btn-action primary" style="flex:1;" onclick="submitModRole('add')">➕ Grant Role</button>
-                  <button class="btn-action danger" style="flex:1;" onclick="submitModRole('remove')">➖ Revoke Role</button>
+                  <button class="btn-action primary" style="flex:1;" onclick="submitModRole('add')">➕ منح الرتبة</button>
+                  <button class="btn-action danger" style="flex:1;" onclick="submitModRole('remove')">➖ سحب الرتبة</button>
                 </div>
               </form>
             </div>
 
-            <!-- Voice Action Card -->
+            <!-- بطاقة التحكم الصوتي -->
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🎙️ Voice Moderation</div>
+                <div class="panel-title">🎙️ الرقابة والتحكم الصوتي</div>
               </div>
               <form onsubmit="return false;">
                 <div class="input-group search-autocomplete-wrap">
-                  <label>Search Member in Voice</label>
-                  <input type="text" id="voiceUserId" class="member-search-input" placeholder="Type username, tag, or ID…" autocomplete="off" required />
+                  <label>ابحث عن العضو المتصل بالفويس</label>
+                  <input type="text" id="voiceUserId" class="member-search-input" placeholder="اكتب اسم العضو أو اليوزر أو الآيدي…" autocomplete="off" required />
                   <div class="member-autocomplete-dropdown" id="dropdown_voiceUserId"></div>
                 </div>
                 <div class="input-group">
-                  <label>Voice Action</label>
+                  <label>نوع الإجراء الصوتي</label>
                   <select id="voiceActionSelect">
-                    <option value="mute">Server Mute</option>
-                    <option value="unmute">Server Unmute</option>
-                    <option value="deafen">Server Deafen</option>
-                    <option value="undeafen">Server Undeafen</option>
-                    <option value="disconnect">Disconnect from Voice</option>
+                    <option value="mute">كتم صوتي إجباري (Server Mute)</option>
+                    <option value="unmute">إلغاء الكتم الصوتي</option>
+                    <option value="deafen">تصميت إجباري (Server Deafen)</option>
+                    <option value="undeafen">إلغاء التصميت</option>
+                    <option value="disconnect">فصل من الروم الصوتي</option>
                   </select>
                 </div>
-                <button class="btn-action danger w-100" onclick="submitModVoiceAction()">Execute Voice Action</button>
+                <button class="btn-action danger w-100" onclick="submitModVoiceAction()">تنفيذ الإجراء الصوتي</button>
               </form>
             </div>
 
           </div>
         </section>
 
-        <!-- ── SECTION 4: APPEALS CENTER ── -->
+        <!-- ── التبويب 4: مركز الطعون ── -->
         <section class="tab-content" id="tab-appeals">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Security Appeals Command</h2>
-              <p class="section-desc">Review submitted member appeals. Decisions immediately unban users and deliver DM notifications.</p>
+              <h2 class="section-heading">مركز مراجعة الطعون والتماسات الحظر</h2>
+              <p class="section-desc">مراجعة طعون الأعضاء المحظورين أو المقيدين، مع إمكانية القبول وإلغاء الحظر وإرسال إشعار فوري في الخاص.</p>
             </div>
             <div class="filter-group">
-              <input type="text" class="input-search" id="searchAppeals" placeholder="Search by User ID or Tag…" />
+              <input type="text" class="input-search" id="searchAppeals" placeholder="بحث بالاسم أو المعرف (User ID)…" />
               <select class="select-filter" id="filterAppealStatus">
-                <option value="all">All Appeals</option>
-                <option value="pending" selected>Pending Review</option>
-                <option value="approved">Approved & Unbanned</option>
-                <option value="rejected">Rejected</option>
+                <option value="all">جميع الطعون</option>
+                <option value="pending" selected>قيد المراجعة والانتظار</option>
+                <option value="approved">تم قبولها وفك الحظر</option>
+                <option value="rejected">مرفوضة</option>
               </select>
             </div>
           </div>
@@ -601,196 +601,196 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Applicant</th>
-                  <th>User ID</th>
-                  <th>Submitted</th>
-                  <th>Statement Summary</th>
-                  <th>Status</th>
-                  <th style="text-align: right;">Actions</th>
+                  <th>صاحب الطلب</th>
+                  <th>المعرف (ID)</th>
+                  <th>تاريخ التقديم</th>
+                  <th>ملخص الإفادة والسبب</th>
+                  <th>الحالة</th>
+                  <th style="text-align: left;">الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="appealsTableBody">
                 <tr>
-                  <td colspan="6" class="text-center text-muted py-4">Loading appeals from encrypted storage…</td>
+                  <td colspan="6" class="text-center text-muted py-4">جارٍ تحميل الطعون من الخزانة المشفرة…</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
 
-        <!-- ── SECTION 5: PANELS MANAGER ── -->
+        <!-- ── التبويب 5: مدير البانلات ── -->
         <section class="tab-content" id="tab-panels">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Interactive Panels & Channels</h2>
-              <p class="section-desc">Deploy, re-send, or delete live panels from your server channels with instant Discord sync.</p>
+              <h2 class="section-heading">البانلات والرسائل التفاعلية</h2>
+              <p class="section-desc">نشر، إعادة إرسال، أو حذف البانلات التفاعلية في رومات الديسكورد بضغطة زر واحدة.</p>
             </div>
           </div>
 
           <div class="grid-3col">
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🎫 Ticket Support Panel</div>
-                <span class="status-chip" id="chipTicketStatus">Active</span>
+                <div class="panel-title">🎫 بانل تذاكر الدعم الفني</div>
+                <span class="status-chip" id="chipTicketStatus">نشط</span>
               </div>
-              <p class="panel-info">Permanent support ticket panel with private thread generation in `#🎫・تذاكر-الدعم`.</p>
+              <p class="panel-info">بانل التذاكر الدائم مع نظام القنوات الفرعية المعزولة في `#🎫・تذاكر-الدعم`.</p>
               <div class="panel-actions">
-                <button class="btn-action primary" onclick="deployPanel('ticket')">🚀 Deploy / Refresh</button>
-                <button class="btn-action danger" onclick="removePanel('ticket')">🗑️ Remove Panel</button>
+                <button class="btn-action primary" onclick="deployPanel('ticket')">🚀 نشر / تحديث البانل</button>
+                <button class="btn-action danger" onclick="removePanel('ticket')">🗑️ حذف البانل</button>
               </div>
             </div>
 
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🏆 Event & Tournament Panel</div>
-                <span class="status-chip" id="chipEventStatus">Active</span>
+                <div class="panel-title">🏆 بانل البطولات والفعاليات</div>
+                <span class="status-chip" id="chipEventStatus">نشط</span>
               </div>
-              <p class="panel-info">Live event match and participant registration panel in `#events-announcement`.</p>
+              <p class="panel-info">بانل التسجيل التفاعلي وإحصائيات المشاركين في `#events-announcement`.</p>
               <div class="panel-actions">
-                <button class="btn-action primary" onclick="deployPanel('event')">🚀 Deploy / Refresh</button>
-                <button class="btn-action danger" onclick="removePanel('event')">🗑️ Remove Panel</button>
+                <button class="btn-action primary" onclick="deployPanel('event')">🚀 نشر / تحديث البانل</button>
+                <button class="btn-action danger" onclick="removePanel('event')">🗑️ حذف البانل</button>
               </div>
             </div>
 
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">📊 Live System Status Panel</div>
-                <span class="status-chip" id="chipSystemStatus">Active</span>
+                <div class="panel-title">📊 بانل حالة النظام الحية</div>
+                <span class="status-chip" id="chipSystemStatus">نشط</span>
               </div>
-              <p class="panel-info">Auto-updating telemetry embed in `#system-status` (10s interval).</p>
+              <p class="panel-info">رسالة الحالة والمؤشرات التلقائية المحدثة كل 10 ثوانٍ في `#system-status`.</p>
               <div class="panel-actions">
-                <button class="btn-action primary" onclick="deployPanel('status')">🔄 Force Refresh Embed</button>
+                <button class="btn-action primary" onclick="deployPanel('status')">🔄 تحديث الإمبد فوراً</button>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- ── SECTION 6: VCR SENTINELS ── -->
+        <!-- ── التبويب 6: مسجلات الصوت VCR ── -->
         <section class="tab-content" id="tab-vcr">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">VCR Audio Sentinel Fleet</h2>
-              <p class="section-desc">Autonomous multi-track voice sentinels permanently locked to designated rooms.</p>
+              <h2 class="section-heading">أسطول مسجلات الصوت (GX VCR Fleet)</h2>
+              <p class="section-desc">5 مسجلات صوتية ذاتية ومثبتة بشكل دائم ومقفول في روماتها الصوتية المحددة.</p>
             </div>
-            <button class="btn-action primary" onclick="forceReStationVCR()">🎙️ Force Re-Station All</button>
+            <button class="btn-action primary" onclick="forceReStationVCR()">🎙️ إعادة تثبيت جميع المسجلات</button>
           </div>
 
           <div class="grid-5col" id="vcrFleetGrid">
-            <!-- Dynamic VCR Cards -->
+            <!-- بطاقات المسجلات الديناميكية -->
           </div>
         </section>
 
-        <!-- ── SECTION 7: SECURITY & SHIELD ── -->
+        <!-- ── التبويب 7: درع الأمان والمزامنة ── -->
         <section class="tab-content" id="tab-security">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Security Shield & Role Management</h2>
-              <p class="section-desc">Trigger instant server-wide member role audits and manage acoustic defense policies.</p>
+              <h2 class="section-heading">درع الأمان ومزامنة الرتب الشاملة</h2>
+              <p class="section-desc">إجراء فحص ومزامنة شاملة لرتب السيرفر بالكامل وإدارة خوارزميات الحماية الذكية.</p>
             </div>
-            <button class="btn-action primary" id="btnSyncRoles" onclick="triggerMassSync()">⚡ Mass Role & Member Sync</button>
+            <button class="btn-action primary" id="btnSyncRoles" onclick="triggerMassSync()">⚡ مزامنة الرتب والأعضاء الشاملة</button>
           </div>
 
           <div class="grid-2col">
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🛡️ Spy Account Auto-Defense</div>
+                <div class="panel-title">🛡️ نظام مكافحة حسابات التجسس</div>
               </div>
               <div class="spec-list">
                 <div class="spec-row">
-                  <span class="spec-name">Account Cutoff Age</span>
-                  <span class="spec-val">16 August 2026</span>
+                  <span class="spec-name">تاريخ حظر الحسابات الجديدة</span>
+                  <span class="spec-val">16 أغسطس 2026</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Default Role on Join</span>
-                  <span class="spec-val mono">UNTRUSTED (Protected)</span>
+                  <span class="spec-name">الرتبة الافتراضية عند الانضمام</span>
+                  <span class="spec-val mono">UNTRUSTED (مقيد الصلاحيات)</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Executive Notification</span>
-                  <span class="spec-val text-white">OWNER / CEO / COO DMs (Alert-only)</span>
+                  <span class="spec-name">إشعار القيادة العليا بالخاص</span>
+                  <span class="spec-val text-white">خاص OWNER / CEO / COO</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Appeals Destination</span>
-                  <span class="spec-val text-white">GX Control Panel</span>
+                  <span class="spec-name">وجهة تقديم الطعون</span>
+                  <span class="spec-val text-white">لوحة تحكم GX Command</span>
                 </div>
               </div>
             </div>
 
             <div class="panel-card">
               <div class="panel-header">
-                <div class="panel-title">🔊 Acoustic Scream Defense</div>
+                <div class="panel-title">🔊 درع مكافحة الصراخ والأصوات المزعجة</div>
               </div>
               <div class="spec-list">
                 <div class="spec-row">
-                  <span class="spec-name">Instant Ear-Rape Threshold</span>
-                  <span class="spec-val mono">RMS > 16,000 (Instant Server Mute)</span>
+                  <span class="spec-name">حد الكتم الفوري للإزعاج العالي</span>
+                  <span class="spec-val mono">RMS > 16,000 (كتم سيرفر فوري)</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Sustained Loud Noise</span>
-                  <span class="spec-val mono">RMS > 11,000 (for 1.5s)</span>
+                  <span class="spec-name">حد الصوت العالي المستمر</span>
+                  <span class="spec-val mono">RMS > 11,000 (لمدة 1.5 ثانية)</span>
                 </div>
                 <div class="spec-row">
-                  <span class="spec-name">Defense Action</span>
-                  <span class="spec-val">Automated 30s Voice Mute + Log</span>
+                  <span class="spec-name">إجراء الدفاع التلقائي</span>
+                  <span class="spec-val">كتم 30 ثانية + توثيق بالسجلات السرية</span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- ── SECTION 8: BROADCAST COMPOSER ── -->
+        <!-- ── التبويب 8: استوديو البث ── -->
         <section class="tab-content" id="tab-broadcast">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Official Broadcast Composer</h2>
-              <p class="section-desc">Broadcast styled high-command announcements directly into any server channel.</p>
+              <h2 class="section-heading">استوديو البث والإعلانات الرسمية</h2>
+              <p class="section-desc">إرسال إعلانات وتنبيهات رسمية مصممة بإمبد احترافي من القيادة العليا مباشرة إلى أي روم.</p>
             </div>
           </div>
 
           <div class="panel-card" style="max-width: 750px;">
             <form id="broadcastForm" onsubmit="return false;">
               <div class="input-group">
-                <label for="broadcastChannel">Target Channel</label>
+                <label for="broadcastChannel">الروم المستهدف</label>
                 <select id="broadcastChannelSelect" required>
-                  <option value="">Loading channels…</option>
+                  <option value="">جارٍ جلب الرومات…</option>
                 </select>
               </div>
               <div class="input-group">
-                <label for="broadcastTitle">Announcement Title</label>
-                <input type="text" id="broadcastTitle" placeholder="Official Notice from High Command" required />
+                <label for="broadcastTitle">عنوان الإعلان الرسمي</label>
+                <input type="text" id="broadcastTitle" placeholder="إشعار رسمي من القيادة العليا لـ GX eSports" required />
               </div>
               <div class="input-group">
-                <label for="broadcastMessage">Message Content</label>
-                <textarea id="broadcastMessage" rows="5" placeholder="Enter announcement body text…" required></textarea>
+                <label for="broadcastMessage">نص ومحتوى الإعلان</label>
+                <textarea id="broadcastMessage" rows="5" placeholder="اكتب تفاصيل الإعلان هنا…" required></textarea>
               </div>
               <div class="input-group">
-                <label for="broadcastColor">Embed Accent Color</label>
+                <label for="broadcastColor">لون الإمبد الجانبي</label>
                 <select id="broadcastColor">
-                  <option value="16777215" selected>⚪ Pure White (0xFFFFFF)</option>
-                  <option value="5763719">🟢 Neon Green (0x57F287)</option>
-                  <option value="15548997">🔴 Security Red (0xED4245)</option>
-                  <option value="16705372">🟡 Warning Amber (0xFEE75C)</option>
+                  <option value="16777215" selected>⚪ الأبيض النقي (0xFFFFFF)</option>
+                  <option value="5763719">🟢 الأخضر النيون (0x57F287)</option>
+                  <option value="15548997">🔴 أحمر الأمان (0xED4245)</option>
+                  <option value="16705372">🟡 الأصفر التحذيري (0xFEE75C)</option>
                 </select>
               </div>
               <button type="submit" class="btn-action primary" onclick="sendBroadcast()" style="margin-top: 10px;">
-                📢 Send Official Broadcast
+                📢 إرسال ونشر الإعلان الرسمي
               </button>
             </form>
           </div>
         </section>
 
-        <!-- ── SECTION 9: LIVE CONSOLE LOGS ── -->
+        <!-- ── التبويب 9: السجل اللحظي ── -->
         <section class="tab-content" id="tab-logs">
           <div class="section-bar">
             <div>
-              <h2 class="section-heading">Live Telemetry & Activity Stream</h2>
-              <p class="section-desc">Real-time audit log of bot events, security actions, and control panel executions.</p>
+              <h2 class="section-heading">سجل الأحداث والعمليات اللحظي</h2>
+              <p class="section-desc">مراقبة حية فورية لجميع تحركات البوت، إجراءات الأمان، وتفاعلات لوحة التحكم.</p>
             </div>
-            <button class="btn-action" onclick="clearEventLog()">Clear View</button>
+            <button class="btn-action" onclick="clearEventLog()">مسح الشاشة</button>
           </div>
 
           <div class="log-container">
             <ul class="event-stream-list" id="eventStreamList">
-              <li class="log-entry">Waiting for realtime SSE stream…</li>
+              <li class="log-entry">في انتظار بث الأحداث اللحظية عبر SSE…</li>
             </ul>
           </div>
         </section>
@@ -799,16 +799,16 @@
     </div>
   </div>
 
-  <!-- Statement Viewer Modal -->
+  <!-- نافذة مراجعة بيان الطعن -->
   <div class="modal-backdrop" id="statementModal">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 class="modal-title" id="modalUserTag">Appeal Statement</h3>
+        <h3 class="modal-title" id="modalUserTag">بيان الطعن والالتماس</h3>
         <button class="modal-close" onclick="closeStatementModal()">✕</button>
       </div>
       <div class="modal-body">
         <div class="meta-row">
-          <span class="meta-label">User ID:</span>
+          <span class="meta-label">معرف العضو (ID):</span>
           <span class="meta-val mono" id="modalUserId">--</span>
         </div>
         <div class="statement-box" id="modalStatementText">--</div>
@@ -817,7 +817,7 @@
     </div>
   </div>
 
-  <!-- Toast Notification Container -->
+  <!-- حاوية التنبيهات المنبثقة (Toasts) -->
   <div class="toast-container" id="toastContainer"></div>
 
   <script type="module" src="app.js"></script>
