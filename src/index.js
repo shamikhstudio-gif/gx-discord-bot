@@ -2424,6 +2424,9 @@ async function openTicketThreadWithData(guild, originChannel, user, realName, re
   await sendTicketNotificationToExecutives(guild, user, ticketCode, realName, reason, thread);
 
   logActivity('ticket', 'Ticket Opened', `${user.tag} opened ${ticketCode} (${reason.slice(0, 30)})`, user);
+  if (typeof pushNotification === 'function') {
+    pushNotification('ticket', `تذكرة جديدة: ${ticketCode}`, `${user.tag} فتح تذكرة (${reason.slice(0, 35)})`, 'support');
+  }
 
   const logEmbed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -4009,6 +4012,9 @@ client.on(Events.MessageCreate, async (message) => {
       saveTickets(ticketsData);
 
       logActivity('ticket', 'Ticket Message', `${message.author.tag}: ${(message.content || 'Image').slice(0, 50)}`, message.author);
+      if (typeof pushNotification === 'function') {
+        pushNotification('ticket', `رسالة في ${ticket.ticketId}`, `${message.author.tag}: ${(message.content || 'مرفق صورة').slice(0, 35)}`, 'support');
+      }
       return; // Allow ticket communication freely
     }
   }
@@ -7534,6 +7540,21 @@ function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '127.0.0.1';
 }
 
+const NOTIFICATIONS_RING = [];
+function pushNotification(type, title, desc, linkTab = null) {
+  const notif = {
+    id: Date.now() + Math.random().toString(36).substr(2, 4),
+    type,
+    title,
+    desc,
+    linkTab,
+    timestamp: Date.now(),
+    read: false
+  };
+  NOTIFICATIONS_RING.unshift(notif);
+  if (NOTIFICATIONS_RING.length > 50) NOTIFICATIONS_RING.pop();
+}
+
 function authenticateAdmin(req) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -7577,6 +7598,13 @@ const healthServer = http.createServer(async (req, res) => {
       assignedChannelId: w.assignedChannelId
     }));
 
+    const rawTickets = loadTickets();
+    const openTicketsCount = Object.values(rawTickets.activeTickets || {}).filter(t => t.stage !== 'CLOSED').length;
+    const rawVerifications = VERIFICATION_MEMORY_CACHE || loadVerificationRequests();
+    const pendingVerificationsCount = Object.values(rawVerifications || {}).filter(v => v.status === 'pending' && !v.hidden).length;
+    const rawAppeals = loadAppealsData();
+    const pendingAppealsCount = Object.values(rawAppeals || {}).filter(a => a.status === 'pending').length;
+
     return sendJsonResponse(res, 200, {
       status: 'operational',
       uptimeSeconds: Math.floor(process.uptime()),
@@ -7595,6 +7623,12 @@ const healthServer = http.createServer(async (req, res) => {
       } : null,
       vcrFleet: vcrFleetData,
       memory: process.memoryUsage(),
+      counts: {
+        openTickets: openTicketsCount,
+        pendingVerifications: pendingVerificationsCount,
+        pendingAppeals: pendingAppealsCount
+      },
+      recentNotifications: NOTIFICATIONS_RING.slice(0, 25),
       acousticShield: {
         sustainedThreshold: 11000,
         instantThreshold: 16000,
@@ -7619,6 +7653,13 @@ const healthServer = http.createServer(async (req, res) => {
 
     function buildPayload() {
       const g = client.guilds.cache.get(ALLOWED_GUILD_ID);
+      const rawTickets = loadTickets();
+      const openTicketsCount = Object.values(rawTickets.activeTickets || {}).filter(t => t.stage !== 'CLOSED').length;
+      const rawVerifications = VERIFICATION_MEMORY_CACHE || loadVerificationRequests();
+      const pendingVerificationsCount = Object.values(rawVerifications || {}).filter(v => v.status === 'pending' && !v.hidden).length;
+      const rawAppeals = loadAppealsData();
+      const pendingAppealsCount = Object.values(rawAppeals || {}).filter(a => a.status === 'pending').length;
+
       return {
         status: 'operational',
         uptimeSeconds: Math.floor(process.uptime()),
@@ -7639,6 +7680,12 @@ const healthServer = http.createServer(async (req, res) => {
           assignedChannelId: w.assignedChannelId
         })),
         memory: process.memoryUsage(),
+        counts: {
+          openTickets: openTicketsCount,
+          pendingVerifications: pendingVerificationsCount,
+          pendingAppeals: pendingAppealsCount
+        },
+        recentNotifications: NOTIFICATIONS_RING.slice(0, 25),
         recentActivity: ACTIVITY_RING.slice(0, 50),
         activityStats: ACTIVITY_STATS
       };
