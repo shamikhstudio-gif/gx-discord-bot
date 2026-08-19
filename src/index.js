@@ -1323,8 +1323,10 @@ async function sendVerificationRequestToExecutives(guild, member) {
       `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n` +
       `🔄 **مرات الانضمام:** \`${requestsData[targetId].joinCount}\` مرة\n` +
       `🔒 **الرتبة الحالية:** \`UNTRUSTED\` (محظور من الكتابة ومقيد الصلاحيات لحين التوثيق)\n\n` +
+      `🌐 **المراجعة والموافقة المباشرة عبر الموقع:**\n` +
+      `### 🔗 [اضغط هنا للدخول إلى مركز التوثيق بالموقع (gxbot.eshamikh.com/#verifications)](https://gxbot.eshamikh.com/#verifications)\n\n` +
       `⚡ **صلاحية الموافقة:** مخصصة لكم كرتبة **OWNER / CEO / COO**.\n` +
-      `👉 **أول مسؤول فقط يوافق على الطلب**، سيتم فوراً منح العضو رتبة **MEMBER** وتحديث الرسائل تلقائياً لدى باقي المسؤولين.`
+      `👉 **أول مسؤول فقط يوافق على الطلب (سواء عبر الموقع أو الزر)**، سيتم فوراً منح العضو رتبة **MEMBER** وتحديث الرسائل تلقائياً لدى باقي المسؤولين.`
     )
     .setFooter({ text: `GX eSports Security Engine • المعرف: ${member.id}` })
     .setTimestamp();
@@ -1343,7 +1345,7 @@ async function sendVerificationRequestToExecutives(guild, member) {
   for (const [, execMember] of executives) {
     try {
       const dmMsg = await execMember.send({
-        content: `🔔 **طلب توثيق عضو ${isRejoin ? 'أعاد الانضمام' : 'جديد'} في سيرفر \`${guild.name}\` بحاجة لموافقتك (أول موافق فقط):**`,
+        content: `🔔 **طلب توثيق عضو ${isRejoin ? 'أعاد الانضمام' : 'جديد'}:** \`${member.user.tag}\`\n🌐 يمكنك اتخاذ الإجراء عبر لوحة التحكم بالموقع: https://gxbot.eshamikh.com/#verifications أو عبر الأزرار أدناه (لأول موافق فقط):`,
         embeds: [embed],
         components: [row]
       }).catch(() => null);
@@ -1360,6 +1362,167 @@ async function sendVerificationRequestToExecutives(guild, member) {
 
   saveVerificationRequests(requestsData);
   console.log(`📩 [طلب توثيق] تم إرسال طلب التوثيق في الخاص للإدارة العليا بخصوص ${member.user.tag} (انضمام رقم ${requestsData[targetId].joinCount})`);
+}
+
+/**
+ * 👑 Executes Verification Approval (invokable via Web Control Panel or Discord Button).
+ */
+async function executeVerificationApproval(targetId, client, approverName, guildId, sendToLogChannel, botVersion) {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return { success: false, error: 'تعذر الوصول إلى السيرفر' };
+
+  const requestsData = loadVerificationRequests();
+  const req = requestsData[targetId];
+
+  // First-responder guard if already handled
+  if (req && req.status === 'approved') {
+    return { success: true, message: `تمت الموافقة مسبقاً بواسطة @${req.handledByName || 'الإدارة'}` };
+  }
+
+  const targetMember = await guild.members.fetch(targetId).catch(() => null);
+  if (!targetMember) {
+    return { success: false, error: 'لم يتم العثور على العضو في السيرفر (ربما غادر السيرفر)' };
+  }
+
+  const memberRole = findAutoRole(guild);
+  const untrustedRole = await findOrCreateUntrustedRole(guild);
+  const botMember = guild.members.me || (await guild.members.fetch(client.user.id).catch(() => null));
+
+  if (untrustedRole && targetMember.roles.cache.has(untrustedRole.id)) {
+    if (botMember && botMember.roles.highest.comparePositionTo(untrustedRole) > 0) {
+      await targetMember.roles.remove(untrustedRole).catch(() => {});
+    }
+  }
+  if (memberRole && !targetMember.roles.cache.has(memberRole.id)) {
+    if (botMember && botMember.roles.highest.comparePositionTo(memberRole) > 0) {
+      await targetMember.roles.add(memberRole).catch(() => {});
+    }
+  }
+
+  if (!requestsData[targetId]) {
+    requestsData[targetId] = { targetId, messages: [], userTag: targetMember.user.tag };
+  }
+  requestsData[targetId].status = 'approved';
+  requestsData[targetId].handledByName = approverName;
+  requestsData[targetId].handledAt = Date.now();
+  saveVerificationRequests(requestsData);
+
+  // Update Discord DM buttons for executives
+  if (req && Array.isArray(req.messages)) {
+    const updatedRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`approved_by_done_${targetId}`)
+        .setLabel(`✅ تم القبول بواسطة: @${approverName}`)
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(true)
+    );
+
+    for (const msgInfo of req.messages) {
+      try {
+        const execUser = await client.users.fetch(msgInfo.execUserId).catch(() => null);
+        if (execUser) {
+          const dmChan = execUser.dmChannel || (await execUser.createDM().catch(() => null));
+          if (dmChan) {
+            const msg = await dmChan.messages.fetch(msgInfo.messageId).catch(() => null);
+            if (msg) await msg.edit({ components: [updatedRow] }).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Send Direct DM congratulations to the member
+  const approvedDMEmbed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setAuthor({ name: '🎉 تم قبول التوثيق بنجاح | GX eSports', iconURL: guild.iconURL() })
+    .setTitle('👑 تهانينا! تمت ترقيتك وتفعيل حسابك بالكامل')
+    .setDescription(
+      `أهلاً بك <@${targetId}>! تمت مراجعة وتوثيق حسابك بنجاح من قِبل الإدارة العليا (\`${approverName}\`).\n\n` +
+      `✅ **تم منحك رتبة:** <@&${memberRole ? memberRole.id : ''}>\n` +
+      `🗑️ **تمت إزالة رتبة:** \`UNTRUSTED\`\n` +
+      `💬 **أصبح بإمكانك الآن الكتابة والتفاعل والمشاركة في جميع قنوات السيرفر بحرية.**\n\n` +
+      `نتمنى لك أوقاتاً ممتعة معنا في **GX eSports**! 🎮🔥`
+    )
+    .setFooter({ text: `GX eSports Security System • الإصدار ${botVersion}` })
+    .setTimestamp();
+
+  await targetMember.send({ embeds: [approvedDMEmbed] }).catch(() => {});
+
+  const logEmbed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setAuthor({ name: '✅ قبول وتوثيق عضو (Gatekeeper Approval)', iconURL: targetMember.user.displayAvatarURL() })
+    .setDescription(`تمت الموافقة على توثيق <@${targetId}> (\`${targetMember.user.tag}\`) بواسطة \`${approverName}\` ومنحه رتبة **MEMBER** وسحب **UNTRUSTED**.`)
+    .setFooter({ text: `GX eSports Security • الإصدار ${botVersion}` })
+    .setTimestamp();
+  await sendToLogChannel(guild, logEmbed);
+
+  logActivity('security', 'Member Verified', `Approved and verified ${targetMember.user.tag} (${targetId}) by ${approverName}`);
+  return { success: true, message: `تم قبول وتوثيق العضو ${targetMember.user.tag} بنجاح ومنحه رتبة MEMBER` };
+}
+
+/**
+ * 👑 Executes Verification Rejection (invokable via Web Control Panel or Discord Button).
+ */
+async function executeVerificationRejection(targetId, client, rejecterName, guildId, sendToLogChannel, botVersion, action = 'reject') {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return { success: false, error: 'تعذر الوصول إلى السيرفر' };
+
+  const requestsData = loadVerificationRequests();
+  const req = requestsData[targetId];
+
+  const targetMember = await guild.members.fetch(targetId).catch(() => null);
+
+  if (!requestsData[targetId]) {
+    requestsData[targetId] = { targetId, messages: [], userTag: targetMember?.user.tag || targetId };
+  }
+  requestsData[targetId].status = 'rejected';
+  requestsData[targetId].handledByName = rejecterName;
+  requestsData[targetId].handledAt = Date.now();
+  saveVerificationRequests(requestsData);
+
+  // Update Discord DM buttons
+  if (req && Array.isArray(req.messages)) {
+    const updatedRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rejected_by_done_${targetId}`)
+        .setLabel(`❌ تم الرفض بواسطة: @${rejecterName}`)
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(true)
+    );
+
+    for (const msgInfo of req.messages) {
+      try {
+        const execUser = await client.users.fetch(msgInfo.execUserId).catch(() => null);
+        if (execUser) {
+          const dmChan = execUser.dmChannel || (await execUser.createDM().catch(() => null));
+          if (dmChan) {
+            const msg = await dmChan.messages.fetch(msgInfo.messageId).catch(() => null);
+            if (msg) await msg.edit({ components: [updatedRow] }).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+  }
+
+  let actionText = 'رفض الطلب';
+  if (action === 'kick' && targetMember) {
+    await targetMember.kick(`تم رفض التوثيق وطرده عبر لوحة التحكم بواسطة ${rejecterName}`).catch(() => {});
+    actionText = 'رفض التوثيق وطرد العضو';
+  } else if (action === 'ban' && targetMember) {
+    await guild.members.ban(targetId, { reason: `تم رفض التوثيق وحظره عبر لوحة التحكم بواسطة ${rejecterName}` }).catch(() => {});
+    actionText = 'رفض التوثيق وحظر العضو نهائياً';
+  }
+
+  const logEmbed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setAuthor({ name: '❌ رفض توثيق عضو (Gatekeeper Rejection)', iconURL: targetMember?.user.displayAvatarURL() || client.user?.displayAvatarURL() })
+    .setDescription(`تم ${actionText} للعضو <@${targetId}> (\`${req?.userTag || targetMember?.user.tag || targetId}\`) بواسطة \`${rejecterName}\`.`)
+    .setFooter({ text: `GX eSports Security • الإصدار ${botVersion}` })
+    .setTimestamp();
+  await sendToLogChannel(guild, logEmbed);
+
+  logActivity('security', 'Verification Rejected', `Rejected untrusted member ${targetId} (${actionText}) by ${rejecterName}`);
+  return { success: true, message: `تمت عملية (${actionText}) للعضو بنجاح` };
 }
 
 /**
@@ -4851,120 +5014,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-        const requestsData = loadVerificationRequests();
-        const req = requestsData[targetId];
-
-        // First-Responder Guard: if already handled by someone else
-        if (req && req.status !== 'pending') {
-          const handledLabel = req.status === 'approved'
-            ? `✅ تم القبول مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`
-            : `❌ تم الرفض مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`;
-
-          const disabledRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`already_handled_${targetId}`)
-              .setLabel(handledLabel)
-              .setStyle(req.status === 'approved' ? ButtonStyle.Success : ButtonStyle.Danger)
-              .setDisabled(true)
-          );
-          await interaction.update({ components: [disabledRow] }).catch(() => {});
-          return interaction.followUp({
-            content: `⚠️ **عذراً يا عزيزنا <@${interaction.user.id}>**، تم التعامل مع هذا الطلب مسبقاً بواسطة **@${req.handledByName}**!`,
-            ephemeral: true
-          });
-        }
-
-        const targetMember = await guild.members.fetch(targetId).catch(() => null);
-        if (!targetMember) {
-          return interaction.reply({ content: '❌ لم يتم العثور على العضو في السيرفر (ربما غادر السيرفر).', ephemeral: true });
-        }
-
-        const memberRole = findAutoRole(guild);
-        const untrustedRole = await findOrCreateUntrustedRole(guild);
-
-        if (untrustedRole && targetMember.roles.cache.has(untrustedRole.id)) {
-          await targetMember.roles.remove(untrustedRole).catch(() => {});
-        }
-        if (memberRole && !targetMember.roles.cache.has(memberRole.id)) {
-          await targetMember.roles.add(memberRole).catch(() => {});
-        }
-
         const approverName = interaction.user.displayName || interaction.user.username;
-
-        if (!requestsData[targetId]) {
-          requestsData[targetId] = { targetId, messages: [] };
+        await interaction.deferUpdate().catch(() => {});
+        const resData = await executeVerificationApproval(targetId, client, approverName, ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
+        if (resData.success) {
+          return interaction.followUp({ content: `✅ **${resData.message}**`, ephemeral: true }).catch(() => {});
+        } else {
+          return interaction.followUp({ content: `❌ **${resData.error}**`, ephemeral: true }).catch(() => {});
         }
-        requestsData[targetId].status = 'approved';
-        requestsData[targetId].handledBy = interaction.user.id;
-        requestsData[targetId].handledByName = approverName;
-        requestsData[targetId].handledAt = Date.now();
-        saveVerificationRequests(requestsData);
-
-        // 1. Update clicking approver's message
-        const approverRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`approved_by_me_${targetId}`)
-            .setLabel(`✅ تم القبول بواسطتك (@${approverName})`)
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(true)
-        );
-        await interaction.update({ components: [approverRow] }).catch(() => {});
-
-        // 2. Broadcast button update to all other executives' DMs ("تم القبول بواسطة: @{name}")
-        const otherExecRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`approved_by_other_${targetId}`)
-            .setLabel(`✅ تم القبول بواسطة: @${approverName}`)
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(true)
-        );
-
-        if (req && Array.isArray(req.messages)) {
-          for (const msgInfo of req.messages) {
-            if (msgInfo.execUserId !== interaction.user.id) {
-              try {
-                const execUser = await client.users.fetch(msgInfo.execUserId).catch(() => null);
-                if (execUser) {
-                  const dmChan = execUser.dmChannel || await execUser.createDM().catch(() => null);
-                  if (dmChan) {
-                    const msg = await dmChan.messages.fetch(msgInfo.messageId).catch(() => null);
-                    if (msg) await msg.edit({ components: [otherExecRow] }).catch(() => {});
-                  }
-                }
-              } catch {}
-            }
-          }
-        }
-
-        // Direct DM to the approved member
-        const approvedDMEmbed = new EmbedBuilder()
-          .setColor(0x57F287)
-          .setAuthor({ name: '🎉 تم قبول التوثيق بنجاح | GX eSports', iconURL: guild.iconURL() })
-          .setTitle('👑 تهانينا! تمت ترقيتك وتفعيل حسابك بالكامل')
-          .setDescription(
-            `أهلاً بك <@${targetId}>! تمت مراجعة طلبك والموافقة على توثيق حسابك بواسطة الإدارة العليا (<@${interaction.user.id}>).\n\n` +
-            `✅ **تم منحك رتبة:** <@&${memberRole ? memberRole.id : ''}>\n` +
-            `🗑️ **تمت إزالة رتبة:** \`UNTRUSTED\`\n` +
-            `💬 **أصبح بإمكانك الآن الكتابة والتفاعل والمشاركة في جميع قنوات السيرفر بحرية.**\n\n` +
-            `نتمنى لك أوقاتاً ممتعة معنا في **GX eSports**! 🎮🔥`
-          )
-          .setFooter({ text: `GX eSports Security System • الإصدار ${BOT_VERSION}` })
-          .setTimestamp();
-
-        await targetMember.send({ embeds: [approvedDMEmbed] }).catch(() => {});
-
-        const logEmbed = new EmbedBuilder()
-          .setColor(0x57F287)
-          .setAuthor({ name: '✅ قبول توثيق عضو (عبر الخاص)', iconURL: interaction.user.displayAvatarURL() })
-          .setDescription(`قام المسؤول <@${interaction.user.id}> بالموافقة في الخاص على توثيق <@${targetId}> (\`${targetMember.user.tag}\`) ومنحه رتبة **MEMBER** وسحب **UNTRUSTED** وتفعيل صلاحية الكتابة.`)
-          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
-          .setTimestamp();
-        await sendToLogChannel(guild, logEmbed);
-
-        return interaction.followUp({
-          content: `✅ **تم بنجاح توثيق العضو <@${targetId}> ومنحه رتبة MEMBER وإلغاء UNTRUSTED!**`,
-          ephemeral: true
-        });
       }
 
       // 9. زر رفض توثيق العضوية (عبر الخاص DM - أول مسؤول فقط)
@@ -4984,103 +5041,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-        const requestsData = loadVerificationRequests();
-        const req = requestsData[targetId];
-
-        // First-Responder Guard: if already handled by someone else
-        if (req && req.status !== 'pending') {
-          const handledLabel = req.status === 'approved'
-            ? `✅ تم القبول مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`
-            : `❌ تم الرفض مسبقاً بواسطة: @${req.handledByName || 'مسؤول آخر'}`;
-
-          const disabledRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`already_handled_${targetId}`)
-              .setLabel(handledLabel)
-              .setStyle(req.status === 'approved' ? ButtonStyle.Success : ButtonStyle.Danger)
-              .setDisabled(true)
-          );
-          await interaction.update({ components: [disabledRow] }).catch(() => {});
-          return interaction.followUp({
-            content: `⚠️ **عذراً يا عزيزنا <@${interaction.user.id}>**، تم التعامل مع هذا الطلب مسبقاً بواسطة **@${req.handledByName}**!`,
-            ephemeral: true
-          });
-        }
-
         const rejecterName = interaction.user.displayName || interaction.user.username;
-
-        if (!requestsData[targetId]) {
-          requestsData[targetId] = { targetId, messages: [] };
+        await interaction.deferUpdate().catch(() => {});
+        const resData = await executeVerificationRejection(targetId, client, rejecterName, ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION, 'reject');
+        if (resData.success) {
+          return interaction.followUp({ content: `❌ **${resData.message}**`, ephemeral: true }).catch(() => {});
+        } else {
+          return interaction.followUp({ content: `❌ **${resData.error}**`, ephemeral: true }).catch(() => {});
         }
-        requestsData[targetId].status = 'rejected';
-        requestsData[targetId].handledBy = interaction.user.id;
-        requestsData[targetId].handledByName = rejecterName;
-        requestsData[targetId].handledAt = Date.now();
-        saveVerificationRequests(requestsData);
-
-        // 1. Update clicking user's message
-        const rejecterRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`rejected_by_me_${targetId}`)
-            .setLabel(`❌ تم رفض الطلب بواسطتك (@${rejecterName})`)
-            .setStyle(ButtonStyle.Danger)
-            .setDisabled(true)
-        );
-        await interaction.update({ components: [rejecterRow] }).catch(() => {});
-
-        // 2. Broadcast button update to all other executives' DMs
-        const otherRejectRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`rejected_by_other_${targetId}`)
-            .setLabel(`❌ تم الرفض بواسطة: @${rejecterName}`)
-            .setStyle(ButtonStyle.Danger)
-            .setDisabled(true)
-        );
-
-        if (req && Array.isArray(req.messages)) {
-          for (const msgInfo of req.messages) {
-            if (msgInfo.execUserId !== interaction.user.id) {
-              try {
-                const execUser = await client.users.fetch(msgInfo.execUserId).catch(() => null);
-                if (execUser) {
-                  const dmChan = execUser.dmChannel || await execUser.createDM().catch(() => null);
-                  if (dmChan) {
-                    const msg = await dmChan.messages.fetch(msgInfo.messageId).catch(() => null);
-                    if (msg) await msg.edit({ components: [otherRejectRow] }).catch(() => {});
-                  }
-                }
-              } catch {}
-            }
-          }
-        }
-
-        const targetMember = await guild.members.fetch(targetId).catch(() => null);
-        if (targetMember) {
-          const rejectDMEmbed = new EmbedBuilder()
-            .setColor(0xED4245)
-            .setAuthor({ name: '❌ طلب التوثيق | GX eSports', iconURL: guild.iconURL() })
-            .setTitle('تنبيه بخصوص طلب توثيق العضوية')
-            .setDescription(
-              `عزيزنا <@${targetId}>، تم رفض طلب التوثيق الخاص بك حالياً من قِبل الإدارة العليا.\n` +
-              `ستبقى رتبتك كما هي \`UNTRUSTED\` (يمكنك مشاهدة القنوات ودخول الرومات الصوتية فقط).`
-            )
-            .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
-            .setTimestamp();
-          await targetMember.send({ embeds: [rejectDMEmbed] }).catch(() => {});
-        }
-
-        const logEmbed = new EmbedBuilder()
-          .setColor(0xED4245)
-          .setAuthor({ name: '❌ رفض توثيق عضو (عبر الخاص)', iconURL: interaction.user.displayAvatarURL() })
-          .setDescription(`قام المسؤول <@${interaction.user.id}> برفض طلب توثيق <@${targetId}> عبر الخاص.`)
-          .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
-          .setTimestamp();
-        await sendToLogChannel(guild, logEmbed);
-
-        return interaction.followUp({
-          content: `❌ **تم رفض طلب التوثيق للعضو <@${targetId}>.**`,
-          ephemeral: true
-        });
       }
     }
 
@@ -8403,7 +8371,99 @@ const healthServer = http.createServer(async (req, res) => {
     });
   }
 
-  // 30. Serve Static Website Files (Websites/Status)
+  // 31. Admin Verifications (Untrusted Members): GET /api/admin/verifications
+  if (url === '/api/admin/verifications' && method === 'GET') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+    const requestsData = loadVerificationRequests();
+    const untrustedRole = guild?.roles.cache.find((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
+
+    const list = [];
+    const knownTargetIds = new Set();
+
+    for (const [targetId, item] of Object.entries(requestsData)) {
+      knownTargetIds.add(targetId);
+      const member = guild?.members.cache.get(targetId);
+      list.push({
+        targetId,
+        userTag: item.userTag || member?.user.tag || 'عضو غير معروف',
+        userAvatar: member?.user.displayAvatarURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
+        status: item.status || 'pending',
+        joinCount: item.joinCount || 1,
+        accountCreatedAt: member?.user.createdTimestamp || null,
+        joinedAt: member?.joinedTimestamp || item.createdAt || Date.now(),
+        createdAt: item.createdAt || Date.now(),
+        handledBy: item.handledBy,
+        handledByName: item.handledByName,
+        handledAt: item.handledAt,
+        isCurrentlyInServer: !!member,
+        hasUntrustedRole: member && untrustedRole ? member.roles.cache.has(untrustedRole.id) : false
+      });
+    }
+
+    if (guild && untrustedRole) {
+      for (const [, member] of guild.members.cache) {
+        if (!member.user.bot && member.roles.cache.has(untrustedRole.id) && !knownTargetIds.has(member.id)) {
+          list.push({
+            targetId: member.id,
+            userTag: member.user.tag,
+            userAvatar: member.user.displayAvatarURL({ dynamic: true }),
+            status: 'pending',
+            joinCount: 1,
+            accountCreatedAt: member.user.createdTimestamp,
+            joinedAt: member.joinedTimestamp || Date.now(),
+            createdAt: member.joinedTimestamp || Date.now(),
+            handledBy: null,
+            handledByName: null,
+            handledAt: null,
+            isCurrentlyInServer: true,
+            hasUntrustedRole: true
+          });
+        }
+      }
+    }
+
+    list.sort((a, b) => {
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    return sendJsonResponse(res, 200, { success: true, verifications: list });
+  }
+
+  // 32. Admin Resolve Verification: POST /api/admin/verifications/resolve
+  if (url === '/api/admin/verifications/resolve' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    const body = await parseJsonBody(req);
+    const { targetId, action = 'approve', notes = '' } = body;
+
+    if (!targetId || !['approve', 'reject', 'kick', 'ban'].includes(action)) {
+      return sendJsonResponse(res, 400, { error: 'بيانات غير صالحة' });
+    }
+
+    if (action === 'approve') {
+      const resData = await executeVerificationApproval(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
+      if (resData.success) {
+        return sendJsonResponse(res, 200, resData);
+      } else {
+        return sendJsonResponse(res, 400, { error: resData.error || 'فشلت الموافقة' });
+      }
+    } else {
+      const resData = await executeVerificationRejection(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION, action);
+      if (resData.success) {
+        return sendJsonResponse(res, 200, resData);
+      } else {
+        return sendJsonResponse(res, 400, { error: resData.error || 'فشل الرفض' });
+      }
+    }
+  }
+
+  // 33. Serve Static Website Files (Websites/Status)
   let cleanUrl = url === '/' || url === '/support' || url.startsWith('/support') ? '/index.html' : url;
   let filePath = path.join(STATUS_DIR, cleanUrl.replace(/^\//, ''));
   
