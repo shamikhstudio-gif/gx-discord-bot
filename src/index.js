@@ -6210,7 +6210,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           { name: '🚀 معالجة الأوامر (Event Loop)', value: `\`< 2ms\` 🟢 (Non-Blocking)`, inline: true },
           { name: '💾 استهلاك الذاكرة (RAM)', value: `\`${heapMb} MB\` 📊`, inline: true },
           { name: '🎙️ أسطول مسجلات VCR', value: `\`5 مسجلات متصلة\` 🎙️`, inline: true },
-          { name: '🌐 لوحة المراقبة الحية (Web Dashboard)', value: `[اضغط لفتح الموقع](http://localhost:${process.env.PORT || 3000}/)`, inline: true },
+          { name: '🌐 لوحة المراقبة الحية (Web Dashboard)', value: `[اضغط لفتح الموقع](https://gxbot.eshamikh.com/)`, inline: true },
           { name: '🛡️ حماية الصوت (RMS Filter)', value: `\`11,000 RMS (30s Mute)\` 🔒`, inline: true }
         )
         .setFooter({ text: `GX eSports Flash Engine • الإصدار ${BOT_VERSION}`, iconURL: client.user?.displayAvatarURL() })
