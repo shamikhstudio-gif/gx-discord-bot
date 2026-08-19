@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════
-   GX COMMAND CENTER & LIVE SUPPORT DESK
+   GX COMMAND CENTER & LIVE SUPPORT DESK (ARABIC RTL)
    LUXURY OBSIDIAN & CRISP PEARL WHITE DESIGN SYSTEM
    ══════════════════════════════════════════════════════ */
 
@@ -25,7 +25,7 @@
   --sidebar-w-collapsed: 72px;
   --sidebar-w-expanded: 250px;
   
-  --font-main: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-main: 'Tajawal', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -46,8 +46,10 @@ body {
   font-family: var(--font-main);
   min-height: 100vh;
   overflow-x: hidden;
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  direction: rtl;
+  text-align: right;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -98,7 +100,7 @@ body {
 .auth-title {
   font-size: 22px;
   font-weight: 900;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   color: var(--text-main);
 }
 
@@ -109,18 +111,17 @@ body {
 }
 
 .input-group {
-  text-align: left;
+  text-align: right;
   margin-bottom: 18px;
   position: relative;
 }
 
 .input-group label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 700;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
   margin-bottom: 8px;
 }
 
@@ -139,7 +140,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 11px 14px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-family: inherit;
   color: var(--text-main);
   transition: var(--transition-fast);
@@ -156,7 +157,8 @@ body {
 
 .btn-toggle-pw {
   position: absolute;
-  right: 12px;
+  left: 12px;
+  right: auto;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -166,7 +168,7 @@ body {
 
 .auth-error {
   min-height: 20px;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--red);
   margin-bottom: 12px;
 }
@@ -178,7 +180,7 @@ body {
   border: none;
   border-radius: var(--radius-sm);
   padding: 13px;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 800;
   cursor: pointer;
   display: flex;
@@ -186,6 +188,7 @@ body {
   align-items: center;
   gap: 8px;
   transition: var(--transition-fast);
+  font-family: var(--font-main);
 }
 
 .btn-auth:hover {
@@ -201,8 +204,8 @@ body {
 }
 
 .auth-badge {
-  font-size: 11px;
-  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-family: var(--font-main);
   color: var(--text-sub);
   background: rgba(255, 255, 255, 0.03);
   padding: 4px 8px;
@@ -210,7 +213,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════
-   APP LAYOUT & INSTAGRAM-STYLE SIDEBAR
+   APP LAYOUT & INSTAGRAM-STYLE SIDEBAR (RTL RIGHT SIDE)
    ══════════════════════════════════════════════════════ */
 .app-layout {
   display: flex;
@@ -220,12 +223,14 @@ body {
 .insta-sidebar {
   position: fixed;
   top: 0;
-  left: 0;
+  right: 0;
+  left: auto;
   bottom: 0;
   width: var(--sidebar-w-collapsed);
   background: rgba(10, 10, 13, 0.95);
   backdrop-filter: blur(20px);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: none;
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -233,7 +238,7 @@ body {
   padding: 16px 10px;
   transition: var(--transition-sidebar);
   overflow-x: hidden;
-  box-shadow: 4px 0 25px rgba(0, 0, 0, 0.5);
+  box-shadow: -4px 0 25px rgba(0, 0, 0, 0.5);
 }
 
 .insta-sidebar:hover {
@@ -263,7 +268,7 @@ body {
   display: flex;
   flex-direction: column;
   opacity: 0;
-  transform: translateX(-10px);
+  transform: translateX(10px);
   transition: opacity 180ms ease, transform 180ms ease;
   white-space: nowrap;
 }
@@ -285,9 +290,8 @@ body {
 }
 
 .brand-tag {
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 1px;
   color: var(--text-sub);
   font-family: var(--font-mono);
 }
@@ -312,9 +316,10 @@ body {
   color: var(--text-muted);
   cursor: pointer;
   transition: var(--transition-fast);
-  text-align: left;
+  text-align: right;
   white-space: nowrap;
   position: relative;
+  font-family: var(--font-main);
 }
 
 .nav-item:hover {
@@ -339,10 +344,10 @@ body {
 }
 
 .nav-label {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   opacity: 0;
-  transform: translateX(-10px);
+  transform: translateX(10px);
   transition: opacity 180ms ease, transform 180ms ease;
 }
 
@@ -352,10 +357,11 @@ body {
 }
 
 .nav-badge {
-  margin-left: auto;
+  margin-right: auto;
+  margin-left: 0;
   background: var(--discord-blurple);
   color: #fff;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
   padding: 2px 7px;
   border-radius: 99px;
@@ -383,7 +389,8 @@ body {
   border-radius: 50%;
   background: var(--green);
   box-shadow: 0 0 8px var(--green);
-  margin-left: auto;
+  margin-right: auto;
+  margin-left: 0;
   opacity: 0;
 }
 
@@ -406,15 +413,16 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════
-   CONTENT SHELL & TOP BAR
+   CONTENT SHELL & TOP BAR (RTL)
    ══════════════════════════════════════════════════════ */
 .content-shell {
   flex: 1;
-  margin-left: var(--sidebar-w-collapsed);
+  margin-right: var(--sidebar-w-collapsed);
+  margin-left: 0;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  transition: margin-left 260ms cubic-bezier(0.2, 0, 0, 1);
+  transition: margin-right 260ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .top-bar {
@@ -431,13 +439,12 @@ body {
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 800;
-  letter-spacing: -0.3px;
 }
 
 .page-subtitle {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -455,8 +462,8 @@ body {
   border: 1px solid var(--border);
   padding: 6px 14px;
   border-radius: 99px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
 .live-dot {
@@ -501,22 +508,22 @@ body {
 }
 
 .section-heading {
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 800;
 }
 
 .section-desc {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-muted);
   margin-top: 2px;
 }
 
 /* ══════════════════════════════════════════════════════
-   LIVE SUPPORT DESK (3-COLUMN LAYOUT)
+   LIVE SUPPORT DESK (3-COLUMN LAYOUT - RTL)
    ══════════════════════════════════════════════════════ */
 .support-desk-layout {
   display: grid;
-  grid-template-columns: 280px 1fr 280px;
+  grid-template-columns: 290px 1fr 290px;
   gap: 20px;
   height: 680px;
   background: var(--bg-card);
@@ -527,7 +534,8 @@ body {
 
 .support-ticket-list-panel {
   background: var(--bg-surface);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: none;
   display: flex;
   flex-direction: column;
 }
@@ -556,6 +564,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  text-align: right;
 }
 
 .support-ticket-item:hover {
@@ -583,12 +592,12 @@ body {
 }
 
 .support-ticket-time {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-sub);
 }
 
 .support-ticket-user {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
@@ -597,7 +606,7 @@ body {
 }
 
 .support-ticket-snippet {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -654,7 +663,7 @@ body {
 }
 
 .chat-bubble-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-sub);
   margin-bottom: 4px;
   display: flex;
@@ -663,14 +672,14 @@ body {
 }
 
 .chat-bubble-wrap.agent .chat-bubble-meta {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .chat-bubble {
   padding: 12px 16px;
   border-radius: 14px;
-  font-size: 13.5px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -679,14 +688,14 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-main);
-  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
 }
 
 .chat-bubble-wrap.agent .chat-bubble {
   background: var(--discord-blurple);
   color: #ffffff;
   font-weight: 500;
-  border-bottom-right-radius: 4px;
+  border-bottom-left-radius: 4px;
 }
 
 .chat-bubble-image {
@@ -716,7 +725,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-family: inherit;
   color: #fff;
   resize: none;
@@ -731,13 +740,14 @@ body {
 /* Support Details Sidebar */
 .support-sidebar-panel {
   background: var(--bg-surface);
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-left: none;
   padding: 20px 16px;
   overflow-y: auto;
 }
 
 /* ══════════════════════════════════════════════════════
-   REAL-TIME MEMBER AUTOCOMPLETE DROPDOWN
+   REAL-TIME MEMBER AUTOCOMPLETE DROPDOWN (RTL)
    ══════════════════════════════════════════════════════ */
 .search-autocomplete-wrap {
   position: relative;
@@ -794,13 +804,13 @@ body {
 }
 
 .member-tag-line {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   color: #fff;
 }
 
 .member-id-line {
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-sub);
 }
@@ -834,7 +844,7 @@ body {
 }
 
 .panel-title {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 800;
   color: var(--text-main);
 }
@@ -850,7 +860,7 @@ body {
   color: var(--text-main);
   padding: 9px 14px;
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition: var(--transition-fast);
@@ -858,6 +868,7 @@ body {
   justify-content: center;
   align-items: center;
   gap: 6px;
+  font-family: var(--font-main);
 }
 
 .btn-action:hover {
@@ -905,10 +916,8 @@ body {
 }
 
 .kpi-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
   color: var(--text-sub);
   margin-bottom: 6px;
 }
@@ -925,11 +934,11 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
-  margin-left: 4px;
+  margin-right: 4px;
 }
 
 .kpi-sub {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-sub);
   margin-top: 6px;
 }
@@ -964,7 +973,7 @@ body {
   align-items: center;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .spec-name {
@@ -972,22 +981,21 @@ body {
 }
 
 .spec-val {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .badge-white {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  font-family: var(--font-mono);
   color: var(--text-main);
   padding: 3px 8px;
   border-radius: 99px;
 }
 
 .status-chip {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 99px;
@@ -1003,7 +1011,7 @@ body {
 }
 
 .panel-info {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-muted);
   margin-bottom: 18px;
 }
@@ -1048,15 +1056,14 @@ body {
 }
 
 .gauge-sub {
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   color: var(--text-sub);
-  font-family: var(--font-mono);
 }
 
 /* ══════════════════════════════════════════════════════
-   DATA TABLES & LOGS
+   DATA TABLES & LOGS (RTL)
    ══════════════════════════════════════════════════════ */
 .filter-group {
   display: flex;
@@ -1069,7 +1076,8 @@ body {
   border-radius: var(--radius-sm);
   color: var(--text-main);
   padding: 8px 14px;
-  font-size: 13px;
+  font-size: 13.5px;
+  font-family: var(--font-main);
 }
 
 .appeals-table-wrap {
@@ -1082,17 +1090,16 @@ body {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  text-align: left;
-  font-size: 13px;
+  text-align: right;
+  font-size: 13.5px;
 }
 
 .data-table th {
   background: var(--bg-surface);
   color: var(--text-sub);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
 }
@@ -1109,7 +1116,7 @@ body {
 
 .badge-status {
   display: inline-block;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 99px;
@@ -1148,11 +1155,12 @@ body {
 
 .log-entry {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 12.5px;
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
-  border-left: 3px solid #ffffff;
+  border-right: 3px solid #ffffff;
+  border-left: none;
   display: flex;
   justify-content: space-between;
 }
@@ -1163,7 +1171,7 @@ body {
 .log-entry.ticket { border-color: var(--discord-blurple); }
 
 /* ══════════════════════════════════════════════════════
-   MODAL & TOASTS
+   MODAL & TOASTS (RTL)
    ══════════════════════════════════════════════════════ */
 .modal-backdrop {
   position: fixed;
@@ -1201,7 +1209,7 @@ body {
 }
 
 .modal-title {
-  font-size: 18px;
+  font-size: 18.5px;
   font-weight: 800;
 }
 
@@ -1223,6 +1231,7 @@ body {
   max-height: 220px;
   overflow-y: auto;
   white-space: pre-wrap;
+  text-align: right;
 }
 
 .modal-footer {
@@ -1235,7 +1244,8 @@ body {
 .toast-container {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 24px;
+  right: auto;
   z-index: 99999;
   display: flex;
   flex-direction: column;
@@ -1248,14 +1258,15 @@ body {
   color: #fff;
   padding: 12px 20px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  animation: slideToast 250ms ease;
+  animation: slideToastRTL 250ms ease;
+  font-family: var(--font-main);
 }
 
-@keyframes slideToast {
-  from { transform: translateX(50px); opacity: 0; }
+@keyframes slideToastRTL {
+  from { transform: translateX(-50px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
 
