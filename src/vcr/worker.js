@@ -110,6 +110,14 @@ export class VCRWorker {
       this.isInternalSwitching = true;
       this.cleanupSubscriptions();
 
+      if (this.connection) {
+        try {
+          this.connection.removeAllListeners();
+          this.connection.destroy();
+        } catch {}
+        this.connection = null;
+      }
+
       this.connection = joinVoiceChannel({
         channelId: channel.id,
         guildId: guild.id,
@@ -118,6 +126,8 @@ export class VCRWorker {
         selfMute: false,
         group: this.id
       });
+
+      this.connection.setMaxListeners(50);
 
       this.connection.on(VoiceConnectionStatus.Ready, () => {
         this.isInternalSwitching = false;
