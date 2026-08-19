@@ -43,7 +43,7 @@ export class VCRWorker {
         resolve(true);
       });
 
-      // Direct auto-unmute and auto-undeafen listener
+      // Direct auto-unmute, auto-undeafen, and STRICT CHANNEL ANCHOR LOCK
       this.client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         if (newState.id === this.id) {
           if (newState.serverMute) {
@@ -53,6 +53,18 @@ export class VCRWorker {
           if (newState.serverDeaf) {
             console.warn(`🛡️ [حماية VCR] إلغاء تصميت السيرفر الإجباري عن ${this.name} فوراً...`);
             await newState.setDeaf(false, 'GX VCR Immune Policy: Un-Server-Deaf').catch(() => {});
+          }
+
+          // 🔒 STRICT CHANNEL ANCHOR LOCK: Prevent moving to any other room
+          if (newState.channelId !== this.defaultChannelId) {
+            const guild = newState.guild;
+            const targetChannel = guild.channels.cache.get(this.defaultChannelId);
+            if (targetChannel && !this.isInternalSwitching) {
+              console.warn(`🛡️ [تثبيت VCR محكم] تم رصد محاولة نقل ${this.name} إلى روم (${newState.channel?.name || 'غير مخصص'}). إعادة التثبيت الفوري في #${targetChannel.name}...`);
+              setTimeout(async () => {
+                await this.joinChannel(targetChannel, guild, true).catch(() => {});
+              }, 300);
+            }
           }
         }
       });
