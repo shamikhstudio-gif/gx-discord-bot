@@ -60,15 +60,3 @@ export const TOP_EXEC_ROLE_IDS = [
 export const TOP_EXEC_ROLE_NAMES = ['owner', 'ceo', 'coo'];
 export const TOP_EXEC_USER_IDS = ['1152686277255237663', '1484535997893967980'];
 export const TOP_EXEC_USERNAMES = ['itszoki', 'ice0090'];
-
-// 🔊 Advanced Acoustic Scream & Ear-Rape Calibration
-export const SUSTAINED_SCREAM_RMS_THRESHOLD = 11000;
-export const SUSTAINED_SCREAM_FRAMES_REQUIRED = 30; // ~1.5 seconds sustained
-export const INSTANT_EAR_RAPE_RMS_THRESHOLD = 16000;
-export const INSTANT_EAR_RAPE_PEAK_THRESHOLD = 32000;
-export const LOUD_SOUND_THRESHOLD = 25000;
-export const MUTE_DURATION_MS = 30000; // Exactly 30 seconds fixed server mute
-export const MUTE_COOLDOWN_MS = 35000;
-export const DEFAULT_SUSTAINED_THRESHOLD = 11000;
-export const DEFAULT_INSTANT_THRESHOLD = 16000;
-export const DEFAULT_MUTE_DURATION_SEC = 30;
