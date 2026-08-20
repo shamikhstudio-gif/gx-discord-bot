@@ -3067,7 +3067,7 @@ client.once(Events.ClientReady, async (c) => {
       }, 3000);
       console.log('🛡️ [حارس الفويس VCR] تم تفعيل حارس المراقبة الفورية وإعادة التثبيت التلقائي لمسجلات الصوت كل 3 ثوانٍ.');
       await checkAndResetBiweeklyInfractions(guild);
-      sendSecurityDMToExistingMembers(guild);
+      // sendSecurityDMToExistingMembers(guild); // Disabled to prevent mass DM spam on startup
 
       // Start 60s recurring role sync & manager auto-grant check (every minute)
       setInterval(async () => {
@@ -6170,7 +6170,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await syncActiveTicketsMembers(targetGuild);
         syncResult = await syncAllMembersRole(targetGuild, true);
         await welcomeExistingMembersSequentially(targetGuild);
-        sendSecurityDMToExistingMembers(targetGuild);
+        // sendSecurityDMToExistingMembers(targetGuild); // Disabled to prevent mass DM spam on update
       }
 
       const logChannel = targetGuild ? await getOrCreateLogChannel(targetGuild) : null;
