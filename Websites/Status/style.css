@@ -1,16 +1,16 @@
 /* ══════════════════════════════════════════════════════
-   GX COMMAND CENTER & SUPPORT DESK (LUXURY OBSIDIAN UI)
+   GX COMMAND CENTER & SUPPORT DESK (APPLE FLUID OBSIDIAN UI)
    ══════════════════════════════════════════════════════ */
 
 :root {
   --bg-dark: #07070a;
-  --bg-surface: #0e0e13;
-  --bg-card: #13131a;
-  --bg-card-hover: #1b1b24;
-  --bg-input: #0a0a0e;
+  --bg-surface: rgba(14, 14, 20, 0.72);
+  --bg-card: rgba(19, 19, 28, 0.65);
+  --bg-card-hover: rgba(27, 27, 38, 0.82);
+  --bg-input: rgba(10, 10, 15, 0.85);
   
   --border: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(255, 255, 255, 0.25);
+  --border-focus: rgba(255, 255, 255, 0.28);
   --border-glow: rgba(88, 101, 242, 0.35);
 
   --text-main: #ffffff;
@@ -18,32 +18,41 @@
   --text-sub: #5c6270;
 
   --accent-white: #ffffff;
-  --accent-glow: rgba(255, 255, 255, 0.12);
+  --accent-glow: rgba(255, 255, 255, 0.14);
   --discord-blurple: #5865f2;
   --discord-blurple-hover: #4752c4;
   --green: #22c55e;
-  --green-glow: rgba(34, 197, 94, 0.2);
+  --green-glow: rgba(34, 197, 94, 0.25);
   --red: #ef4444;
-  --red-glow: rgba(239, 68, 68, 0.2);
+  --red-glow: rgba(239, 68, 68, 0.25);
   --amber: #f59e0b;
 
   --sidebar-w-collapsed: 82px;
   --sidebar-w-expanded: 295px;
 
-  --font-main: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-main: -apple-system, BlinkMacSystemFont, 'Cairo', 'Tajawal', 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --transition-fast: 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-sidebar: width 340ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 340ms ease;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-pill: 9999px;
+
+  /* 🍎 Apple Fluid Physics & Spring Curves */
+  --apple-spring: 360ms cubic-bezier(0.32, 0.72, 0, 1);
+  --apple-spring-snappy: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  --apple-spring-bounce: 420ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  --apple-blur: blur(28px) saturate(190%);
+  --apple-card-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --transition-fast: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-sidebar: width 340ms cubic-bezier(0.32, 0.72, 0, 1), box-shadow 340ms ease;
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -52,10 +61,45 @@ body {
   font-family: var(--font-main);
   min-height: 100vh;
   overflow-x: hidden;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   direction: rtl;
   text-align: right;
+  letter-spacing: 0;
+}
+
+/* 🍎 Optical Typography Tuning */
+h1, .display-title, .auth-title, .view-title {
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+h2, h3, .card-title {
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.stat-value, .gauge-val, .uptime-val, .badge-count, .table-cell-id {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* 🍎 Instant Touch/Click Press Compression (Kill Latency) */
+button:active,
+.btn:active,
+.nav-item:active,
+.vfilter-chip:active,
+.tab-btn:active,
+.btn-auth:active,
+.btn-action:active,
+.btn-topbar-action:active,
+.mod-action-card:active {
+  transform: scale(0.97) !important;
+  transition: transform 70ms var(--apple-spring) !important;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -64,14 +108,14 @@ body {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(5, 5, 8, 0.96);
-  backdrop-filter: blur(25px);
+  background: rgba(5, 5, 8, 0.88);
+  backdrop-filter: var(--apple-blur);
   z-index: 99999;
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 20px;
-  transition: opacity 280ms ease, visibility 280ms ease;
+  transition: opacity 280ms var(--apple-spring), visibility 280ms;
 }
 
 .auth-overlay.hidden {
@@ -83,12 +127,20 @@ body {
 .auth-card {
   width: 100%;
   max-width: 440px;
-  background: var(--bg-card);
+  background: rgba(18, 18, 26, 0.78);
+  backdrop-filter: var(--apple-blur);
   border: 1px solid var(--border);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-lg);
-  padding: 36px 32px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px var(--accent-glow);
+  padding: 38px 34px;
+  box-shadow: var(--apple-card-shadow), 0 0 35px var(--accent-glow);
   text-align: center;
+  transform: scale(1);
+  transition: transform 300ms var(--apple-spring);
+}
+
+.auth-overlay.hidden .auth-card {
+  transform: scale(0.95);
 }
 
 .auth-logo {
@@ -262,8 +314,8 @@ body {
   min-width: 44px;
   object-fit: cover;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: none;
   transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -353,7 +405,7 @@ body {
   background: #ffffff;
   color: #050507;
   font-weight: 800;
-  box-shadow: 0 6px 22px rgba(255, 255, 255, 0.2);
+  box-shadow: none;
   transform: translateX(0);
 }
 
@@ -555,25 +607,27 @@ html, body {
   top: calc(100% + 10px);
   left: 0;
   width: 360px;
-  background: rgba(14, 14, 20, 0.98);
-  backdrop-filter: blur(25px);
+  background: rgba(14, 14, 20, 0.88);
+  backdrop-filter: var(--apple-blur);
   border: 1px solid var(--border);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   z-index: 9999;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-8px);
-  transition: opacity 200ms ease, transform 200ms ease, visibility 200ms ease;
+  transform-origin: top left;
+  transform: scale(0.95) translateY(-8px);
+  transition: opacity 220ms var(--apple-spring), transform 220ms var(--apple-spring), visibility 220ms;
 }
 
 .notif-dropdown.open {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: scale(1) translateY(0);
 }
 
 .notif-header {
@@ -1577,13 +1631,15 @@ html, body {
 .panel-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 22px;
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
   transition: var(--transition-fast);
 }
 
 .panel-card:hover {
   border-color: var(--border-focus);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
 }
 
 .panel-header {
@@ -1945,10 +2001,15 @@ html, body {
 .modal-card {
   width: 100%;
   max-width: 560px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-focus);
+  background: rgba(18, 18, 26, 0.85);
+  backdrop-filter: var(--apple-blur);
+  border: 1px solid var(--border);
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: var(--radius-lg);
-  padding: 28px;
+  padding: 30px 28px;
+  box-shadow: var(--apple-card-shadow), 0 0 60px rgba(0, 0, 0, 0.85);
+  transform: scale(1);
+  transition: transform 300ms var(--apple-spring);
 }
 
 .modal-header {
@@ -1960,15 +2021,28 @@ html, body {
 
 .modal-title {
   font-size: 18.5px;
-  font-weight: 800;
+  font-weight: 900;
+  letter-spacing: -0.015em;
 }
 
 .modal-close {
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 18px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
   cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .statement-box {
@@ -1982,6 +2056,7 @@ html, body {
   overflow-y: auto;
   white-space: pre-wrap;
   text-align: right;
+  line-height: 1.6;
 }
 
 .modal-footer {
@@ -1999,25 +2074,27 @@ html, body {
   z-index: 99999;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .toast {
-  background: var(--bg-card);
-  border: 1px solid var(--border-focus);
+  background: rgba(20, 20, 30, 0.88);
+  backdrop-filter: var(--apple-blur);
+  border: 1px solid var(--border);
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
   color: #fff;
-  padding: 12px 20px;
-  border-radius: var(--radius-sm);
+  padding: 14px 22px;
+  border-radius: var(--radius-md);
   font-size: 13.5px;
   font-weight: 700;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  animation: slideToastRTL 250ms ease;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  animation: slideToastApple 340ms var(--apple-spring);
   font-family: inherit;
 }
 
-@keyframes slideToastRTL {
-  from { transform: translateX(-50px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+@keyframes slideToastApple {
+  from { transform: translateX(-40px) scale(0.94); opacity: 0; }
+  to { transform: translateX(0) scale(1); opacity: 1; }
 }
 
 .mono { font-family: var(--font-mono); }
@@ -2025,3 +2102,27 @@ html, body {
 .text-green { color: var(--green); }
 .text-red { color: var(--red); }
 .text-muted { color: var(--text-muted); }
+
+/* 🍎 Apple Accessibility Standards */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .auth-overlay, .modal-card, .toast {
+    transform: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .insta-sidebar,
+  .auth-card,
+  .modal-card,
+  .toast,
+  .notif-dropdown {
+    background: #101017 !important;
+    backdrop-filter: none !important;
+  }
+}
