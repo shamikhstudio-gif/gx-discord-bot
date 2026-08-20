@@ -1,4 +1,4 @@
-import { GX_LOGO_DATA_URI } from './logo.js';
+export const LOGO_URL = './logo.jpg';
 
 /* ══════════════════════════════════════════════════════
    GLOBAL STATE & CONSTANTS
@@ -48,8 +48,10 @@ function showToast(message, type = 'info') {
   container.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-30px) scale(0.95)';
+    toast.style.transition = 'all 280ms cubic-bezier(0.32, 0.72, 0, 1)';
     setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  }, 3800);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -178,7 +180,7 @@ function formatTimeAgo(timestamp) {
 document.addEventListener('DOMContentLoaded', () => {
   // Inject official GX logo
   document.querySelectorAll('.gx-logo-img').forEach((img) => {
-    img.src = GX_LOGO_DATA_URI;
+    img.src = './logo.jpg';
   });
 
   // Check auth state
@@ -550,7 +552,7 @@ function renderTranscript(transcript, ticket) {
     .map((msg) => {
       const isAgent = !!msg.isAgent || msg.authorTag.includes('الدعم');
       const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-      const avatarUrl = isAgent ? (GX_LOGO_DATA_URI || 'https://cdn.discordapp.com/embed/avatars/0.png') : (ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png');
+      const avatarUrl = isAgent ? './logo.jpg' : (ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png');
       const imagesHtml = (msg.attachments || [])
         .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="msg-attachment-img" alt="مرفق" /></a>`)
         .join('');
