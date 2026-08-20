@@ -4,7 +4,7 @@ import { GX_LOGO_DATA_URI } from './logo.js';
    GLOBAL STATE & CONSTANTS
    ══════════════════════════════════════════════════════ */
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = IS_LOCAL ? `http://${window.location.hostname}:3000` : 'https://gxbot.eshamikh.com';
+const API_BASE = IS_LOCAL ? `http://${window.location.hostname}:3000` : 'https://worker-production-cd30.up.railway.app';
 
 let adminToken = sessionStorage.getItem('gx_admin_token') || null;
 let currentAppeals = [];
