@@ -11,12 +11,15 @@ const VAULT_SALT = 'gx_secure_env_salt_9e4c1a7b3d2f8e01';
 const VAULT_ITERATIONS = 100000;
 const VAULT_KEYLEN = 32; // 256-bit key for AES-256-GCM
 const VAULT_DIGEST = 'sha512';
-const MASTER_KEY_PHRASE = process.env.GX_VAULT_KEY || 'Qwert54321!@#$%';
+const MASTER_KEY_PHRASE = process.env.GX_VAULT_KEY;
 
 /**
  * Derives a 256-bit encryption key using SHA-512 PBKDF2.
  */
 function deriveKey(passphrase = MASTER_KEY_PHRASE) {
+  if (!passphrase) {
+    throw new Error('GX_VAULT_KEY is not set in the environment variables.');
+  }
   return crypto.pbkdf2Sync(
     passphrase,
     VAULT_SALT,

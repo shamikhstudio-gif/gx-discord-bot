@@ -7,14 +7,17 @@ const AUTH_ITERATIONS = 100000;
 const AUTH_KEYLEN = 64;
 const AUTH_DIGEST = 'sha512';
 
-// Pre-computed hash of "Qwert54321!@#$%" with AUTH_SALT
-const MASTER_PASSWORD_HASH = crypto.pbkdf2Sync(
-  'Qwert54321!@#$%',
+// Extract password from environment instead of hardcoding
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.GX_VAULT_KEY;
+
+// Pre-computed hash of the admin password
+const MASTER_PASSWORD_HASH = ADMIN_PASSWORD ? crypto.pbkdf2Sync(
+  ADMIN_PASSWORD,
   AUTH_SALT,
   AUTH_ITERATIONS,
   AUTH_KEYLEN,
   AUTH_DIGEST
-).toString('hex');
+).toString('hex') : null;
 
 // Dynamic Server Secret for Session Signing (generated per server lifecycle or persistent)
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET || crypto.randomBytes(32).toString('hex');
@@ -28,6 +31,7 @@ const loginRateLimit = new Map();
  */
 export function verifyMasterPassword(plainPassword) {
   if (!plainPassword || typeof plainPassword !== 'string') return false;
+  if (!MASTER_PASSWORD_HASH) return false; // Fail if no password set in env
   try {
     const computedHash = crypto.pbkdf2Sync(
       plainPassword,
