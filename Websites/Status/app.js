@@ -92,7 +92,7 @@ function switchTab(tabId) {
   if (tabId === 'verifications') loadVerifications();
   if (tabId === 'appeals') loadAppeals();
   if (tabId === 'panels') loadPanels();
-  if (tabId === 'moderation') loadModData();
+  if (tabId === 'moderation' || tabId === 'broadcast') loadModData();
 }
 
 /* ══════════════════════════════════════════════════════
@@ -798,8 +798,11 @@ window.deleteSupportTicket = async (threadId) => {
    ══════════════════════════════════════════════════════ */
 async function loadModData() {
   if (!adminToken) return;
+  if (serverChannels.length > 0 && serverRoles.length > 0) {
+    populateModSelects();
+  }
   try {
-    const res = await fetch(`${API_BASE}/api/admin/channels`, {
+    const res = await fetch(`${API_BASE}/api/admin/mod/data`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -808,7 +811,9 @@ async function loadModData() {
       serverRoles = data.roles || [];
       populateModSelects();
     }
-  } catch {}
+  } catch (err) {
+    console.error('Error loading mod data:', err);
+  }
 }
 
 function populateModSelects() {
@@ -821,6 +826,10 @@ function populateModSelects() {
 
   channelSelects.forEach((sel) => {
     if (!sel) return;
+    if (!serverChannels || serverChannels.length === 0) {
+      sel.innerHTML = '<option value="">لا توجد رومات متاحة</option>';
+      return;
+    }
     sel.innerHTML = serverChannels
       .map((c) => `<option value="${c.id}"># ${escapeHtml(c.name)}</option>`)
       .join('');
@@ -828,6 +837,10 @@ function populateModSelects() {
 
   const roleSel = $('roleSelect');
   if (roleSel) {
+    if (!serverRoles || serverRoles.length === 0) {
+      roleSel.innerHTML = '<option value="">لا توجد رتب متاحة</option>';
+      return;
+    }
     roleSel.innerHTML = serverRoles
       .map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`)
       .join('');

@@ -7943,8 +7943,8 @@ const healthServer = http.createServer(async (req, res) => {
     return sendJsonResponse(res, 200, { success: true, message: 'تمت إعادة تثبيت وربط المسجلات الصوتية' });
   }
 
-  // 14. Admin Moderation Metadata: GET /api/admin/mod/data
-  if (url === '/api/admin/mod/data' && method === 'GET') {
+  // 14. Admin Moderation Metadata: GET /api/admin/mod/data & GET /api/admin/channels
+  if ((url === '/api/admin/mod/data' || url === '/api/admin/channels') && method === 'GET') {
     const session = authenticateAdmin(req);
     if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
 
