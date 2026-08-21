@@ -4,6 +4,8 @@ import {
   handleAppealModalSubmit,
   executeAppealApproval,
   executeAppealRejection,
+  executeAppealRevocation,
+  deleteAppealRecord,
   loadAppealsData,
   findOrCreateAntiSpyRole,
   enforceAntiSpyChannelBlackout,
@@ -2706,6 +2708,10 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
     let managerGrantedCount = 0;
 
     for (const [, member] of humanMembers) {
+      // 🛡️ SPY & SUSPICIOUS ACCOUNT SCAN (Auto-detect and register appeal for existing members)
+      const isSpy = await enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION, getExecutiveMembers);
+      if (isSpy) continue;
+
       const hasAntiSpyRole = member.roles.cache.some((r) => r.name.toLowerCase() === 'banned by anti-spy');
       if (hasAntiSpyRole) {
         // Quarantined by Anti-Spy: strictly maintain quarantine, do NOT assign MEMBER or UNTRUSTED
@@ -7815,7 +7821,7 @@ const healthServer = http.createServer(async (req, res) => {
     const body = await parseJsonBody(req);
     const { targetId, action, notes } = body;
 
-    if (!targetId || !['approve', 'reject'].includes(action)) {
+    if (!targetId || !['approve', 'reject', 'revoke', 'delete'].includes(action)) {
       return sendJsonResponse(res, 400, { error: 'بيانات غير صالحة' });
     }
 
@@ -7823,9 +7829,16 @@ const healthServer = http.createServer(async (req, res) => {
     if (action === 'approve') {
       result = await executeAppealApproval(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION, sendVerificationRequestToExecutives);
       logActivity('admin', 'Appeal Approved', `Unbanned/Unquarantined member ${targetId} via Control Panel and sent Verification Request`);
-    } else {
+    } else if (action === 'reject') {
       result = await executeAppealRejection(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
       logActivity('admin', 'Appeal Rejected', `Rejected appeal for member ${targetId} via Control Panel`);
+    } else if (action === 'revoke') {
+      result = await executeAppealRevocation(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
+      logActivity('admin', 'Appeal Revoked', `Revoked appeal approval and re-quarantined member ${targetId} via Control Panel`);
+    } else if (action === 'delete') {
+      const deleted = deleteAppealRecord(targetId);
+      result = { success: deleted, message: deleted ? 'تم حذف سجل الطعن بنجاح' : 'لم يتم العثور على سجل الطعن' };
+      logActivity('admin', 'Appeal Deleted', `Deleted appeal record for ${targetId} via Control Panel`);
     }
 
     return sendJsonResponse(res, 200, { success: true, result });
