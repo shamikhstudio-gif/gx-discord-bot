@@ -853,35 +853,66 @@
             </div>
           </div>
 
-          <div class="panel-card" style="max-width: 750px;">
-            <form id="broadcastForm" onsubmit="return false;">
-              <div class="input-group">
-                <label for="broadcastChannelSelect">الروم المستهدف</label>
-                <select id="broadcastChannelSelect" required>
-                  <option value="">جارٍ جلب الرومات…</option>
-                </select>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; max-width: 1100px;">
+            <!-- Form Card -->
+            <div class="panel-card">
+              <form id="broadcastForm" onsubmit="return false;">
+                <div class="input-group">
+                  <label for="broadcastChannelSelect">الروم المستهدف</label>
+                  <select id="broadcastChannelSelect" required>
+                    <option value="">جارٍ جلب الرومات…</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label for="broadcastMention">نوع التنبيه / المنشن</label>
+                  <select id="broadcastMention">
+                    <option value="none" selected>بدون منشن (إشعار صامت)</option>
+                    <option value="everyone">@everyone (تنبيه كافة الأعضاء)</option>
+                    <option value="here">@here (تنبيه المتواجدين الآن)</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label for="broadcastTitle">عنوان الإعلان الرسمي</label>
+                  <input type="text" id="broadcastTitle" placeholder="إشعار رسمي من القيادة العليا لـ GX eSports" required />
+                </div>
+                <div class="input-group">
+                  <label for="broadcastMessage">نص ومحتوى الإعلان</label>
+                  <textarea id="broadcastMessage" rows="5" placeholder="اكتب تفاصيل الإعلان هنا…" required></textarea>
+                </div>
+                <div class="input-group">
+                  <label for="broadcastImage">رابط صورة أو بنر الإعلان (اختياري)</label>
+                  <input type="url" id="broadcastImage" placeholder="https://example.com/banner.png" />
+                </div>
+                <div class="input-group">
+                  <label for="broadcastColor">لون الإمبد الجانبي</label>
+                  <select id="broadcastColor">
+                    <option value="16777215" selected>الأبيض النقي (0xFFFFFF)</option>
+                    <option value="5763719">الأخضر النيون (0x57F287)</option>
+                    <option value="15548997">أحمر الأمان (0xED4245)</option>
+                    <option value="16705372">الأصفر التحذيري (0xFEE75C)</option>
+                    <option value="5793266">الأزرق الاحترافي (0x5865F2)</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn-action primary" onclick="sendBroadcast()" style="margin-top: 10px; width: 100%;">
+                  📢 إرسال ونشر الإعلان فوراً
+                </button>
+              </form>
+            </div>
+
+            <!-- Live Preview Card -->
+            <div class="panel-card">
+              <h3 style="margin-top: 0; font-size: 15px; color: var(--text-muted); margin-bottom: 15px;">👁️ معاينة مباشرة للإعلان (Discord Live Preview):</h3>
+              <div id="broadcastPreviewMention" style="font-size: 13px; color: #5865f2; font-weight: bold; margin-bottom: 8px; display: none;">@everyone</div>
+              <div id="broadcastPreviewEmbed" style="border-right: 4px solid #ffffff; background: rgba(255,255,255,0.03); border-radius: 8px; padding: 15px; transition: border-color 0.2s;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">📢 إشعار إداري رسمي | GX High Command</div>
+                <div id="broadcastPreviewTitle" style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 8px;">إشعار من الإدارة العليا</div>
+                <div id="broadcastPreviewDesc" style="font-size: 13px; color: #ccc; line-height: 1.6; white-space: pre-wrap;">تفاصيل الإعلان ستظهر هنا مباشرة أثناء الكتابة…</div>
+                <div id="broadcastPreviewImageContainer" style="margin-top: 12px; display: none;">
+                  <img id="broadcastPreviewImg" src="" alt="Banner Preview" style="max-width: 100%; border-radius: 6px; max-height: 200px; object-fit: cover;" />
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;">GX eSports Broadcast • الآن</div>
               </div>
-              <div class="input-group">
-                <label for="broadcastTitle">عنوان الإعلان الرسمي</label>
-                <input type="text" id="broadcastTitle" placeholder="إشعار رسمي من القيادة العليا لـ GX eSports" required />
-              </div>
-              <div class="input-group">
-                <label for="broadcastMessage">نص ومحتوى الإعلان</label>
-                <textarea id="broadcastMessage" rows="5" placeholder="اكتب تفاصيل الإعلان هنا…" required></textarea>
-              </div>
-              <div class="input-group">
-                <label for="broadcastColor">لون الإمبد الجانبي</label>
-                <select id="broadcastColor">
-                  <option value="16777215" selected>الأبيض النقي (0xFFFFFF)</option>
-                  <option value="5763719">الأخضر النيون (0x57F287)</option>
-                  <option value="15548997">أحمر الأمان (0xED4245)</option>
-                  <option value="16705372">الأصفر التحذيري (0xFEE75C)</option>
-                </select>
-              </div>
-              <button type="submit" class="btn-action primary" onclick="sendBroadcast()" style="margin-top: 10px;">
-                إرسال ونشر الإعلان
-              </button>
-            </form>
+            </div>
           </div>
         </section>
 
@@ -927,6 +958,6 @@
   <!-- حاوية التنبيهات المنبثقة (Toasts) -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script type="module" src="app.js?v=2.4"></script>
+  <script type="module" src="app.js?v=2.5"></script>
 </body>
 </html>
