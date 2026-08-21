@@ -345,18 +345,18 @@ export async function handleAppealButton(interaction, client, sendToLogChannel, 
 export async function handleAppealModalSubmit(interaction, client, getExecutiveMembers, allowedGuildId) {
   if (!interaction.customId.startsWith('modal_appeal_')) return false;
 
+  try {
+    await interaction.deferReply({ ephemeral: true });
+  } catch (e) {
+    console.error('Defer reply error in appeal modal:', e.message);
+  }
+
   const targetId = interaction.customId.replace('modal_appeal_', '');
   const statement = interaction.fields.getTextInputValue('appeal_statement');
   const guild = client.guilds.cache.get(allowedGuildId);
 
   if (!guild) {
-    await interaction.reply({ content: '❌ حدث خطأ في الوصول لبيانات السيرفر.', ephemeral: true });
-    return true;
-  }
-
-  const executives = await getExecutiveMembers(guild);
-  if (!executives || executives.size === 0) {
-    await interaction.reply({ content: '⚠️ تعذر العثور على أفراد القيادة العليا حالياً.', ephemeral: true });
+    await interaction.editReply({ content: '❌ حدث خطأ في الوصول لبيانات السيرفر.' }).catch(() => {});
     return true;
   }
 
@@ -393,19 +393,28 @@ export async function handleAppealModalSubmit(interaction, client, getExecutiveM
     .setFooter({ text: `GX Security Sentinel • ${targetId}` })
     .setTimestamp();
 
-  for (const [, execMember] of executives) {
+  // Async dispatch notifications in background without blocking response
+  (async () => {
     try {
-      await execMember.send({
-        content: `🔔 **إشعار أمني جديد: طعن معلق من \`${interaction.user.tag}\`**`,
-        embeds: [appealNotifyEmbed]
-      }).catch(() => null);
-    } catch {}
-  }
+      const executives = await getExecutiveMembers(guild);
+      if (executives && executives.size > 0) {
+        for (const [, execMember] of executives) {
+          try {
+            await execMember.send({
+              content: `🔔 **إشعار أمني جديد: طعن معلق من \`${interaction.user.tag}\`**`,
+              embeds: [appealNotifyEmbed]
+            }).catch(() => null);
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error('Error dispatching executive notifications:', err.message);
+    }
+  })();
 
-  await interaction.reply({
-    content: '✅ **تم استلام طعنك بنجاح وإرساله إلى القيادة العليا (OWNER, CEO, COO) لمراجعته.** ستصلك رسالة بالقرار فور اتخاذه عبر لوحة الإدارة.',
-    ephemeral: true
-  });
+  await interaction.editReply({
+    content: '✅ **تم استلام طعنك بنجاح وإرساله إلى القيادة العليا (OWNER, CEO, COO) لمراجعته.** ستصلك رسالة بالقرار فور اتخاذه عبر لوحة الإدارة.'
+  }).catch(() => {});
   return true;
 }
 
