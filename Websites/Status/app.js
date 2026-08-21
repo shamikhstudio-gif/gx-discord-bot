@@ -3,8 +3,61 @@ export const LOGO_URL = './logo.jpg';
 /* ══════════════════════════════════════════════════════
    GLOBAL STATE & CONSTANTS
    ══════════════════════════════════════════════════════ */
-const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = IS_LOCAL ? `http://${window.location.hostname}:3000` : 'https://worker-production-cd30.up.railway.app';
+export const LIVE_BACKEND_URL = 'https://worker-production-cd30.up.railway.app';
+export const LOCAL_BACKEND_URL = 'http://localhost:3000';
+
+function resolveApiBase() {
+  try {
+    const host = window.location.hostname || '';
+    const port = window.location.port || '';
+    const proto = window.location.protocol || '';
+
+    // 1. Direct deployment on Railway backend
+    if (host.includes('railway.app')) {
+      return window.location.origin;
+    }
+    // 2. Direct local Node.js server on port 3000
+    if ((host === 'localhost' || host === '127.0.0.1') && (port === '3000' || !port)) {
+      return `http://${host}:3000`;
+    }
+    // 3. Local frontend dev servers (Live Server 5500, Vite 5173, etc.)
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return LOCAL_BACKEND_URL;
+    }
+    // 4. Any static host, Cloudflare Pages, custom domain (gxbot.eshamikh.com), file://, etc.
+    return LIVE_BACKEND_URL;
+  } catch {
+    return LIVE_BACKEND_URL;
+  }
+}
+
+let API_BASE = resolveApiBase();
+
+/**
+ * Universal Resilient API Fetch with Automatic Backend Failover
+ */
+async function apiFetch(endpoint, options = {}) {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+  try {
+    const res = await fetch(url, options);
+    // If static host returns 404/502/503 and we are not yet on LIVE_BACKEND_URL, auto-failover
+    if ((res.status === 404 || res.status === 502 || res.status === 503) && API_BASE !== LIVE_BACKEND_URL) {
+      console.warn(`[GX API] Request to ${url} returned ${res.status}. Failing over to live backend: ${LIVE_BACKEND_URL}`);
+      API_BASE = LIVE_BACKEND_URL;
+      const fallbackUrl = `${API_BASE}${endpoint}`;
+      return await fetch(fallbackUrl, options);
+    }
+    return res;
+  } catch (err) {
+    if (API_BASE !== LIVE_BACKEND_URL) {
+      console.warn(`[GX API] Request to ${url} failed (${err.message}). Failing over to live backend: ${LIVE_BACKEND_URL}`);
+      API_BASE = LIVE_BACKEND_URL;
+      const fallbackUrl = `${API_BASE}${endpoint}`;
+      return await fetch(fallbackUrl, options);
+    }
+    throw err;
+  }
+}
 
 let adminToken = sessionStorage.getItem('gx_admin_token') || null;
 let currentAppeals = [];
@@ -274,7 +327,7 @@ async function handleLogin() {
   if (btnText) btnText.textContent = 'جارٍ التحقق…';
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin/login`, {
+    const res = await apiFetch(`/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pwInput.value.trim() })
@@ -305,7 +358,7 @@ async function handleLogin() {
 
 async function validateSession() {
   try {
-    const res = await fetch(`${API_BASE}/api/admin/session`, {
+    const res = await apiFetch(`/api/admin/session`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -379,7 +432,7 @@ function setupAllMemberSearchDropdowns() {
 async function searchMembersRealtime(query) {
   if (!adminToken) return [];
   try {
-    const res = await fetch(`${API_BASE}/api/admin/members/search?q=${encodeURIComponent(query)}`, {
+    const res = await apiFetch(`/api/admin/members/search?q=${encodeURIComponent(query)}`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -426,7 +479,7 @@ function renderMemberDropdownResults(members, container, onSelect) {
 window.loadSupportTickets = async () => {
   if (!adminToken) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/tickets`, {
+    const res = await apiFetch(`/api/admin/tickets`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -657,7 +710,7 @@ window.quickModWarn = async (userId) => {
   if (!reason || !reason.trim()) return;
   showToast('جارٍ تسجيل التحذير الإداري…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/warn`, {
+    const res = await apiFetch(`/api/admin/mod/warn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId: userId, reason: reason.trim() })
@@ -677,7 +730,7 @@ window.quickModTimeout = async (userId) => {
   if (!adminToken || !userId) return;
   showToast('جارٍ تطبيق الكتم السريع…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
+    const res = await apiFetch(`/api/admin/mod/timeout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId: userId, durationMinutes: 10, reason: 'كتم سريع من شات الدعم الفني' })
@@ -724,7 +777,7 @@ window.sendSupportAgentReply = async () => {
   showToast('جارٍ إرسال رد الدعم الفني…', 'info');
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin/tickets/reply`, {
+    const res = await apiFetch(`/api/admin/tickets/reply`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -755,7 +808,7 @@ window.closeSupportTicket = async (threadId) => {
   if (!adminToken) return;
   showToast('جارٍ أرشفة وإغلاق التذكرة…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/tickets/close`, {
+    const res = await apiFetch(`/api/admin/tickets/close`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ threadId })
@@ -777,7 +830,7 @@ window.deleteSupportTicket = async (threadId) => {
   if (!confirm('هل أنت متأكد من رغبتك في حذف هذه التذكرة نهائياً؟')) return;
   showToast('جارٍ حذف التذكرة نهائياً…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/tickets/delete`, {
+    const res = await apiFetch(`/api/admin/tickets/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ threadId })
@@ -804,7 +857,7 @@ async function loadModData() {
     populateModSelects();
   }
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/data`, {
+    const res = await apiFetch(`/api/admin/mod/data`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -857,7 +910,7 @@ window.submitModBan = async () => {
 
   showToast('جارٍ تنفيذ الحظر النهائي…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/ban`, {
+    const res = await apiFetch(`/api/admin/mod/ban`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, reason, deleteMessageDays })
@@ -881,7 +934,7 @@ window.submitModUnban = async () => {
 
   showToast('جارٍ فك الحظر…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/unban`, {
+    const res = await apiFetch(`/api/admin/mod/unban`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, reason })
@@ -905,7 +958,7 @@ window.submitModKick = async () => {
 
   showToast('جارٍ تنفيذ الطرد…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/kick`, {
+    const res = await apiFetch(`/api/admin/mod/kick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, reason })
@@ -930,7 +983,7 @@ window.submitModTimeout = async () => {
 
   showToast('جارٍ تطبيق الكتم…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
+    const res = await apiFetch(`/api/admin/mod/timeout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, durationMinutes, reason })
@@ -952,7 +1005,7 @@ window.submitModUntimeout = async () => {
 
   showToast('جارٍ إلغاء الكتم…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/timeout`, {
+    const res = await apiFetch(`/api/admin/mod/timeout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, durationMinutes: 0, reason: 'إلغاء الكتم مبكراً' })
@@ -976,7 +1029,7 @@ window.submitModPurge = async () => {
 
   showToast(`جارٍ مسح ${count} رسالة…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/purge`, {
+    const res = await apiFetch(`/api/admin/mod/purge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ channelId, count, filterUserId })
@@ -998,7 +1051,7 @@ window.submitModChannelLock = async (locked) => {
 
   showToast(`جارٍ ${locked ? 'قفل' : 'فتح'} الروم…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/lock`, {
+    const res = await apiFetch(`/api/admin/mod/lock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ channelId, locked })
@@ -1021,7 +1074,7 @@ window.submitModSlowmode = async () => {
 
   showToast('جارٍ تطبيق السلو مود…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/slowmode`, {
+    const res = await apiFetch(`/api/admin/mod/slowmode`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ channelId, seconds })
@@ -1045,7 +1098,7 @@ window.submitModRole = async (action) => {
 
   showToast(`جارٍ ${action === 'add' ? 'منح' : 'سحب'} الرتبة…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/role`, {
+    const res = await apiFetch(`/api/admin/mod/role`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, roleId, action })
@@ -1068,7 +1121,7 @@ window.submitModVoiceAction = async () => {
 
   showToast(`جارٍ تنفيذ الإجراء الصوتي (${action})…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/mod/voice-action`, {
+    const res = await apiFetch(`/api/admin/mod/voice-action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: JSON.stringify({ targetId, action })
@@ -1087,27 +1140,61 @@ window.submitModVoiceAction = async () => {
 /* ══════════════════════════════════════════════════════
    REALTIME TELEMETRY & SSE STREAM (ARABIC)
    ══════════════════════════════════════════════════════ */
+let streamEventSource = null;
+let streamFallbackTimer = null;
+
 function startRealtimeStream() {
-  const eventSource = new EventSource(`${API_BASE}/api/stream`);
+  if (streamEventSource) {
+    try { streamEventSource.close(); } catch {}
+    streamEventSource = null;
+  }
+  if (streamFallbackTimer) {
+    clearInterval(streamFallbackTimer);
+    streamFallbackTimer = null;
+  }
 
-  eventSource.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      updateTelemetry(data);
-    } catch {}
-  };
+  const sseUrl = `${API_BASE}/api/stream`;
+  try {
+    streamEventSource = new EventSource(sseUrl);
 
-  eventSource.onerror = () => {
-    setInterval(async () => {
+    streamEventSource.onmessage = (e) => {
       try {
-        const res = await fetch(`${API_BASE}/api/status`);
-        if (res.ok) {
-          const data = await res.json();
-          updateTelemetry(data);
-        }
+        const data = JSON.parse(e.data);
+        updateTelemetry(data);
       } catch {}
-    }, 1000);
-  };
+    };
+
+    streamEventSource.onerror = () => {
+      if (API_BASE !== LIVE_BACKEND_URL) {
+        API_BASE = LIVE_BACKEND_URL;
+        startRealtimeStream();
+        return;
+      }
+      if (!streamFallbackTimer) {
+        streamFallbackTimer = setInterval(async () => {
+          try {
+            const res = await apiFetch('/api/status');
+            if (res.ok) {
+              const data = await res.json();
+              updateTelemetry(data);
+            }
+          } catch {}
+        }, 1500);
+      }
+    };
+  } catch {
+    if (!streamFallbackTimer) {
+      streamFallbackTimer = setInterval(async () => {
+        try {
+          const res = await apiFetch('/api/status');
+          if (res.ok) {
+            const data = await res.json();
+            updateTelemetry(data);
+          }
+        } catch {}
+      }, 1500);
+    }
+  }
 }
 
 function updateTelemetry(d) {
@@ -1212,7 +1299,7 @@ function renderActivityLog(logs) {
 async function loadAppeals() {
   if (!adminToken) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/appeals`, {
+    const res = await apiFetch(`/api/admin/appeals`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -1308,7 +1395,7 @@ window.closeStatementModal = () => {
 window.resolveAppeal = async (targetId, action) => {
   if (!adminToken) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/appeals/resolve`, {
+    const res = await apiFetch(`/api/admin/appeals/resolve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1343,7 +1430,7 @@ window.setVerificationFilter = (filter) => {
 async function loadVerifications() {
   if (!adminToken) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/verifications`, {
+    const res = await apiFetch(`/api/admin/verifications`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -1475,7 +1562,7 @@ window.resolveVerification = async (targetId, action) => {
   showToast(`جارٍ تنفيذ (${actionNames[action] || action})…`, 'info');
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin/verifications/resolve`, {
+    const res = await apiFetch(`/api/admin/verifications/resolve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1502,7 +1589,7 @@ window.resolveVerification = async (targetId, action) => {
 async function loadPanels() {
   if (!adminToken) return;
   try {
-    const res = await fetch(`${API_BASE}/api/admin/panels`, {
+    const res = await apiFetch(`/api/admin/panels`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     if (res.ok) {
@@ -1525,7 +1612,7 @@ window.deployPanel = async (panelType) => {
   if (!adminToken) return;
   showToast(`جارٍ نشر بانل (${panelType}) في ديسكورد…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/panels/deploy`, {
+    const res = await apiFetch(`/api/admin/panels/deploy`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1549,7 +1636,7 @@ window.removePanel = async (panelType) => {
   if (!adminToken) return;
   showToast(`جارٍ حذف بانل (${panelType}) من ديسكورد…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/panels/remove`, {
+    const res = await apiFetch(`/api/admin/panels/remove`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1576,7 +1663,7 @@ window.forceReStationVCR = async () => {
   if (!adminToken) return;
   showToast('جارٍ إعادة تثبيت وضبط أسطول مسجلات الصوت…', 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/vcr/re-station`, {
+    const res = await apiFetch(`/api/admin/vcr/re-station`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
@@ -1595,7 +1682,7 @@ window.reconnectSingleVCR = async (vcrId) => {
   if (!adminToken) return;
   showToast(`جارٍ فحص وإعادة تثبيت مسجل VCR: ${vcrId}…`, 'info');
   try {
-    const res = await fetch(`${API_BASE}/api/admin/vcr/reconnect`, {
+    const res = await apiFetch(`/api/admin/vcr/reconnect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1624,7 +1711,7 @@ window.triggerMassSync = async () => {
   showToast('جارٍ تنفيذ الفحص والمزامنة الشاملة لكافة أعضاء ورتب السيرفر…', 'info');
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin/security/sync-all`, {
+    const res = await apiFetch(`/api/admin/security/sync-all`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
@@ -1659,7 +1746,7 @@ window.sendBroadcast = async () => {
   showToast('جارٍ إرسال ونشر الإعلان الرسمي…', 'info');
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin/broadcast`, {
+    const res = await apiFetch(`/api/admin/broadcast`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
