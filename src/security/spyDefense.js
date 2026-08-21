@@ -19,6 +19,35 @@ export const SPY_ACCOUNT_START_TIMESTAMP = Date.UTC(2026, 7, 16, 0, 0, 0); // 16
 export const SPY_ACCOUNT_END_TIMESTAMP   = Date.UTC(2026, 7, 18, 0, 0, 0); // 18 Aug 2026 00:00:00 UTC (excludes 18th)
 export const SPY_ACCOUNT_CUTOFF_TIMESTAMP = SPY_ACCOUNT_START_TIMESTAMP;
 
+export const SPY_BANNED_ROLE_NAME = 'Banned By Anti-Spy';
+
+export async function findOrCreateAntiSpyRole(guild) {
+  if (!guild) return null;
+  let role = guild.roles.cache.find(
+    (r) => r.name.toLowerCase() === SPY_BANNED_ROLE_NAME.toLowerCase()
+  );
+
+  if (!role) {
+    role = await guild.roles.create({
+      name: SPY_BANNED_ROLE_NAME,
+      color: 0xED4245,
+      permissions: 0n, // Strictly 0 permissions - removes all permissions
+      hoist: true,
+      mentionable: false,
+      reason: 'GX Security: Strict Anti-Spy Quarantine role that removes all permissions from suspicious accounts'
+    }).catch(() => null);
+
+    if (role) {
+      console.log(`🛡️ [رتبة العزل] تم إنشاء رتبة ${SPY_BANNED_ROLE_NAME} وتجريدها من كل الصلاحيات.`);
+    }
+  } else {
+    if (role.permissions.bitfield !== 0n) {
+      await role.setPermissions(0n).catch(() => {});
+    }
+  }
+  return role;
+}
+
 function safeWriteJson(filePath, data) {
   try {
     const dir = path.dirname(filePath);
@@ -44,9 +73,8 @@ export function saveAppealsData(data) {
 }
 
 /**
- * 🛡️ Scans and enforces ban on suspicious accounts created on or after August 16, 2026.
- * Sends private DM with appeal button, then bans the account and logs it.
- * Does NOT reveal that account creation date is the reason.
+ * 🛡️ Scans and quarantines suspicious accounts with "Banned By Anti-Spy" role (0 permissions).
+ * Sends private DM, then isolates the account and automatically registers an appeal for High Command review.
  */
 export async function enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, botVersion = '1.0', getExecutiveMembers = null) {
   if (!member || !guild || member.user.bot) return false;
@@ -55,14 +83,33 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
   const createdTs = member.user.createdTimestamp;
   const isTargetSpyDate = (createdTs >= SPY_ACCOUNT_START_TIMESTAMP && createdTs < SPY_ACCOUNT_END_TIMESTAMP) || member.id === '1540394518237548604';
   if (isTargetSpyDate) {
-    console.warn(`🚨 [رصد حساب تجسس مشبوه] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ الطرد والحظر وإرسال الطعن التلقائي للوحة الإدارة...`);
+    console.warn(`🚨 [رصد حساب مشبوه - Anti-Spy] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ العزل برتبة "${SPY_BANNED_ROLE_NAME}" وتجريد كافة الصلاحيات...`);
 
-    // 1. Automatically create and register appeal in appeals_data.json
+    // 1. Find or create the "Banned By Anti-Spy" role with 0 permissions
+    const antiSpyRole = await findOrCreateAntiSpyRole(guild);
+    const botMember = guild.members.me;
+
+    // 2. Strip all other non-managed roles and apply "Banned By Anti-Spy"
+    if (antiSpyRole && botMember?.permissions.has(PermissionFlagsBits.ManageRoles) && botMember.roles.highest.comparePositionTo(antiSpyRole) > 0) {
+      const currentRoles = member.roles.cache.filter(r => r.id !== guild.id && !r.managed && botMember.roles.highest.comparePositionTo(r) > 0);
+      if (currentRoles.size > 0) {
+        await member.roles.remove(currentRoles).catch(() => {});
+      }
+      await member.roles.add(antiSpyRole).catch(() => {});
+      console.log(`🛡️ [عزل Anti-Spy] تم تجريد كل الرتب ومنح رتبة "${SPY_BANNED_ROLE_NAME}" للعضو ${member.user.tag}.`);
+    }
+
+    // 3. Apply Timeout for total isolation guarantee
+    if (botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      await member.timeout(28 * 24 * 60 * 60 * 1000, 'Banned By Anti-Spy Quarantine (Awaiting Executive Review)').catch(() => {});
+    }
+
+    // 4. Automatically create and register appeal in appeals_data.json
     const appealsData = loadAppealsData();
     const appealRecord = {
       targetId: member.id,
       userTag: member.user.tag,
-      statement: `تم رصد الحساب وحظره تلقائياً للاشتباه بحساب جديد/وهمي (تاريخ الإنشاء: ${new Date(createdTs).toISOString()}). معروض تلقائياً في لوحة التحكم لمراجعة والبت من القيادة العليا.`,
+      statement: `تم رصد الحساب وعزله برتبة "${SPY_BANNED_ROLE_NAME}" للاشتباه بحساب جديد/وهمي (تاريخ الإنشاء: ${new Date(createdTs).toISOString()}). معروض تلقائياً في لوحة التحكم لمراجعة والبت من القيادة العليا.`,
       status: 'pending',
       messages: [],
       handledBy: null,
@@ -72,16 +119,16 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
     appealsData[member.id] = appealRecord;
     saveAppealsData(appealsData);
 
-    // 2. Send Clean Security DM to the User (Automatic review notice, No button needed)
+    // 5. Send Clean Security DM to the User
     const securityDMEmbed = new EmbedBuilder()
       .setColor(0xED4245)
       .setAuthor({ name: 'نظام أمان GX eSports | Security Sentinel', iconURL: guild.iconURL() })
-      .setTitle('⛔ تنبيه أمني عالي الحساسية')
+      .setTitle(`⛔ تنبيه أمني: تم عزل الحساب (${SPY_BANNED_ROLE_NAME})`)
       .setDescription(
         `مرحباً <@${member.id}>،\n\n` +
-        `⚠️ **رصدت منظومة الأمان التلقائية حسابك كحساب غير مصرح به، وتم حظرك من السيرفر كإجراء وقائي.**\n\n` +
+        `⚠️ **رصدت منظومة الأمان التلقائية حسابك للاشتباه بحساب غير مصرح به، وتم منحك رتبة \`${SPY_BANNED_ROLE_NAME}\` وسحب كافة الصلاحيات كإجراء وقائي.**\n\n` +
         `⚖️ **تم رفع طعن ومراجعة أمنية لحسابك تلقائياً وفورياً إلى القيادة العليا (OWNER / CEO / COO) في لوحة التحكم والسيطرة (GX Control Panel).**\n\n` +
-        `📩 ستصلك رسالة هنا في الخاص فور مراجعة القيادة العليا لبيانات حسابك والبت في قبول دخولك وإلغاء الحظر.`
+        `📩 ستصلك رسالة هنا في الخاص فور مراجعة القيادة العليا لبيانات حسابك والبت في قبول دخولك وإلغاء العزل.`
       )
       .setFooter({ text: 'GX eSports Security Engine • نظام الحماية التلقائي' })
       .setTimestamp();
@@ -93,21 +140,7 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
       }).catch(() => {});
     } catch {}
 
-    // 3. Ban from Guild
-    try {
-      if (guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
-        await guild.bans.create(member.id, {
-          reason: 'رصد حساب تجسس مشبوه عبر نظام الأمان التلقائي (تم إدراج طعن تلقائي في لوحة الإدارة)'
-        });
-        console.log(`🔨 [حظر مشبوه] تم بنجاح حظر الحساب المشبوه: ${member.user.tag} (${member.id})`);
-      } else {
-        await member.kick('رصد حساب تجسس مشبوه عبر نظام الأمان');
-      }
-    } catch (err) {
-      console.error(`خطأ في حظر الحساب المشبوه ${member.user.tag}:`, err.message);
-    }
-
-    // 4. Send Informational Alert to Executives in DMs
+    // 6. Send Alert to Executives in DMs
     (async () => {
       try {
         if (typeof getExecutiveMembers === 'function') {
@@ -118,8 +151,9 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
               .setAuthor({ name: '⚖️ طعن أمني معلق تلقائياً | GX High Command', iconURL: member.user.displayAvatarURL() })
               .setTitle(`📝 طعن أمني جديد معروض للمراجعة: ${member.user.tag}`)
               .setDescription(
-                `👤 **الحساب المحظور:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+                `👤 **الحساب المعزول:** <@${member.id}> (\`${member.user.tag}\`)\n` +
                 `🆔 **المعرف (ID):** \`${member.id}\`\n` +
+                `🛡️ **الحالة:** تم تطبيق رتبة \`${SPY_BANNED_ROLE_NAME}\` وتجريد كافة الصلاحيات.\n` +
                 `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(createdTs / 1000)}:F> (<t:${Math.floor(createdTs / 1000)}:R>)\n\n` +
                 `📄 **حالة المراجعة:** تم تحويل الحساب تلقائياً إلى **لوحة التحكم والسيطرة (GX Control Panel)** للبت في قبوله أو تثبيت الحظر.\n\n` +
                 `🔗 **افتح لوحة التحكم للمراجعة والبت:**\n` +
@@ -131,7 +165,7 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
             for (const [, execMember] of executives) {
               try {
                 await execMember.send({
-                  content: `🔔 **إشعار أمني: تم رصد حساب مشبوه \`${member.user.tag}\` وإدراجه تلقائياً للمراجعة في لوحة التحكم.**`,
+                  content: `🔔 **إشعار أمني: تم عزل الحساب المشبوه \`${member.user.tag}\` برتبة \`${SPY_BANNED_ROLE_NAME}\` وإدراجه في لوحة التحكم.**`,
                   embeds: [appealNotifyEmbed]
                 }).catch(() => null);
               } catch {}
@@ -143,17 +177,17 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
       }
     })();
 
-    // 5. Log to Admin Audit Channel
+    // 7. Log to Admin Audit Channel
     if (sendToLogChannel) {
       const logEmbed = new EmbedBuilder()
         .setColor(0xED4245)
-        .setAuthor({ name: '🚨 رصد وطرد حساب تجسس مشبوه', iconURL: member.user.displayAvatarURL() })
-        .setTitle('🔨 تم حظر حساب مشبوه وإدراج طعن تلقائي للإدارة')
+        .setAuthor({ name: '🚨 رصد وعزل حساب تجسس مشبوه', iconURL: member.user.displayAvatarURL() })
+        .setTitle(`🛡️ تم عزل حساب مشبوه برتبة ${SPY_BANNED_ROLE_NAME}`)
         .addFields(
           { name: '👤 الحساب المشبوه', value: `<@${member.id}> (` + '\`' + member.user.tag + '\`' + `)`, inline: true },
           { name: '🆔 المعرف (ID)', value: `\`${member.id}\``, inline: true },
           { name: '📅 تاريخ إنشاء الحساب', value: `<t:${Math.floor(createdTs / 1000)}:F> (<t:${Math.floor(createdTs / 1000)}:R>)`, inline: false },
-          { name: '🛡️ الإجراء المتخذ', value: 'تم حظر الحساب وإرسال إشعار للمستخدم وإدراج طعن تلقائي في لوحة التحكم (Control Panel) لمراجعة القيادة العليا.', inline: false }
+          { name: '🛡️ الإجراء المتخذ', value: `تم تجريد الرتب وتطبيق رتبة \`${SPY_BANNED_ROLE_NAME}\` وتجميد الحساب، مع إدراج طعن تلقائي في لوحة التحكم لمراجعة القيادة العليا.`, inline: false }
         )
         .setFooter({ text: `GX eSports Security Engine • الإصدار ${botVersion}` })
         .setTimestamp();
@@ -469,19 +503,42 @@ export async function handleAppealModalSubmit(interaction, client, getExecutiveM
 }
 
 /**
- * 👑 Executes appeal approval from the Control Panel (Unbans user + Sends invite DM + Logs to security channel).
+ * 👑 Executes appeal approval from the Control Panel (Unbans / Lifts Anti-Spy quarantine + Assigns UNTRUSTED + Sends invite DM).
  */
 export async function executeAppealApproval(targetId, client, approverTag = 'GX Control Panel', allowedGuildId = '1537461174222725120', sendToLogChannel = null, botVersion = '1.0') {
   const guild = client.guilds.cache.get(allowedGuildId);
   const appealsData = loadAppealsData();
   const appeal = appealsData[targetId];
 
-  // 1. Unban in Discord Guild
+  // 1. Unban in Discord Guild if banned, and restore member from Anti-Spy role
   if (guild) {
+    // Try unbanning if was previously banned
     try {
-      await guild.bans.remove(targetId, `قبول الطعن عبر لوحة التحكم بواسطة ${approverTag}`);
+      await guild.bans.remove(targetId, `قبول الطعن عبر لوحة التحكم بواسطة ${approverTag}`).catch(() => {});
+    } catch {}
+
+    // Check if member is still in guild (in quarantine with Banned By Anti-Spy role)
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (member) {
+        // Remove Banned By Anti-Spy role
+        const antiSpyRole = await findOrCreateAntiSpyRole(guild);
+        if (antiSpyRole && member.roles.cache.has(antiSpyRole.id)) {
+          await member.roles.remove(antiSpyRole).catch(() => {});
+        }
+        // Remove any timeout
+        if (member.isCommunicationDisabled()) {
+          await member.timeout(null).catch(() => {});
+        }
+        // Assign default UNTRUSTED role
+        const untrustedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'untrusted');
+        if (untrustedRole) {
+          await member.roles.add(untrustedRole).catch(() => {});
+        }
+        console.log(`✅ [إلغاء عزل Anti-Spy] تم رفع رتبة Banned By Anti-Spy ومنح UNTRUSTED للعضو ${member.user.tag}.`);
+      }
     } catch (err) {
-      console.warn('Unban error:', err.message);
+      console.warn('Error adjusting member roles on approval:', err.message);
     }
   }
 
@@ -516,20 +573,20 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
       }
 
       const dmContent =
-        `🎉 **تم قبول مراجعة حسابك وإلغاء الحظر عنك بنجاح في مجتمع GX eSports!**\n\n` +
-        `🔗 **رابط السيرفر المباشر للانضمام:**\n${inviteUrl}\n\n` +
-        `🛡️ *ملاحظة: عند انضمامك للسيرفر، ستحصل تلقائياً على رتبة \`UNTRUSTED\` المبدئية لحين استكمال مراجعة وتوثيق عضويتك.*`;
+        `🎉 **تم قبول مراجعة حسابك وإلغاء العزل الأمني بنجاح في مجتمع GX eSports!**\n\n` +
+        `🔗 **رابط السيرفر:**\n${inviteUrl}\n\n` +
+        `🛡️ **الرتبة الممنوحة تلقائياً:** تم منحك رتبة \`UNTRUSTED\` المبدئية لحين استكمال مراجعة وتوثيق عضويتك.`;
 
       const acceptedEmbed = new EmbedBuilder()
         .setColor(0x57F287)
         .setAuthor({ name: '✅ نتيجة مراجعة الطعن | GX Security', iconURL: guild ? guild.iconURL() : undefined })
-        .setTitle('🎉 تم قبول مراجعة حسابك وإلغاء الحظر')
+        .setTitle('🎉 تم قبول مراجعة حسابك وإلغاء العزل الأمني')
         .setDescription(
           `مرحباً <@${targetId}>،\n\n` +
-          `تمت مراجعة حسابك من قِبل **القيادة العليا (OWNER / CEO / COO)** في لوحة التحكم وتقرر **قبول الحساب وإلغاء الحظر عنك بنجاح**.\n\n` +
-          `🔗 **يمكنك الآن إعادة الانضمام إلى السيرفر عبر الرابط التالي:**\n` +
+          `تمت مراجعة حسابك من قِبل **القيادة العليا (OWNER / CEO / COO)** في لوحة التحكم وتقرر **قبول الحساب وإلغاء العزل الأمني بنجاح**.\n\n` +
+          `🔗 **رابط السيرفر المباشر:**\n` +
           `👉 **${inviteUrl}**\n\n` +
-          `🛡️ **الرتبة الممنوحة تلقائياً:** ستحصل على رتبة \`UNTRUSTED\` المبدئية عند الانضمام لحين إتمام توثيقك.\n\n` +
+          `🛡️ **الرتبة الحالية:** تم إعطاؤك رتبة \`UNTRUSTED\` المبدئية لحين إتمام توثيقك.\n\n` +
           `نتمنى لك وقتاً ممتعاً والالتزام بأنظمة وقوانين السيرفر.`
         )
         .setFooter({ text: 'GX eSports High Command' })
@@ -551,8 +608,8 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
   if (sendToLogChannel && guild) {
     const logEmbed = new EmbedBuilder()
       .setColor(0x57F287)
-      .setAuthor({ name: '⚖️ قبول طعن أمني وإلغاء حظر (لوحة التحكم)', iconURL: guild.iconURL() })
-      .setDescription(`قام المسؤول **${approverTag}** عبر لوحة التحكم بقبول طعن العضو <@${targetId}> وإلغاء الحظر عنه بنجاح.`)
+      .setAuthor({ name: '⚖️ قبول طعن أمني وإلغاء عزل (لوحة التحكم)', iconURL: guild.iconURL() })
+      .setDescription(`قام المسؤول **${approverTag}** عبر لوحة التحكم بقبول طعن العضو <@${targetId}> وإلغاء عزل Anti-Spy عنه ومنحه رتبة UNTRUSTED بنجاح.`)
       .setFooter({ text: `GX eSports Security • الإصدار ${botVersion}` })
       .setTimestamp();
     await sendToLogChannel(guild, logEmbed).catch(() => {});
@@ -562,14 +619,50 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
 }
 
 /**
- * ⛔ Executes appeal rejection from the Control Panel (Sends rejection DM + Updates status).
+ * ⛔ Executes appeal rejection from the Control Panel (Permanently bans user + Sends rejection DM + Updates status).
  */
 export async function executeAppealRejection(targetId, client, rejectorTag = 'GX Control Panel', allowedGuildId = '1537461174222725120', sendToLogChannel = null, botVersion = '1.0') {
   const guild = client.guilds.cache.get(allowedGuildId);
   const appealsData = loadAppealsData();
   const appeal = appealsData[targetId];
 
-  // 1. Update Database Record
+  // 1. Send rejection DM to the user first before kicking/banning
+  try {
+    const userObj = await client.users.fetch(targetId).catch(() => null);
+    if (userObj) {
+      const rejectedEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '⛔ نتيجة مراجعة الطعن | GX Security', iconURL: guild ? guild.iconURL() : undefined })
+        .setTitle('❌ تم رفض الطعن الأمني وتثبيت الحظر')
+        .setDescription(
+          `مرحباً <@${targetId}>،\n\n` +
+          `نأسف لإبلاغك بأنه بعد مراجعة حسابك من قِبل **القيادة العليا (OWNER / CEO / COO)**، تقرر **رفض طلبك وحظرك نهائياً من السيرفر**.\n\n` +
+          `⚠️ هذا القرار نهائي وصادر من القيادة العليا لسيرفر GX eSports.`
+        )
+        .setFooter({ text: 'GX eSports High Command' })
+        .setTimestamp();
+
+      const dmCh = await userObj.createDM().catch(() => null);
+      if (dmCh) {
+        await dmCh.send({ embeds: [rejectedEmbed] }).catch(() => {});
+      } else {
+        await userObj.send({ embeds: [rejectedEmbed] }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  // 2. Permanently ban member from Discord Guild
+  if (guild) {
+    try {
+      await guild.bans.create(targetId, {
+        reason: `رفض الطعن وتثبيت الحظر الدائم عبر لوحة التحكم بواسطة ${rejectorTag}`
+      }).catch(() => {});
+    } catch (err) {
+      console.warn('Ban on rejection error:', err.message);
+    }
+  }
+
+  // 3. Update Database Record
   if (appeal) {
     appeal.status = 'rejected';
     appeal.handledBy = 'CONTROL_PANEL';
@@ -585,31 +678,12 @@ export async function executeAppealRejection(targetId, client, rejectorTag = 'GX
   }
   saveAppealsData(appealsData);
 
-  // 2. Send rejection DM to the user
-  try {
-    const userObj = await client.users.fetch(targetId).catch(() => null);
-    if (userObj) {
-      const rejectedEmbed = new EmbedBuilder()
-        .setColor(0xED4245)
-        .setAuthor({ name: '⛔ نتيجة مراجعة الطعن | GX Security', iconURL: guild ? guild.iconURL() : undefined })
-        .setTitle('❌ تم رفض الطعن الأمني')
-        .setDescription(
-          `مرحباً <@${targetId}>،\n\n` +
-          `نأسف لإبلاغك بأنه بعد مراجعة طعنك من قِبل **القيادة العليا**، تقرر **رفض طلبك وتثبيت قرار الحظر بشكل نهائي**.`
-        )
-        .setFooter({ text: 'GX eSports High Command' })
-        .setTimestamp();
-
-      await userObj.send({ embeds: [rejectedEmbed] }).catch(() => {});
-    }
-  } catch {}
-
-  // 3. Log to Discord Security Log Channel
+  // 4. Log to Discord Security Log Channel
   if (sendToLogChannel && guild) {
     const logEmbed = new EmbedBuilder()
       .setColor(0xED4245)
-      .setAuthor({ name: '⚖️ رفض طعن أمني (لوحة التحكم)', iconURL: guild.iconURL() })
-      .setDescription(`قام المسؤول **${rejectorTag}** عبر لوحة التحكم برفض طعن العضو <@${targetId}> وتثبيت الحظر عليه.`)
+      .setAuthor({ name: '⛔ رفض طعن أمني وتثبيت الحظر (لوحة التحكم)', iconURL: guild.iconURL() })
+      .setDescription(`قام المسؤول **${rejectorTag}** عبر لوحة التحكم برفض طعن العضو <@${targetId}> وتثبيت الحظر النهائي عليه.`)
       .setFooter({ text: `GX eSports Security • الإصدار ${botVersion}` })
       .setTimestamp();
     await sendToLogChannel(guild, logEmbed).catch(() => {});
