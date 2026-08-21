@@ -2243,66 +2243,19 @@ async function welcomeExistingMembersSequentially(guild) {
 }
 
 /**
- * 🛡️ Sends the official "تم تفعيل GX" security onboarding direct message to a member.
- * Sends the "تم تفعيل GX" security onboarding message to members.
+ * 🛡️ Security DM onboarding (Permanently disabled per user request).
  */
 async function sendSecurityOnboardingDM(member) {
-  if (!member || member.user.bot) return;
-
-  const sentList = loadDMSecuritySent();
-  if (sentList.includes(member.id)) return;
-
-  const securityEmbed = new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setAuthor({
-      name: '🛡️ نظام الحماية والأمان الذكي | GX eSports Shield',
-      iconURL: member.guild.iconURL() || member.client.user?.displayAvatarURL()
-    })
-    .setTitle('تم تفعيل GX')
-    .setDescription(
-      `# 🛡️ تم تفعيل نظام الأمان المتقدم لحسابك بنجاح\n\n` +
-      `أهلاً بك يا <@${member.id}> في مجتمع **GX eSports**.\n` +
-      `تم ربط وتفعيل منظومة **GX Security Engine** لحماية وتأمين تواجدك داخل السيرفر:\n\n` +
-      `🔹 **الخصائص والأنظمة المفعلة:**\n` +
-      `> ⚡ **مكافحة التكرار والسبام الذكية:** مراقبة وتحليل النصوص المتطابقة أو المشابهة بنسبة \`85%+\`.\n` +
-      `> 🛡️ **نظام المخالفات التلقائي (Strikes Ladder):** إنذارات متدرجة وحظر فوري عند الإصرار على الإزعاج.\n` +
-      `> 🎫 **نظام التذاكر المشفرة:** حماية كاملة وخصوصية لطلبات الدعم الفني.\n\n` +
-      `💡 *نتمنى لك قضاء وقت ممتع ومميز في GX eSports!*`
-    )
-    .setFooter({ text: `GX eSports Security System • الإصدار ${BOT_VERSION}` })
-    .setTimestamp();
-
-  try {
-    await member.send({ embeds: [securityEmbed] });
-    console.log(`🛡️ [أمان GX] تم إرسال رسالة "تم تفعيل GX" بنجاح إلى ${member.user.tag} (${member.id})`);
-  } catch (err) {
-    console.log(`ℹ️ [أمان GX] تعذر إرسال رسالة الأمان بالخاص إلى ${member.user.tag} (الخاص مغلق لدى العضو).`);
-  } finally {
-    if (!sentList.includes(member.id)) {
-      sentList.push(member.id);
-      saveDMSecuritySent(sentList);
-    }
-  }
+  // Disabled: No security DM is sent to users.
+  return;
 }
 
 /**
- * 🛡️ Retroactively sends the "تم تفعيل GX" security message to all existing members.
+ * 🛡️ Security DM to existing members (Permanently disabled per user request).
  */
 async function sendSecurityDMToExistingMembers(guild) {
-  if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
-  try {
-    const allMembers = await guild.members.fetch().catch(() => guild.members.cache);
-    const sentList = loadDMSecuritySent();
-
-    for (const [, m] of allMembers) {
-      if (!m.user.bot && !sentList.includes(m.id)) {
-        await sendSecurityOnboardingDM(m);
-        await new Promise((resolve) => setTimeout(resolve, 800)); // Delay to prevent Discord API rate limiting
-      }
-    }
-  } catch (err) {
-    console.error('خطأ في إرسال رسائل الأمان للأعضاء الحاليين:', err.message);
-  }
+  // Disabled: No bulk security DM is sent to members.
+  return;
 }
 
 
@@ -3742,7 +3695,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
         welcomedList.push(member.id);
         saveWelcomedMembers(welcomedList);
       }
-      await sendSecurityOnboardingDM(member);
       await sendVerificationRequestToExecutives(member.guild, member);
     }
 
