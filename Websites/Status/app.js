@@ -1348,14 +1348,21 @@ function renderAppealsTable() {
         </span>
       </td>
       <td style="text-align: left;">
-        <button class="btn-action" onclick="openStatementModal('${a.targetId}')">مراجعة الإفادة</button>
+        <button class="btn-action" onclick="openStatementModal('${a.targetId}')">مراجعة</button>
         ${
           a.status === 'pending'
             ? `
-          <button class="btn-action primary" onclick="resolveAppeal('${a.targetId}', 'approve')">قبول وفك الحظر</button>
+          <button class="btn-action primary" onclick="resolveAppeal('${a.targetId}', 'approve')">قبول وفك العزل</button>
           <button class="btn-action danger" onclick="resolveAppeal('${a.targetId}', 'reject')">رفض</button>
         `
-            : ''
+            : a.status === 'approved'
+            ? `
+          <button class="btn-action warning" style="color: #FEE75C; border-color: rgba(254,231,92,0.4);" onclick="resolveAppeal('${a.targetId}', 'revoke')">إلغاء القبول وعزل</button>
+          <button class="btn-action danger" onclick="resolveAppeal('${a.targetId}', 'delete')">حذف</button>
+        `
+            : `
+          <button class="btn-action danger" onclick="resolveAppeal('${a.targetId}', 'delete')">حذف السجل</button>
+        `
         }
       </td>
     </tr>
@@ -1377,11 +1384,20 @@ window.openStatementModal = (targetId) => {
   if (actionsEl) {
     if (appeal.status === 'pending') {
       actionsEl.innerHTML = `
-        <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve')">قبول الطعن وفك الحظر</button>
-        <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject')">رفض الطعن</button>
+        <button class="btn-action primary" onclick="resolveAppeal('${targetId}', 'approve')">قبول الطعن وفك العزل</button>
+        <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'reject')">رفض وتثبيت الحظر</button>
+      `;
+    } else if (appeal.status === 'approved') {
+      actionsEl.innerHTML = `
+        <span class="badge-status approved" style="margin-left: 10px;">تم القبول مسبقاً (${appeal.handledByName || 'الإدارة'})</span>
+        <button class="btn-action warning" style="color: #FEE75C; border-color: rgba(254,231,92,0.4);" onclick="resolveAppeal('${targetId}', 'revoke')">إلغاء القبول وإعادة العزل</button>
+        <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'delete')">حذف السجل</button>
       `;
     } else {
-      actionsEl.innerHTML = `<span class="badge-status ${appeal.status}">تم البت في هذا الطلب (${appeal.status})</span>`;
+      actionsEl.innerHTML = `
+        <span class="badge-status rejected" style="margin-left: 10px;">مرفوض</span>
+        <button class="btn-action danger" onclick="resolveAppeal('${targetId}', 'delete')">حذف السجل نهائياً</button>
+      `;
     }
   }
 
@@ -1393,7 +1409,15 @@ window.closeStatementModal = () => {
 };
 
 window.resolveAppeal = async (targetId, action) => {
-  if (!adminToken) return;
+  if (!adminToken) return showToast('يرجى تسجيل الدخول أولاً', 'error');
+
+  if (action === 'delete') {
+    if (!confirm('هل أنت متأكد من رغبتك في حذف سجل هذا الطعن نهائياً؟')) return;
+  }
+  if (action === 'revoke') {
+    if (!confirm('هل أنت متأكد من رغبتك في إلغاء قرار القبول وسحب الرتب وإعادة عزل الحساب برتبة Banned By Anti-Spy؟')) return;
+  }
+
   try {
     const res = await apiFetch(`/api/admin/appeals/resolve`, {
       method: 'POST',
@@ -1406,10 +1430,17 @@ window.resolveAppeal = async (targetId, action) => {
 
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(`تم ${action === 'approve' ? 'قبول الطعن وإلغاء العزل وإرسال طلب التوثيق' : 'رفض الطعن وتثبيت الحظر'} بنجاح!`, 'success');
+      let toastMsg = 'تم تنفيذ الإجراء بنجاح!';
+      if (action === 'approve') toastMsg = 'تم قبول الطعن وإلغاء العزل وإرسال طلب التوثيق بنجاح!';
+      else if (action === 'reject') toastMsg = 'تم رفض الطعن وتثبيت الحظر النهائي بنجاح!';
+      else if (action === 'revoke') toastMsg = 'تم إلغاء قرار القبول وإعادة عزل الحساب بنجاح!';
+      else if (action === 'delete') toastMsg = 'تم حذف سجل الطعن بنجاح!';
+
+      showToast(toastMsg, 'success');
       window.closeStatementModal();
       loadAppeals();
       if (typeof loadVerifications === 'function') loadVerifications();
+      if (typeof loadOverviewData === 'function') loadOverviewData();
     } else {
       showToast(data.error || 'فشلت معالجة الطعن', 'error');
     }
