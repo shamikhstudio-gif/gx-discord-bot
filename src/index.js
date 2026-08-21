@@ -1340,20 +1340,24 @@ function isVerificationApprover(member, user) {
 }
 
 /**
- * 👑 Retrieves all members holding COO, CEO, or OWNER roles to receive private DM verification requests.
+ * 👑 Retrieves members holding CEO or OWNER roles to receive private DM verification/ticket/security requests (Strictly excluding COO per directive).
  */
 async function getExecutiveMembers(guild) {
   if (!guild) return [];
   const members = await guild.members.fetch().catch(() => guild.members.cache);
-  const approverRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
-  const approverNames = ['owner', 'ceo', 'coo'];
+  const approverRoleIds = ['1538485406922838066', '1538485672795570196']; // OWNER, CEO only
+  const approverNames = ['owner', 'ceo']; // Strictly NO 'coo'
+  const cooRoleId = '1538544110913454160';
 
   return members.filter((m) => {
     if (m.user.bot) return false;
     if (m.id === guild.ownerId) return true;
     if (m.id === '1152686277255237663' || m.id === '1484535997893967980') return true;
-    if (m.roles.cache.some((r) => approverRoleIds.includes(r.id))) return true;
-    if (m.roles.cache.some((r) => approverNames.some((n) => r.name.toLowerCase().trim().includes(n)))) return true;
+
+    // Strict exclusion: If member does NOT have Owner or CEO role, do NOT send DMs
+    const hasOwnerOrCeoRole = m.roles.cache.some((r) => approverRoleIds.includes(r.id) || approverNames.some((n) => r.name.toLowerCase().trim().includes(n)));
+    if (hasOwnerOrCeoRole) return true;
+
     return false;
   });
 }
