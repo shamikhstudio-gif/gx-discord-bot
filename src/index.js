@@ -82,7 +82,6 @@ const STATUS_MSG_FILE = path.join(DATA_DIR, 'status_message.json');
 const WARNINGS_FILE = path.join(DATA_DIR, 'warnings.json');
 const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
 const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
-const DM_SECURITY_SENT_FILE = path.join(DATA_DIR, 'dm_security_sent.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
 const VERIFICATION_REQUESTS_FILE = path.join(DATA_DIR, 'verification_requests.json');
 const EMERGENCY_STATE_FILE = path.join(DATA_DIR, 'emergency_state.json');
@@ -242,20 +241,6 @@ function loadTicketPanelData() {
 
 function saveTicketPanelData(data) {
   safeWriteJson(TICKET_PANEL_FILE, data);
-}
-
-function loadDMSecuritySent() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(DM_SECURITY_SENT_FILE)) {
-      return JSON.parse(fs.readFileSync(DM_SECURITY_SENT_FILE, 'utf-8'));
-    }
-  } catch {}
-  return [];
-}
-
-function saveDMSecuritySent(list) {
-  safeWriteJson(DM_SECURITY_SENT_FILE, list);
 }
 
 function isUntrustedMember(member) {
@@ -2293,23 +2278,6 @@ async function welcomeExistingMembersSequentially(guild) {
   saveWelcomeTracker(tracker);
   saveWelcomedMembers(welcomedList);
 }
-
-/**
- * 🛡️ Security DM onboarding (Permanently disabled per user request).
- */
-async function sendSecurityOnboardingDM(member) {
-  // Disabled: No security DM is sent to users.
-  return;
-}
-
-/**
- * 🛡️ Security DM to existing members (Permanently disabled per user request).
- */
-async function sendSecurityDMToExistingMembers(guild) {
-  // Disabled: No bulk security DM is sent to members.
-  return;
-}
-
 
 /**
  * 🎫 Support Ticket Thread Generator with Collected Data (Instant Modal Creation)
