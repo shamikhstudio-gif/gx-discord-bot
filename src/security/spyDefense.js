@@ -21,6 +21,37 @@ export const SPY_ACCOUNT_CUTOFF_TIMESTAMP = SPY_ACCOUNT_START_TIMESTAMP;
 
 export const SPY_BANNED_ROLE_NAME = 'Banned By Anti-Spy';
 
+/**
+ * 🔒 Applies total channel blackout across ALL channels and categories for the Anti-Spy role.
+ * Explicitly denies ViewChannel, SendMessages, Connect, ReadMessageHistory so the user sees NOTHING.
+ */
+export async function enforceAntiSpyChannelBlackout(guild, role) {
+  if (!guild || !role) return;
+  const botMember = guild.members.me;
+  if (!botMember?.permissions.has(PermissionFlagsBits.ManageChannels)) return;
+
+  const promises = [];
+  for (const [, channel] of guild.channels.cache) {
+    promises.push(
+      channel.permissionOverwrites.edit(role, {
+        ViewChannel: false,
+        SendMessages: false,
+        Connect: false,
+        Speak: false,
+        ReadMessageHistory: false,
+        CreateInstantInvite: false,
+        AddReactions: false,
+        SendMessagesInThreads: false,
+        CreatePublicThreads: false,
+        CreatePrivateThreads: false,
+        UseApplicationCommands: false
+      }, { reason: 'GX Security: Total Blind Blackout for Banned By Anti-Spy' }).catch(() => null)
+    );
+  }
+  await Promise.allSettled(promises);
+  console.log(`🔒 [عزل كلي للقنوات] تم حجب كافة قنوات وفئات السيرفر بالكامل (${guild.channels.cache.size} قناة/فئة) عن رتبة ${role.name}.`);
+}
+
 export async function findOrCreateAntiSpyRole(guild) {
   if (!guild) return null;
   let role = guild.roles.cache.find(
@@ -44,6 +75,10 @@ export async function findOrCreateAntiSpyRole(guild) {
     if (role.permissions.bitfield !== 0n) {
       await role.setPermissions(0n).catch(() => {});
     }
+  }
+
+  if (role) {
+    enforceAntiSpyChannelBlackout(guild, role).catch(() => {});
   }
   return role;
 }
