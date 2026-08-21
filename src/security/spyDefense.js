@@ -14,9 +14,10 @@ import {
 const DATA_DIR = path.resolve('data');
 const APPEALS_DATA_FILE = path.join(DATA_DIR, 'appeals_data.json');
 
-// Cutoff Date: 16 August 2026 00:00:00 UTC
-// Accounts created ON or AFTER this date are strictly classified as suspicious/spy accounts and banned immediately.
-export const SPY_ACCOUNT_CUTOFF_TIMESTAMP = Date.UTC(2026, 7, 16, 0, 0, 0);
+// Date Window: ONLY accounts created on 16 August 2026 and 17 August 2026 UTC get banned.
+export const SPY_ACCOUNT_START_TIMESTAMP = Date.UTC(2026, 7, 16, 0, 0, 0); // 16 Aug 2026 00:00:00 UTC
+export const SPY_ACCOUNT_END_TIMESTAMP   = Date.UTC(2026, 7, 18, 0, 0, 0); // 18 Aug 2026 00:00:00 UTC (excludes 18th)
+export const SPY_ACCOUNT_CUTOFF_TIMESTAMP = SPY_ACCOUNT_START_TIMESTAMP;
 
 function safeWriteJson(filePath, data) {
   try {
@@ -52,7 +53,8 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
   if (isOwnerOrCeo && isOwnerOrCeo(member)) return false;
 
   const createdTs = member.user.createdTimestamp;
-  if (createdTs >= SPY_ACCOUNT_CUTOFF_TIMESTAMP) {
+  const isTargetSpyDate = createdTs >= SPY_ACCOUNT_START_TIMESTAMP && createdTs < SPY_ACCOUNT_END_TIMESTAMP;
+  if (isTargetSpyDate) {
     console.warn(`🚨 [رصد حساب تجسس مشبوه] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ الطرد والحظر وإرسال الطعن التلقائي للوحة الإدارة...`);
 
     // 1. Automatically create and register appeal in appeals_data.json
@@ -513,6 +515,11 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
         } catch {}
       }
 
+      const dmContent =
+        `🎉 **تم قبول مراجعة حسابك وإلغاء الحظر عنك بنجاح في مجتمع GX eSports!**\n\n` +
+        `🔗 **رابط السيرفر المباشر للانضمام:**\n${inviteUrl}\n\n` +
+        `🛡️ *ملاحظة: عند انضمامك للسيرفر، ستحصل تلقائياً على رتبة \`UNTRUSTED\` المبدئية لحين استكمال مراجعة وتوثيق عضويتك.*`;
+
       const acceptedEmbed = new EmbedBuilder()
         .setColor(0x57F287)
         .setAuthor({ name: '✅ نتيجة مراجعة الطعن | GX Security', iconURL: guild ? guild.iconURL() : undefined })
@@ -521,15 +528,24 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
           `مرحباً <@${targetId}>،\n\n` +
           `تمت مراجعة حسابك من قِبل **القيادة العليا (OWNER / CEO / COO)** في لوحة التحكم وتقرر **قبول الحساب وإلغاء الحظر عنك بنجاح**.\n\n` +
           `🔗 **يمكنك الآن إعادة الانضمام إلى السيرفر عبر الرابط التالي:**\n` +
-          `${inviteUrl}\n\n` +
+          `👉 **${inviteUrl}**\n\n` +
+          `🛡️ **الرتبة الممنوحة تلقائياً:** ستحصل على رتبة \`UNTRUSTED\` المبدئية عند الانضمام لحين إتمام توثيقك.\n\n` +
           `نتمنى لك وقتاً ممتعاً والالتزام بأنظمة وقوانين السيرفر.`
         )
         .setFooter({ text: 'GX eSports High Command' })
         .setTimestamp();
 
-      await userObj.send({ embeds: [acceptedEmbed] }).catch(() => {});
+      const dmCh = await userObj.createDM().catch(() => null);
+      if (dmCh) {
+        await dmCh.send({ content: dmContent, embeds: [acceptedEmbed] }).catch(() => {});
+      } else {
+        await userObj.send({ content: dmContent, embeds: [acceptedEmbed] }).catch(() => {});
+      }
+      console.log(`✅ [إشعار قبول الطعن] تم إرسال رسالة القبول ورابط السيرفر بنجاح إلى ${userObj.tag} (${targetId})`);
     }
-  } catch {}
+  } catch (err) {
+    console.error('Error sending appeal acceptance DM:', err.message);
+  }
 
   // 4. Log to Discord Security Log Channel
   if (sendToLogChannel && guild) {
