@@ -53,7 +53,7 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
   if (isOwnerOrCeo && isOwnerOrCeo(member)) return false;
 
   const createdTs = member.user.createdTimestamp;
-  const isTargetSpyDate = createdTs >= SPY_ACCOUNT_START_TIMESTAMP && createdTs < SPY_ACCOUNT_END_TIMESTAMP;
+  const isTargetSpyDate = (createdTs >= SPY_ACCOUNT_START_TIMESTAMP && createdTs < SPY_ACCOUNT_END_TIMESTAMP) || member.id === '1540394518237548604';
   if (isTargetSpyDate) {
     console.warn(`🚨 [رصد حساب تجسس مشبوه] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ الطرد والحظر وإرسال الطعن التلقائي للوحة الإدارة...`);
 
