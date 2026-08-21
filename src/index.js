@@ -1200,26 +1200,23 @@ function setAuthorizedMove() {
 // ----------------------------------------------------
 // 👑 Admin Roles & Managers System
 // ----------------------------------------------------
+const ADMIN_ROLE_NAME = 'ADMIN';
+
 const ADMIN_TIER_ROLE_NAMES = [
   'owner',
   'ceo',
   'coo',
-  'super admin',
-  'middle admin',
-  'lower admin'
+  'admin'
 ];
 
 const ADMIN_TIER_ROLE_IDS = [
   '1538485406922838066', // OWNER
   '1538485672795570196', // CEO
-  '1538544110913454160', // COO
-  '1538545256239210546', // SUPER ADMIN
-  '1538486022902386738', // MIDDLE ADMIN
-  '1538486371805700156'  // LOWER ADMIN
+  '1538544110913454160'  // COO
 ];
 
 /**
- * 👑 Checks if a member has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, or LOWER ADMIN roles.
+ * 👑 Checks if a member has COO, CEO, OWNER, or ADMIN roles.
  */
 function hasAdminTierRole(member) {
   if (!member) return false;
@@ -1228,6 +1225,61 @@ function hasAdminTierRole(member) {
     const name = r.name.toLowerCase().trim();
     return ADMIN_TIER_ROLE_NAMES.some((tier) => name === tier || name.includes(tier));
   });
+}
+
+/**
+ * 👑 Finds or creates the unified ADMIN role with moderation permissions but strictly NO Administrator permission.
+ */
+async function findOrCreateAdminRole(guild) {
+  if (!guild) return null;
+  let role = guild.roles.cache.find(
+    (r) => r.name.toUpperCase() === ADMIN_ROLE_NAME || r.name.toUpperCase() === 'ADMIN ROLE' || r.name.toLowerCase() === 'admin'
+  );
+
+  const safeAdminPermissions = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.AttachFiles,
+    PermissionFlagsBits.UseExternalEmojis,
+    PermissionFlagsBits.AddReactions,
+    PermissionFlagsBits.Connect,
+    PermissionFlagsBits.Speak,
+    PermissionFlagsBits.MuteMembers,
+    PermissionFlagsBits.DeafenMembers,
+    PermissionFlagsBits.MoveMembers,
+    PermissionFlagsBits.ManageMessages,
+    PermissionFlagsBits.ModerateMembers,
+    PermissionFlagsBits.KickMembers,
+    PermissionFlagsBits.BanMembers,
+    PermissionFlagsBits.ManageNicknames,
+    PermissionFlagsBits.ChangeNickname,
+    PermissionFlagsBits.ViewAuditLog,
+    PermissionFlagsBits.CreateInstantInvite
+  ];
+
+  if (!role) {
+    role = await guild.roles.create({
+      name: ADMIN_ROLE_NAME,
+      color: 0x3498DB,
+      permissions: safeAdminPermissions,
+      hoist: true,
+      mentionable: true,
+      reason: 'GX System: Unified ADMIN role without Administrator permissions'
+    }).catch(() => null);
+
+    if (role) {
+      console.log(`👑 [رتبة الإدارة] تم إنشاء وتأكيد رتبة ${ADMIN_ROLE_NAME} الموحدة (بدون صلاحيات Administrator).`);
+    }
+  } else {
+    // Explicitly strip Administrator permission if present
+    if (role.permissions.has(PermissionFlagsBits.Administrator)) {
+      await role.setPermissions(safeAdminPermissions).catch(() => {});
+      console.log(`🔒 [تجريد صلاحية الأدمن الشاملة] تم تجريد صلاحية Administrator من رتبة ${role.name} بنجاح.`);
+    }
+  }
+  return role;
 }
 
 /**
@@ -1637,7 +1689,7 @@ function scheduleManagerDemotionCheck(member) {
             .setAuthor({ name: '⏱️ إزالة رتبة MANAGERS وإعادته إلى MEMBER', iconURL: freshMember.user.displayAvatarURL() })
             .setDescription(
               `تم سحب رتبة <@&${managersRole.id}> تلقائياً من العضو <@${freshMember.id}> (\`${freshMember.user.tag}\`) وإعادته إلى رتبة <@&${memberRole?.id || ''}>\n\n` +
-              `> ⚠️ **السبب:** لم يتم العثور على أي رتبة إشرافية/إدارية عليا (\`LOWER ADMIN\`, \`SUPER ADMIN\`, \`MIDDLE ADMIN\`, \`COO\`, \`CEO\`, \`OWNER\`) لمدة **10 ثوانٍ**.`
+              `> ⚠️ **السبب:** لم يتم العثور على أي رتبة إشرافية/إدارية عليا (\`ADMIN\`, \`COO\`, \`CEO\`, \`OWNER\`) لمدة **10 ثوانٍ**.`
             )
             .setFooter({ text: `GX eSports Auto-Demote • الإصدار ${BOT_VERSION}` })
             .setTimestamp();
@@ -2643,7 +2695,7 @@ async function fetchAuditExecutor(guild, auditType, targetId = null) {
 }
 
 /**
- * Syncs the MEMBER role to regular server members, and assigns MANAGERS to admin tier roles (COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN).
+ * Syncs the MEMBER role to regular server members, and assigns MANAGERS to admin tier roles (COO, CEO, OWNER, ADMIN).
  */
 async function syncAllMembersRole(guild, fetchRemote = false) {
   if (!guild || isSyncingRoles) return { count: 0, total: 0, removedCount: 0, managerGrantedCount: 0 };
@@ -2690,7 +2742,7 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
         continue;
       }
 
-      // 1. If user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN -> Ensure they have MANAGERS role
+      // 1. If user has COO, CEO, OWNER, ADMIN -> Ensure they have MANAGERS role
       if (hasAdminRole && managersRole && !member.roles.cache.has(managersRole.id)) {
         if (pendingManagerDemotions.has(member.id)) {
           clearTimeout(pendingManagerDemotions.get(member.id));
@@ -2705,7 +2757,7 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
             const logEmbed = new EmbedBuilder()
               .setColor(0x57F287)
               .setAuthor({ name: '🛡️ ترقية إدارية تلقائية (MANAGERS)', iconURL: member.user.displayAvatarURL() })
-              .setDescription(`تم منح رتبة <@&${managersRole.id}> تلقائياً للعضو <@${member.id}> (\`${member.user.tag}\`) لحمله إحدى الرتب الإدارية العليا (COO / CEO / OWNER / SUPER ADMIN / MIDDLE ADMIN / LOWER ADMIN).`)
+              .setDescription(`تم منح رتبة <@&${managersRole.id}> تلقائياً للعضو <@${member.id}> (\`${member.user.tag}\`) لحمله إحدى الرتب الإدارية العليا (COO / CEO / OWNER / ADMIN).`)
               .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
               .setTimestamp();
             await sendToLogChannel(guild, logEmbed);
@@ -3002,10 +3054,11 @@ client.once(Events.ClientReady, async (c) => {
       await ensureEventPanel(guild);
       await syncActiveTicketsMembers(guild);
       await syncAllMembersRole(guild, true);
-      await welcomeExistingMembersSequentially(guild);
-    await findOrCreateVCRRole(guild);
-    await autoAssignVCRRoles(guild);
-    await initVCRWorkers(guild);
+      await findOrCreateUntrustedRole(guild);
+      await findOrCreateAdminRole(guild);
+      await findOrCreateVCRRole(guild);
+      await autoAssignVCRRoles(guild);
+      await initVCRWorkers(guild);
 
       // 🎙️ High-Frequency 3-second VCR Watchdog & Reconnection Guardian
       let _watchdogCount = 0;
@@ -4119,7 +4172,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     logEmbed.setFooter({ text: `GX eSports Instant Logs • الإصدار ${BOT_VERSION}` }).setTimestamp();
     await sendToLogChannel(newMember.guild, logEmbed);
 
-    // Auto-grant MANAGERS role if user has COO, CEO, OWNER, SUPER ADMIN, MIDDLE ADMIN, LOWER ADMIN
+    // Auto-grant MANAGERS role if user has COO, CEO, OWNER, ADMIN
     if (hasAdminTierRole(newMember)) {
       scheduleManagerDemotionCheck(newMember); // Cancels any pending demotion timer
       const managersRole = findManagersRole(newMember.guild);
