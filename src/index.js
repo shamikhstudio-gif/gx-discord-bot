@@ -7,6 +7,7 @@ import {
   executeAppealRevocation,
   deleteAppealRecord,
   loadAppealsData,
+  saveAppealsData,
   findOrCreateAntiSpyRole,
   enforceAntiSpyChannelBlackout,
   SPY_ACCOUNT_CUTOFF_TIMESTAMP
@@ -7827,6 +7828,16 @@ const healthServer = http.createServer(async (req, res) => {
     const rawAppeals = loadAppealsData();
     const list = Object.values(rawAppeals).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return sendJsonResponse(res, 200, { success: true, appeals: list });
+  }
+
+  // 6.5. Admin Clear All Appeals: POST /api/admin/appeals/clear-all
+  if (url === '/api/admin/appeals/clear-all' && method === 'POST') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    saveAppealsData({});
+    logActivity('admin', 'All Appeals Cleared', 'Admin cleared all appeal records from Control Panel');
+    return sendJsonResponse(res, 200, { success: true, message: 'تم مسح كافة سجلات الطعون بنجاح' });
   }
 
   // 7. Admin Resolve Appeal: POST /api/admin/appeals/resolve
