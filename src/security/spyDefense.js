@@ -129,23 +129,27 @@ export async function handleAppealButton(interaction, client, sendToLogChannel, 
   if (customId.startsWith('appeal_ban_')) {
     const targetId = customId.replace('appeal_ban_', '');
 
-    const appealModal = new ModalBuilder()
-      .setCustomId(`modal_appeal_${targetId}`)
-      .setTitle('⚖️ تقديم طعن أمني | GX Security');
+    try {
+      const appealModal = new ModalBuilder()
+        .setCustomId(`modal_appeal_${targetId}`)
+        .setTitle('تقديم طعن أمني - GX Security');
 
-    const appealReasonInput = new TextInputBuilder()
-      .setCustomId('appeal_statement')
-      .setLabel('سبب الطعن والتوضيح للإدارة العليا:')
-      .setPlaceholder('اشرح بالتفصيل سبب وجودك وما إذا كان الحساب يخصك لنقله للقيادة العليا...')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true)
-      .setMinLength(5)
-      .setMaxLength(1000);
+      const appealReasonInput = new TextInputBuilder()
+        .setCustomId('appeal_statement')
+        .setLabel('سبب وجودك والتوضيح للإدارة العليا:')
+        .setPlaceholder('اشرح بالتفصيل سبب وجودك وما إذا كان الحساب يخصك لنقله للقيادة العليا...')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMinLength(5)
+        .setMaxLength(1000);
 
-    const row = new ActionRowBuilder().addComponents(appealReasonInput);
-    appealModal.addComponents(row);
+      const row = new ActionRowBuilder().addComponents(appealReasonInput);
+      appealModal.addComponents(row);
 
-    await interaction.showModal(appealModal);
+      await interaction.showModal(appealModal);
+    } catch (err) {
+      console.error('Error showing appeal modal:', err.message);
+    }
     return true;
   }
 
