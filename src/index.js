@@ -2267,7 +2267,7 @@ async function welcomeExistingMembersSequentially(guild) {
   let countIndex = 1;
   for (const [, member] of humanMembers) {
       // Check & ban suspicious accounts created on/after 16 August 2026
-      if (await enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION)) continue;
+      if (await enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION, getExecutiveMembers)) continue;
     if (!tracker.members[member.id]) {
       tracker.members[member.id] = {
         number: countIndex,
@@ -3686,7 +3686,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
     if (member.partial) await member.fetch();
 
     // 🛡️ SPY & SUSPICIOUS ACCOUNT DEFENSE (Created on or after August 16, 2026)
-    const wasSpy = await enforceSuspiciousAccountBan(member, member.guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION);
+    const wasSpy = await enforceSuspiciousAccountBan(member, member.guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION, getExecutiveMembers);
     if (wasSpy) return;
 
     // Check if new member is one of our VCR Bots
