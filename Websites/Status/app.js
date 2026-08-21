@@ -1733,16 +1733,63 @@ window.triggerMassSync = async () => {
 /* ══════════════════════════════════════════════════════
    OFFICIAL BROADCAST STUDIO (ARABIC)
    ══════════════════════════════════════════════════════ */
+function updateBroadcastPreview() {
+  const mention = $('broadcastMention')?.value || 'none';
+  const title = $('broadcastTitle')?.value.trim() || 'إشعار من الإدارة العليا';
+  const message = $('broadcastMessage')?.value.trim() || 'تفاصيل الإعلان ستظهر هنا مباشرة أثناء الكتابة…';
+  const imageUrl = $('broadcastImage')?.value.trim();
+  const colorNum = parseInt($('broadcastColor')?.value || '16777215', 10);
+  const colorHex = '#' + colorNum.toString(16).padStart(6, '0');
+
+  const mentionEl = $('broadcastPreviewMention');
+  if (mentionEl) {
+    if (mention === 'everyone') {
+      mentionEl.style.display = 'block';
+      mentionEl.textContent = '@everyone';
+    } else if (mention === 'here') {
+      mentionEl.style.display = 'block';
+      mentionEl.textContent = '@here';
+    } else {
+      mentionEl.style.display = 'none';
+    }
+  }
+
+  if ($('broadcastPreviewTitle')) $('broadcastPreviewTitle').textContent = title;
+  if ($('broadcastPreviewDesc')) $('broadcastPreviewDesc').textContent = message;
+
+  const embedBox = $('broadcastPreviewEmbed');
+  if (embedBox) embedBox.style.borderRightColor = colorHex;
+
+  const imgContainer = $('broadcastPreviewImageContainer');
+  const imgEl = $('broadcastPreviewImg');
+  if (imgContainer && imgEl) {
+    if (imageUrl && imageUrl.startsWith('http')) {
+      imgEl.src = imageUrl;
+      imgContainer.style.display = 'block';
+    } else {
+      imgContainer.style.display = 'none';
+    }
+  }
+}
+
+// Bind live preview listeners
+['broadcastMention', 'broadcastTitle', 'broadcastMessage', 'broadcastImage', 'broadcastColor'].forEach((id) => {
+  $(id)?.addEventListener('input', updateBroadcastPreview);
+  $(id)?.addEventListener('change', updateBroadcastPreview);
+});
+
 window.sendBroadcast = async () => {
   if (!adminToken) return showToast('يرجى تسجيل الدخول أولاً', 'error');
 
   const channelId = $('broadcastChannelSelect')?.value;
+  const mention = $('broadcastMention')?.value || 'none';
   const title = $('broadcastTitle')?.value.trim();
   const message = $('broadcastMessage')?.value.trim();
+  const imageUrl = $('broadcastImage')?.value.trim() || null;
   const color = parseInt($('broadcastColor')?.value || '16777215', 10);
 
   if (!channelId || !title || !message) {
-    return showToast('يرجى تعبئة جميع حقول الإعلان الرسمي', 'warning');
+    return showToast('يرجى اختيار الروم وكتابة عنوان ونص الإعلان الرسمي', 'warning');
   }
 
   showToast('جارٍ إرسال ونشر الإعلان الرسمي…', 'info');
@@ -1756,17 +1803,21 @@ window.sendBroadcast = async () => {
       },
       body: JSON.stringify({
         channelId,
+        mention,
         title,
         message,
+        imageUrl,
         color
       })
     });
 
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast('تم نشر الإعلان الرسمي بنجاح في ديسكورد!', 'success');
-      $('broadcastTitle').value = '';
-      $('broadcastMessage').value = '';
+      showToast(data.message || 'تم نشر الإعلان الرسمي بنجاح في ديسكورد!', 'success');
+      if ($('broadcastTitle')) $('broadcastTitle').value = '';
+      if ($('broadcastMessage')) $('broadcastMessage').value = '';
+      if ($('broadcastImage')) $('broadcastImage').value = '';
+      updateBroadcastPreview();
     } else {
       showToast(data.error || 'فشل إرسال الإعلان', 'error');
     }
