@@ -1,4 +1,6 @@
-export const LOGO_URL = './logo.jpg';
+import { GX_LOGO_DATA_URI } from './logo.js';
+
+export const LOGO_URL = GX_LOGO_DATA_URI;
 
 /* ══════════════════════════════════════════════════════
    GLOBAL STATE & CONSTANTS
@@ -233,7 +235,8 @@ function formatTimeAgo(timestamp) {
 document.addEventListener('DOMContentLoaded', () => {
   // Inject official GX logo
   document.querySelectorAll('.gx-logo-img').forEach((img) => {
-    img.src = './logo.jpg';
+    img.src = GX_LOGO_DATA_URI;
+    img.onerror = () => { img.src = GX_LOGO_DATA_URI; };
   });
 
   // Check auth state
@@ -605,7 +608,7 @@ function renderTranscript(transcript, ticket) {
     .map((msg) => {
       const isAgent = !!msg.isAgent || msg.authorTag.includes('الدعم');
       const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-      const avatarUrl = isAgent ? './logo.jpg' : (ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png');
+      const avatarUrl = isAgent ? GX_LOGO_DATA_URI : (ticket.userAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png');
       const imagesHtml = (msg.attachments || [])
         .map((img) => `<a href="${img}" target="_blank"><img src="${img}" class="msg-attachment-img" alt="مرفق" /></a>`)
         .join('');
