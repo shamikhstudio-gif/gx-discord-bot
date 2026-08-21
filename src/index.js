@@ -2706,6 +2706,18 @@ async function syncAllMembersRole(guild, fetchRemote = false) {
     let managerGrantedCount = 0;
 
     for (const [, member] of humanMembers) {
+      const hasAntiSpyRole = member.roles.cache.some((r) => r.name.toLowerCase() === 'banned by anti-spy');
+      if (hasAntiSpyRole) {
+        // Quarantined by Anti-Spy: strictly maintain quarantine, do NOT assign MEMBER or UNTRUSTED
+        if (member.roles.cache.has(role.id)) {
+          try { await member.roles.remove(role); } catch {}
+        }
+        if (untrustedRole && member.roles.cache.has(untrustedRole.id)) {
+          try { await member.roles.remove(untrustedRole); } catch {}
+        }
+        continue;
+      }
+
       const hasAdminRole = hasAdminTierRole(member);
       const isManager = isManagerMember(member);
       const hasMemberRole = member.roles.cache.has(role.id);
@@ -4007,6 +4019,15 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
+  // 2.5. Intercept and delete any message from Banned By Anti-Spy quarantined members
+  const isAntiSpyQuarantined = message.member?.roles.cache.some((r) => r.name.toLowerCase() === 'banned by anti-spy');
+  if (isAntiSpyQuarantined) {
+    try {
+      await message.delete().catch(() => {});
+    } catch {}
+    return;
+  }
+
   // 3. Intercept any message sent by untrusted members in general channels
   const isUntrusted = isUntrustedMember(message.member) || message.member?.roles.cache.some((r) => r.name.toUpperCase() === UNTRUSTED_ROLE_NAME);
   if (isUntrusted) {
@@ -4645,7 +4666,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 🎫 BUTTON INTERACTIONS HANDLER (Tickets & Events)
     // ----------------------------------------------------
     if (interaction.isButton()) {
-      if (await handleAppealButton(interaction, client, sendToLogChannel, isVerificationApprover, ALLOWED_GUILD_ID, BOT_VERSION)) return;
+      if (await handleAppealButton(interaction, client, sendToLogChannel, isVerificationApprover, ALLOWED_GUILD_ID, BOT_VERSION, sendVerificationRequestToExecutives)) return;
       // ====================================================
       // 🎉 EVENT BUTTON INTERACTIONS (انضمام / انسحاب / تذكير / مشاركون)
       // ====================================================
