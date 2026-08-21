@@ -1499,7 +1499,7 @@ async function executeVerificationApproval(targetId, client, approverName, guild
     .setTitle('👑 تهانينا! تمت ترقيتك وتفعيل حسابك بالكامل')
     .setDescription(
       `أهلاً بك <@${targetId}>! تمت مراجعة وتوثيق حسابك بنجاح من قِبل الإدارة العليا (\`${approverName}\`).\n\n` +
-      `✅ **تم منحك رتبة:** <@&${memberRole ? memberRole.id : ''}>\n` +
+      `✅ **تم منحك رتبة:** \`${memberRole ? memberRole.name : 'MEMBER'}\` (كامل الصلاحيات)\n` +
       `🗑️ **تمت إزالة رتبة:** \`UNTRUSTED\`\n` +
       `💬 **أصبح بإمكانك الآن الكتابة والتفاعل والمشاركة في جميع قنوات السيرفر بحرية.**\n\n` +
       `نتمنى لك أوقاتاً ممتعة معنا في **GX eSports**! 🎮🔥`
