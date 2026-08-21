@@ -118,6 +118,20 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
   const createdTs = member.user.createdTimestamp;
   const isTargetSpyDate = (createdTs >= SPY_ACCOUNT_START_TIMESTAMP && createdTs < SPY_ACCOUNT_END_TIMESTAMP) || member.id === '1540394518237548604';
   if (isTargetSpyDate) {
+    const appealsData = loadAppealsData();
+    const existingAppeal = appealsData[member.id];
+
+    // If already approved by High Command, NEVER isolate or re-ban!
+    if (existingAppeal && existingAppeal.status === 'approved') {
+      return false;
+    }
+
+    // Check if member already has the Anti-Spy role or an existing pending appeal (Prevent notification spam loops)
+    const hasAntiSpyRole = member.roles.cache.some(r => r.name.toLowerCase() === SPY_BANNED_ROLE_NAME.toLowerCase());
+    if (hasAntiSpyRole || (existingAppeal && existingAppeal.status === 'pending')) {
+      return true; // Already quarantined, do not resend DMs or log spam
+    }
+
     console.warn(`🚨 [رصد حساب مشبوه - Anti-Spy] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ العزل برتبة "${SPY_BANNED_ROLE_NAME}" وتجريد كافة الصلاحيات...`);
 
     // 1. Find or create the "Banned By Anti-Spy" role with 0 permissions
@@ -140,7 +154,6 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
     }
 
     // 4. Automatically create and register appeal in appeals_data.json
-    const appealsData = loadAppealsData();
     const appealRecord = {
       targetId: member.id,
       userTag: member.user.tag,
@@ -472,7 +485,7 @@ export async function handleAppealModalSubmit(interaction, client, getExecutiveM
 }
 
 /**
- * 👑 Executes appeal approval from the Control Panel (Unbans / Lifts Anti-Spy quarantine + Assigns UNTRUSTED + Sends verification request to executives).
+ * 👑 Executes appeal approval from the Control Panel (Unbans / Lifts Anti-Spy quarantine + Assigns MEMBER + Sends verification request to executives).
  */
 export async function executeAppealApproval(targetId, client, approverTag = 'GX Control Panel', allowedGuildId = '1537461174222725120', sendToLogChannel = null, botVersion = '1.0', sendVerificationRequestToExecutives = null) {
   const guild = client.guilds.cache.get(allowedGuildId);
@@ -486,25 +499,34 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
       await guild.bans.remove(targetId, `قبول الطعن عبر لوحة التحكم بواسطة ${approverTag}`).catch(() => {});
     } catch {}
 
-    // Check if member is still in guild (in quarantine with Banned By Anti-Spy role)
+    // Check if member is in guild
     try {
       const member = await guild.members.fetch(targetId).catch(() => null);
       if (member) {
+        const botMember = guild.members.me;
+
         // Remove Banned By Anti-Spy role
         const antiSpyRole = await findOrCreateAntiSpyRole(guild);
         if (antiSpyRole && member.roles.cache.has(antiSpyRole.id)) {
           await member.roles.remove(antiSpyRole).catch(() => {});
         }
-        // Remove any timeout
-        if (member.isCommunicationDisabled()) {
-          await member.timeout(null).catch(() => {});
-        }
-        // Assign default UNTRUSTED role
+
+        // Remove UNTRUSTED role if present
         const untrustedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'untrusted');
-        if (untrustedRole) {
-          await member.roles.add(untrustedRole).catch(() => {});
+        if (untrustedRole && member.roles.cache.has(untrustedRole.id)) {
+          await member.roles.remove(untrustedRole).catch(() => {});
         }
-        console.log(`✅ [إلغاء عزل Anti-Spy] تم رفع رتبة Banned By Anti-Spy ومنح UNTRUSTED للعضو ${member.user.tag}.`);
+
+        // Remove any timeout unconditionally
+        await member.timeout(null, `Appeal approved by ${approverTag}`).catch(() => {});
+
+        // Assign MEMBER role directly (1-click full approval)
+        const memberRole = guild.roles.cache.find(r => r.name.toUpperCase() === 'MEMBER' || r.id === '1538491823901769749');
+        if (memberRole && botMember && botMember.roles.highest.comparePositionTo(memberRole) > 0) {
+          await member.roles.add(memberRole).catch(() => {});
+        }
+
+        console.log(`✅ [إلغاء عزل Anti-Spy] تم رفع رتبة Banned By Anti-Spy وفك التجميد ومنح MEMBER للعضو ${member.user.tag}.`);
 
         // 📩 Automatically trigger verification request to Executives DM & Control Panel
         if (typeof sendVerificationRequestToExecutives === 'function') {
@@ -548,9 +570,8 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
       }
 
       const dmContent =
-        `🎉 **تم قبول مراجعة حسابك وإلغاء العزل الأمني بنجاح في مجتمع GX eSports!**\n\n` +
-        `🔗 **رابط السيرفر:**\n${inviteUrl}\n\n` +
-        `🛡️ **الرتبة الممنوحة تلقائياً:** تم منحك رتبة \`UNTRUSTED\` المبدئية لحين استكمال مراجعة وتوثيق عضويتك.`;
+        `🎉 **تم قبول مراجعة حسابك وإلغاء العزل الأمني وترقيتك إلى رتبة MEMBER بنجاح!**\n\n` +
+        `🔗 **رابط السيرفر:**\n${inviteUrl}`;
 
       const acceptedEmbed = new EmbedBuilder()
         .setColor(0x57F287)
