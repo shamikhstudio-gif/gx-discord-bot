@@ -1406,8 +1406,10 @@ window.resolveAppeal = async (targetId, action) => {
 
     const data = await res.json();
     if (res.ok && data.success) {
-      showToast(`تم ${action === 'approve' ? 'قبول الطعن وفك الحظر وإشعار العضو بالخاص' : 'رفض الطعن'} بنجاح!`, 'success');
+      showToast(`تم ${action === 'approve' ? 'قبول الطعن وإلغاء العزل وإرسال طلب التوثيق' : 'رفض الطعن وتثبيت الحظر'} بنجاح!`, 'success');
+      window.closeStatementModal();
       loadAppeals();
+      if (typeof loadVerifications === 'function') loadVerifications();
     } else {
       showToast(data.error || 'فشلت معالجة الطعن', 'error');
     }
