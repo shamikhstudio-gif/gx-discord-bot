@@ -7618,6 +7618,53 @@ const healthServer = http.createServer(async (req, res) => {
     });
   }
 
+  // 2.5 Server Invite Endpoint
+  if (url === '/api/invite' || url === '/api/admin/invite') {
+    try {
+      const targetGuild = client.guilds.cache.get(ALLOWED_GUILD_ID);
+      if (!targetGuild) {
+        return sendJsonResponse(res, 404, { success: false, error: 'Guild not found' });
+      }
+
+      let vanityUrl = targetGuild.vanityURLCode ? `https://discord.gg/${targetGuild.vanityURLCode}` : null;
+      let targetInvite = null;
+
+      try {
+        const fetchedInvites = await targetGuild.invites.fetch();
+        targetInvite = fetchedInvites.find(inv => !inv.expiresTimestamp || inv.expiresTimestamp > Date.now()) || fetchedInvites.first();
+      } catch {}
+
+      if (!targetInvite) {
+        const channels = await targetGuild.channels.fetch().catch(() => targetGuild.channels.cache);
+        const welcomeCh = channels.get(WELCOME_CHANNEL_ID) || channels.find(c => c && c.isTextBased && c.isTextBased() && c.viewable);
+        if (welcomeCh) {
+          try {
+            targetInvite = await welcomeCh.createInvite({
+              maxAge: 0,
+              maxUses: 0,
+              unique: false,
+              reason: 'Testing invite generated on request'
+            });
+          } catch (err) {
+            console.error('Error creating invite:', err.message);
+          }
+        }
+      }
+
+      const inviteLink = targetInvite ? targetInvite.url : (vanityUrl || 'https://discord.gg/gxesports');
+
+      return sendJsonResponse(res, 200, {
+        success: true,
+        inviteUrl: inviteLink,
+        code: targetInvite?.code || targetGuild.vanityURLCode || 'gxesports',
+        guildName: targetGuild.name,
+        guildId: targetGuild.id
+      });
+    } catch (err) {
+      return sendJsonResponse(res, 500, { success: false, error: err.message });
+    }
+  }
+
   // 3. Server-Sent Events (SSE) Real-time Stream
   if (url === '/api/stream') {
     res.writeHead(200, {
