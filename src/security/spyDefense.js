@@ -538,9 +538,9 @@ export async function handleAppealModalSubmit(interaction, client, getExecutiveM
 }
 
 /**
- * 👑 Executes appeal approval from the Control Panel (Unbans / Lifts Anti-Spy quarantine + Assigns UNTRUSTED + Sends invite DM).
+ * 👑 Executes appeal approval from the Control Panel (Unbans / Lifts Anti-Spy quarantine + Assigns UNTRUSTED + Sends verification request to executives).
  */
-export async function executeAppealApproval(targetId, client, approverTag = 'GX Control Panel', allowedGuildId = '1537461174222725120', sendToLogChannel = null, botVersion = '1.0') {
+export async function executeAppealApproval(targetId, client, approverTag = 'GX Control Panel', allowedGuildId = '1537461174222725120', sendToLogChannel = null, botVersion = '1.0', sendVerificationRequestToExecutives = null) {
   const guild = client.guilds.cache.get(allowedGuildId);
   const appealsData = loadAppealsData();
   const appeal = appealsData[targetId];
@@ -571,6 +571,12 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
           await member.roles.add(untrustedRole).catch(() => {});
         }
         console.log(`✅ [إلغاء عزل Anti-Spy] تم رفع رتبة Banned By Anti-Spy ومنح UNTRUSTED للعضو ${member.user.tag}.`);
+
+        // 📩 Automatically trigger verification request to Executives DM & Control Panel
+        if (typeof sendVerificationRequestToExecutives === 'function') {
+          await sendVerificationRequestToExecutives(guild, member).catch(() => {});
+          console.log(`📩 [طلب توثيق تلقائي] تم إرسال طلب التوثيق للقيادة بعد قبول الطعن للعضو ${member.user.tag}.`);
+        }
       }
     } catch (err) {
       console.warn('Error adjusting member roles on approval:', err.message);
