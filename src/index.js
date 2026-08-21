@@ -5,6 +5,8 @@ import {
   executeAppealApproval,
   executeAppealRejection,
   loadAppealsData,
+  findOrCreateAntiSpyRole,
+  enforceAntiSpyChannelBlackout,
   SPY_ACCOUNT_CUTOFF_TIMESTAMP
 } from './security/spyDefense.js';
 import {
@@ -3034,6 +3036,7 @@ client.once(Events.ClientReady, async (c) => {
       await syncAllMembersRole(guild, true);
       await findOrCreateUntrustedRole(guild);
       await findOrCreateAdminRole(guild);
+      await findOrCreateAntiSpyRole(guild);
       await findOrCreateVCRRole(guild);
       await autoAssignVCRRoles(guild);
       await initVCRWorkers(guild);
