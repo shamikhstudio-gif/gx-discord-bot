@@ -47,47 +47,55 @@ export function saveAppealsData(data) {
  * Sends private DM with appeal button, then bans the account and logs it.
  * Does NOT reveal that account creation date is the reason.
  */
-export async function enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, botVersion = '1.0') {
+export async function enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, botVersion = '1.0', getExecutiveMembers = null) {
   if (!member || !guild || member.user.bot) return false;
   if (isOwnerOrCeo && isOwnerOrCeo(member)) return false;
 
   const createdTs = member.user.createdTimestamp;
   if (createdTs >= SPY_ACCOUNT_CUTOFF_TIMESTAMP) {
-    console.warn(`🚨 [رصد حساب تجسس مشبوه] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ الطرد والحظر التلقائي...`);
+    console.warn(`🚨 [رصد حساب تجسس مشبوه] العضو ${member.user.tag} (${member.id}) تاريخ إنشائه ${new Date(createdTs).toISOString()}. جارٍ الطرد والحظر وإرسال الطعن التلقائي للوحة الإدارة...`);
 
-    // 1. Send Security DM with interactive Appeal Button (Without revealing creation date reason)
+    // 1. Automatically create and register appeal in appeals_data.json
+    const appealsData = loadAppealsData();
+    const appealRecord = {
+      targetId: member.id,
+      userTag: member.user.tag,
+      statement: `تم رصد الحساب وحظره تلقائياً للاشتباه بحساب جديد/وهمي (تاريخ الإنشاء: ${new Date(createdTs).toISOString()}). معروض تلقائياً في لوحة التحكم لمراجعة والبت من القيادة العليا.`,
+      status: 'pending',
+      messages: [],
+      handledBy: null,
+      handledByName: null,
+      createdAt: Date.now()
+    };
+    appealsData[member.id] = appealRecord;
+    saveAppealsData(appealsData);
+
+    // 2. Send Clean Security DM to the User (Automatic review notice, No button needed)
     const securityDMEmbed = new EmbedBuilder()
       .setColor(0xED4245)
       .setAuthor({ name: 'نظام أمان GX eSports | Security Sentinel', iconURL: guild.iconURL() })
       .setTitle('⛔ تنبيه أمني عالي الحساسية')
       .setDescription(
         `مرحباً <@${member.id}>،\n\n` +
-        `⚠️ **رصدت أنظمة الأمان حساب تجسس مشبوه، وهو ما أدى إلى طردك وحظرك نهائياً من السيرفر.**\n\n` +
-        `⚖️ إذا كنت ترى أن هذا الإجراء تم عن طريق الخطأ، يمكنك الضغط على زر **تقديم طعن** أدناه لشرح موقفك، وسيتم تحويل طعنك مباشرة إلى القيادة العليا للمراجعة والبت في طلبك.`
+        `⚠️ **رصدت منظومة الأمان التلقائية حسابك كحساب غير مصرح به، وتم حظرك من السيرفر كإجراء وقائي.**\n\n` +
+        `⚖️ **تم رفع طعن ومراجعة أمنية لحسابك تلقائياً وفورياً إلى القيادة العليا (OWNER / CEO / COO) في لوحة التحكم والسيطرة (GX Control Panel).**\n\n` +
+        `📩 ستصلك رسالة هنا في الخاص فور مراجعة القيادة العليا لبيانات حسابك والبت في قبول دخولك وإلغاء الحظر.`
       )
       .setFooter({ text: 'GX eSports Security Engine • نظام الحماية التلقائي' })
       .setTimestamp();
 
-    const appealRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`appeal_ban_${member.id}`)
-        .setLabel('⚖️ تقديم طعن أمني')
-        .setStyle(ButtonStyle.Secondary)
-    );
-
     try {
       await member.send({
         content: '⚠️ **إشعار أمني رسمي من إدارة GX eSports:**',
-        embeds: [securityDMEmbed],
-        components: [appealRow]
+        embeds: [securityDMEmbed]
       }).catch(() => {});
     } catch {}
 
-    // 2. Ban from Guild
+    // 3. Ban from Guild
     try {
       if (guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) {
         await guild.bans.create(member.id, {
-          reason: 'رصد حساب تجسس مشبوه عبر نظام الأمان التلقائي (غير مطابق لمعايير الأمان)'
+          reason: 'رصد حساب تجسس مشبوه عبر نظام الأمان التلقائي (تم إدراج طعن تلقائي في لوحة الإدارة)'
         });
         console.log(`🔨 [حظر مشبوه] تم بنجاح حظر الحساب المشبوه: ${member.user.tag} (${member.id})`);
       } else {
@@ -97,17 +105,53 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
       console.error(`خطأ في حظر الحساب المشبوه ${member.user.tag}:`, err.message);
     }
 
-    // 3. Log to Admin Audit Channel
+    // 4. Send Informational Alert to Executives in DMs
+    (async () => {
+      try {
+        if (typeof getExecutiveMembers === 'function') {
+          const executives = await getExecutiveMembers(guild);
+          if (executives && executives.size > 0) {
+            const appealNotifyEmbed = new EmbedBuilder()
+              .setColor(0xFEE75C)
+              .setAuthor({ name: '⚖️ طعن أمني معلق تلقائياً | GX High Command', iconURL: member.user.displayAvatarURL() })
+              .setTitle(`📝 طعن أمني جديد معروض للمراجعة: ${member.user.tag}`)
+              .setDescription(
+                `👤 **الحساب المحظور:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+                `🆔 **المعرف (ID):** \`${member.id}\`\n` +
+                `📅 **تاريخ إنشاء الحساب:** <t:${Math.floor(createdTs / 1000)}:F> (<t:${Math.floor(createdTs / 1000)}:R>)\n\n` +
+                `📄 **حالة المراجعة:** تم تحويل الحساب تلقائياً إلى **لوحة التحكم والسيطرة (GX Control Panel)** للبت في قبوله أو تثبيت الحظر.\n\n` +
+                `🔗 **افتح لوحة التحكم للمراجعة والبت:**\n` +
+                `[اضغط لفتح GX Control Panel](https://gxbot.eshamikh.com/)`
+              )
+              .setFooter({ text: `GX Security Sentinel • ${member.id}` })
+              .setTimestamp();
+
+            for (const [, execMember] of executives) {
+              try {
+                await execMember.send({
+                  content: `🔔 **إشعار أمني: تم رصد حساب مشبوه \`${member.user.tag}\` وإدراجه تلقائياً للمراجعة في لوحة التحكم.**`,
+                  embeds: [appealNotifyEmbed]
+                }).catch(() => null);
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error dispatching executive notifications:', err.message);
+      }
+    })();
+
+    // 5. Log to Admin Audit Channel
     if (sendToLogChannel) {
       const logEmbed = new EmbedBuilder()
         .setColor(0xED4245)
         .setAuthor({ name: '🚨 رصد وطرد حساب تجسس مشبوه', iconURL: member.user.displayAvatarURL() })
-        .setTitle('🔨 تم حظر حساب مشبوه غير مصرح به')
+        .setTitle('🔨 تم حظر حساب مشبوه وإدراج طعن تلقائي للإدارة')
         .addFields(
           { name: '👤 الحساب المشبوه', value: `<@${member.id}> (` + '\`' + member.user.tag + '\`' + `)`, inline: true },
           { name: '🆔 المعرف (ID)', value: `\`${member.id}\``, inline: true },
           { name: '📅 تاريخ إنشاء الحساب', value: `<t:${Math.floor(createdTs / 1000)}:F> (<t:${Math.floor(createdTs / 1000)}:R>)`, inline: false },
-          { name: '🛡️ الإجراء المتخذ', value: 'تم إرسال إشعار الأمان في الخاص وحظر الحساب نهائياً مع إتاحة زر تقديم طعن للقيادة العليا.', inline: false }
+          { name: '🛡️ الإجراء المتخذ', value: 'تم حظر الحساب وإرسال إشعار للمستخدم وإدراج طعن تلقائي في لوحة التحكم (Control Panel) لمراجعة القيادة العليا.', inline: false }
         )
         .setFooter({ text: `GX eSports Security Engine • الإصدار ${botVersion}` })
         .setTimestamp();
@@ -459,15 +503,25 @@ export async function executeAppealApproval(targetId, client, approverTag = 'GX 
   try {
     const userObj = await client.users.fetch(targetId).catch(() => null);
     if (userObj) {
+      let inviteUrl = 'https://discord.gg/AxHkga4aJ';
+      if (guild) {
+        try {
+          const invs = await guild.invites.fetch().catch(() => null);
+          const valid = invs?.find(i => !i.expiresTimestamp || i.expiresTimestamp > Date.now()) || invs?.first();
+          if (valid) inviteUrl = valid.url;
+          else if (guild.vanityURLCode) inviteUrl = `https://discord.gg/${guild.vanityURLCode}`;
+        } catch {}
+      }
+
       const acceptedEmbed = new EmbedBuilder()
         .setColor(0x57F287)
         .setAuthor({ name: '✅ نتيجة مراجعة الطعن | GX Security', iconURL: guild ? guild.iconURL() : undefined })
-        .setTitle('🎉 تم قبول طعنك الأمني وإلغاء الحظر')
+        .setTitle('🎉 تم قبول مراجعة حسابك وإلغاء الحظر')
         .setDescription(
           `مرحباً <@${targetId}>،\n\n` +
-          `تمت مراجعة طعنك من قِبل **القيادة العليا (OWNER / CEO / COO)** وتقرر **قبول الطعن وإلغاء الحظر عنك بنجاح**.\n\n` +
+          `تمت مراجعة حسابك من قِبل **القيادة العليا (OWNER / CEO / COO)** في لوحة التحكم وتقرر **قبول الحساب وإلغاء الحظر عنك بنجاح**.\n\n` +
           `🔗 **يمكنك الآن إعادة الانضمام إلى السيرفر عبر الرابط التالي:**\n` +
-          `https://discord.gg/gxesports\n\n` +
+          `${inviteUrl}\n\n` +
           `نتمنى لك وقتاً ممتعاً والالتزام بأنظمة وقوانين السيرفر.`
         )
         .setFooter({ text: 'GX eSports High Command' })
