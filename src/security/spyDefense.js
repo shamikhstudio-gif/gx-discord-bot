@@ -237,7 +237,7 @@ export async function enforceSuspiciousAccountBan(member, guild, client, sendToL
 /**
  * ⚖️ Handles interactive appeal button actions (Open Modal, Approve, Reject).
  */
-export async function handleAppealButton(interaction, client, sendToLogChannel, isVerificationApprover, allowedGuildId, botVersion = '1.0') {
+export async function handleAppealButton(interaction, client, sendToLogChannel, isVerificationApprover, allowedGuildId, botVersion = '1.0', sendVerificationRequestToExecutives = null) {
   const customId = interaction.customId;
 
   // 1. User clicked "تقديم طعن أمني" in their DM
@@ -297,21 +297,10 @@ export async function handleAppealButton(interaction, client, sendToLogChannel, 
       return true;
     }
 
-    // Unban member in Discord Guild
-    try {
-      await guild.bans.remove(targetId, `قبول الطعن الأمني بواسطة ${interaction.user.tag}`);
-    } catch (err) {
-      console.warn('Unban error:', err.message);
-    }
+    await executeAppealApproval(targetId, client, `@${interaction.user.tag}`, allowedGuildId, sendToLogChannel, botVersion, sendVerificationRequestToExecutives);
 
+    // Disable buttons on executive messages
     if (appeal) {
-      appeal.status = 'approved';
-      appeal.handledBy = interaction.user.id;
-      appeal.handledByName = interaction.user.tag;
-      appeal.handledAt = Date.now();
-      saveAppealsData(appealsData);
-
-      // Update DMs of other executives
       const disabledRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('appeal_done_btn')
@@ -332,40 +321,8 @@ export async function handleAppealButton(interaction, client, sendToLogChannel, 
       }
     }
 
-    // Send acceptance DM to the user with server invite
-    try {
-      const userObj = await client.users.fetch(targetId).catch(() => null);
-      if (userObj) {
-        const acceptedEmbed = new EmbedBuilder()
-          .setColor(0x57F287)
-          .setAuthor({ name: '✅ نتيجة مراجعة الطعن | GX Security', iconURL: guild.iconURL() })
-          .setTitle('🎉 تم قبول طعنك الأمني وإلغاء الحظر')
-          .setDescription(
-            `مرحباً <@${targetId}>،\n\n` +
-            `تمت مراجعة طعنك من قِبل **القيادة العليا (OWNER / CEO / COO)** وتقرر **قبول الطعن وإلغاء الحظر عنك بنجاح**.\n\n` +
-            `🔗 **يمكنك الآن إعادة الانضمام إلى السيرفر عبر الرابط التالي:**\n` +
-            `https://discord.gg/gxesports\n\n` +
-            `نتمنى لك وقتاً ممتعاً والالتزام بأنظمة وقوانين السيرفر.`
-          )
-          .setFooter({ text: 'GX eSports High Command' })
-          .setTimestamp();
-
-        await userObj.send({ embeds: [acceptedEmbed] }).catch(() => {});
-      }
-    } catch {}
-
-    if (sendToLogChannel) {
-      const logEmbed = new EmbedBuilder()
-        .setColor(0x57F287)
-        .setAuthor({ name: '⚖️ قبول طعن أمني وإلغاء حظر', iconURL: interaction.user.displayAvatarURL() })
-        .setDescription(`قام المسؤول <@${interaction.user.id}> (${interaction.user.tag}) بقبول طعن العضو <@${targetId}> وإلغاء الحظر عنه بنجاح.`)
-        .setFooter({ text: `GX eSports Security • الإصدار ${botVersion}` })
-        .setTimestamp();
-      await sendToLogChannel(guild, logEmbed);
-    }
-
     await interaction.reply({
-      content: `✅ **تم قبول الطعن وإلغاء الحظر بنجاح عن <@${targetId}> وإشعاره بالخاص برابط الانضمام.**`,
+      content: `✅ **تم قبول الطعن وإلغاء العزل بنجاح عن <@${targetId}> ومنحه رتبة UNTRUSTED وإشعاره بالخاص.**`,
       ephemeral: true
     });
     return true;
@@ -400,13 +357,9 @@ export async function handleAppealButton(interaction, client, sendToLogChannel, 
       return true;
     }
 
-    if (appeal) {
-      appeal.status = 'rejected';
-      appeal.handledBy = interaction.user.id;
-      appeal.handledByName = interaction.user.tag;
-      appeal.handledAt = Date.now();
-      saveAppealsData(appealsData);
+    await executeAppealRejection(targetId, client, `@${interaction.user.tag}`, allowedGuildId, sendToLogChannel, botVersion);
 
+    if (appeal) {
       const disabledRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('appeal_done_btn')
@@ -427,27 +380,8 @@ export async function handleAppealButton(interaction, client, sendToLogChannel, 
       }
     }
 
-    // Send rejection DM
-    try {
-      const userObj = await client.users.fetch(targetId).catch(() => null);
-      if (userObj) {
-        const rejectedEmbed = new EmbedBuilder()
-          .setColor(0xED4245)
-          .setAuthor({ name: '⛔ نتيجة مراجعة الطعن | GX Security', iconURL: guild.iconURL() })
-          .setTitle('❌ تم رفض الطعن الأمني')
-          .setDescription(
-            `مرحباً <@${targetId}>،\n\n` +
-            `نأسف لإبلاغك بأنه بعد مراجعة طعنك من قِبل **القيادة العليا**، تقرر **رفض طلبك وتثبيت قرار الحظر بشكل نهائي**.`
-          )
-          .setFooter({ text: 'GX eSports High Command' })
-          .setTimestamp();
-
-        await userObj.send({ embeds: [rejectedEmbed] }).catch(() => {});
-      }
-    } catch {}
-
     await interaction.reply({
-      content: `❌ **تم رفض الطعن وتثبيت الحظر على <@${targetId}>.**`,
+      content: `❌ **تم رفض الطعن وتثبيت الحظر النهائي على <@${targetId}>.**`,
       ephemeral: true
     });
     return true;
