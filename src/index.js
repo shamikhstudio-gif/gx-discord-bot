@@ -7957,29 +7957,45 @@ const healthServer = http.createServer(async (req, res) => {
     return sendJsonResponse(res, 200, { success: true, result: syncResult });
   }
 
-  // 12. Admin Broadcast: POST /api/admin/bot/broadcast
-  if (url === '/api/admin/bot/broadcast' && method === 'POST') {
+  // 12. Admin Broadcast: POST /api/admin/broadcast & POST /api/admin/bot/broadcast
+  if ((url === '/api/admin/broadcast' || url === '/api/admin/bot/broadcast') && method === 'POST') {
     const session = authenticateAdmin(req);
     if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
 
     const body = await parseJsonBody(req);
-    const { channelId, title, message: broadcastMsg, color = 0xffffff } = body;
+    const { channelId, title, message: broadcastMsg, color = 0xffffff, mention = 'none', imageUrl = null } = body;
 
     const guild = client.guilds.cache.get(ALLOWED_GUILD_ID);
     const targetChannel = guild?.channels.cache.get(channelId);
-    if (!targetChannel) return sendJsonResponse(res, 400, { error: 'الروم المحدد غير موجود' });
+    if (!targetChannel) return sendJsonResponse(res, 400, { error: 'الروم المحدد غير موجود في السيرفر' });
 
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setAuthor({ name: '📢 إشعار إداري رسمي | GX High Command', iconURL: guild.iconURL() })
-      .setTitle(title || 'إشعار من الإدارة العليا')
-      .setDescription(broadcastMsg || '')
-      .setFooter({ text: `GX eSports Broadcast • ${new Date().toLocaleTimeString('ar-SA')}` })
-      .setTimestamp();
+    try {
+      const embed = new EmbedBuilder()
+        .setColor(color)
+        .setAuthor({ name: '📢 إشعار إداري رسمي | GX High Command', iconURL: guild.iconURL() })
+        .setTitle(title || 'إشعار من الإدارة العليا')
+        .setDescription(broadcastMsg || '')
+        .setFooter({ text: `GX eSports Broadcast • ${new Date().toLocaleTimeString('ar-SA')}` })
+        .setTimestamp();
 
-    await targetChannel.send({ embeds: [embed] }).catch(() => {});
-    logActivity('admin', 'Broadcast Sent', `Sent announcement to #${targetChannel.name} via Control Panel`);
-    return sendJsonResponse(res, 200, { success: true, message: 'تم إرسال الإشعار بنجاح' });
+      if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+        embed.setImage(imageUrl);
+      }
+
+      let content = null;
+      if (mention === 'everyone') content = '@everyone';
+      else if (mention === 'here') content = '@here';
+
+      const sendPayload = { embeds: [embed] };
+      if (content) sendPayload.content = content;
+
+      await targetChannel.send(sendPayload);
+      logActivity('admin', 'Broadcast Sent', `Sent announcement to #${targetChannel.name} via Control Panel`);
+      return sendJsonResponse(res, 200, { success: true, message: `تم نشر الإعلان بنجاح في قناة #${targetChannel.name}` });
+    } catch (err) {
+      console.error('Error sending broadcast:', err.message);
+      return sendJsonResponse(res, 500, { error: `فشل إرسال الإعلان: ${err.message}` });
+    }
   }
 
   // 13. Admin VCR Force Reconnect: POST /api/admin/vcr/reconnect
