@@ -1449,6 +1449,33 @@ window.resolveAppeal = async (targetId, action) => {
   }
 };
 
+window.clearAllAppeals = async () => {
+  if (!adminToken) return showToast('يرجى تسجيل الدخول أولاً', 'error');
+  if (!confirm('هل أنت متأكد من رغبتك في تفريغ ومسح كافة سجلات الطعون نهائياً؟')) return;
+
+  try {
+    const res = await apiFetch(`/api/admin/appeals/clear-all`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      }
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('تم تفريغ ومسح كافة سجلات الطعون بنجاح!', 'success');
+      currentAppeals = [];
+      loadAppeals();
+      if (typeof loadOverviewData === 'function') loadOverviewData();
+    } else {
+      showToast(data.error || 'فشل مسح الطعون', 'error');
+    }
+  } catch {
+    showToast('خطأ في الشبكة أثناء تفريغ الطعون', 'error');
+  }
+};
+
 /* ══════════════════════════════════════════════════════
    VERIFICATIONS & GATEKEEPER (ARABIC)
    ══════════════════════════════════════════════════════ */
