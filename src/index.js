@@ -3059,6 +3059,22 @@ client.once(Events.ClientReady, async (c) => {
       await autoAssignVCRRoles(guild);
       await initVCRWorkers(guild);
 
+      // Reset test account on startup for fresh testing
+      try {
+        const testMember = await guild.members.fetch('1540394518237548604').catch(() => null);
+        if (testMember) {
+          await testMember.kick('Resetting test account for fresh joining test').catch(() => {});
+          console.log('🔄 [إعادة تعيين الحساب التجريبي] تم طرد الحساب التجريبي بنجاح لإتاحة اختباره من جديد.');
+        }
+        await guild.bans.remove('1540394518237548604', 'Unban test account').catch(() => {});
+        deleteAppealRecord('1540394518237548604');
+        const vReqs = loadVerificationRequests();
+        if (vReqs['1540394518237548604']) {
+          delete vReqs['1540394518237548604'];
+          saveVerificationRequests(vReqs);
+        }
+      } catch {}
+
       // 🎙️ High-Frequency 3-second VCR Watchdog & Reconnection Guardian
       let _watchdogCount = 0;
       setInterval(async () => {
