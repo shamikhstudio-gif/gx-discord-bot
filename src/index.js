@@ -7800,8 +7800,8 @@ const healthServer = http.createServer(async (req, res) => {
 
     let result;
     if (action === 'approve') {
-      result = await executeAppealApproval(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
-      logActivity('admin', 'Appeal Approved', `Unbanned member ${targetId} via Control Panel`);
+      result = await executeAppealApproval(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION, sendVerificationRequestToExecutives);
+      logActivity('admin', 'Appeal Approved', `Unbanned/Unquarantined member ${targetId} via Control Panel and sent Verification Request`);
     } else {
       result = await executeAppealRejection(targetId, client, 'لوحة التحكم (GX Command Center)', ALLOWED_GUILD_ID, sendToLogChannel, BOT_VERSION);
       logActivity('admin', 'Appeal Rejected', `Rejected appeal for member ${targetId} via Control Panel`);
