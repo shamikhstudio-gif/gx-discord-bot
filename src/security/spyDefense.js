@@ -666,3 +666,93 @@ export async function executeAppealRejection(targetId, client, rejectorTag = 'GX
 
   return { success: true, appeal: appealsData[targetId] };
 }
+
+/**
+ * ⛔ Executes appeal revocation from the Control Panel (Revokes approval, re-quarantines member with Banned By Anti-Spy role, strips untrusted/member, applies timeout, updates DB).
+ */
+export async function executeAppealRevocation(targetId, client, approverTag = 'GX Control Panel', allowedGuildId = '1537461174222725120', sendToLogChannel = null, botVersion = '1.0') {
+  const guild = client.guilds.cache.get(allowedGuildId);
+  const appealsData = loadAppealsData();
+  const appeal = appealsData[targetId];
+
+  // 1. Re-quarantine member if still in guild
+  if (guild) {
+    try {
+      const member = await guild.members.fetch(targetId).catch(() => null);
+      if (member) {
+        const antiSpyRole = await findOrCreateAntiSpyRole(guild);
+        const botMember = guild.members.me;
+        if (antiSpyRole && botMember?.permissions.has(PermissionFlagsBits.ManageRoles) && botMember.roles.highest.comparePositionTo(antiSpyRole) > 0) {
+          const currentRoles = member.roles.cache.filter(r => r.id !== guild.id && !r.managed && botMember.roles.highest.comparePositionTo(r) > 0);
+          if (currentRoles.size > 0) {
+            await member.roles.remove(currentRoles).catch(() => {});
+          }
+          await member.roles.add(antiSpyRole).catch(() => {});
+        }
+        if (botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+          await member.timeout(28 * 24 * 60 * 60 * 1000, `Appeal approval revoked by ${approverTag}`).catch(() => {});
+        }
+        console.log(`⛔ [إلغاء قبول الطعن] تم سحب كافة الرتب وإعادة عزل العضو ${member.user.tag} برتبة Banned By Anti-Spy.`);
+      }
+    } catch (err) {
+      console.warn('Error revoking appeal member roles:', err.message);
+    }
+  }
+
+  // 2. Update Database Record to 'pending'
+  if (appeal) {
+    appeal.status = 'pending';
+    appeal.handledBy = null;
+    appeal.handledByName = null;
+    appeal.revokedBy = approverTag;
+    appeal.revokedAt = Date.now();
+  }
+  saveAppealsData(appealsData);
+
+  // 3. Send Revocation DM to the user
+  try {
+    const userObj = await client.users.fetch(targetId).catch(() => null);
+    if (userObj) {
+      const revokeEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setAuthor({ name: '⚠️ تنبيه أمني رسمي | GX Security', iconURL: guild?.iconURL() })
+        .setTitle('⛔ تم التراجع عن قبول الطعن وإعادة العزل')
+        .setDescription(
+          `مرحباً <@${targetId}>،\n\n` +
+          `نحيطك علماً بأنه بناءً على مراجعة إضافية من **القيادة العليا**، تقرر **إلغاء قرار القبول وإعادة عزلك الأمني برتبة \`Banned By Anti-Spy\`** لحين مراجعة جديدة.\n\n` +
+          `تمت إعادة حالة طعنك إلى قيد المراجعة والتدقيق.`
+        )
+        .setFooter({ text: 'GX eSports Security' })
+        .setTimestamp();
+
+      await userObj.send({ embeds: [revokeEmbed] }).catch(() => {});
+    }
+  } catch {}
+
+  // 4. Log to Audit Channel
+  if (sendToLogChannel && guild) {
+    const logEmbed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setAuthor({ name: '⚠️ إلغاء قبول طعن أمني', iconURL: guild.iconURL() })
+      .setDescription(`تم إلغاء قرار القبول وإعادة عزل العضو <@${targetId}> بواسطة **${approverTag}**.`)
+      .setFooter({ text: `GX Security • الإصدار ${botVersion}` })
+      .setTimestamp();
+    await sendToLogChannel(guild, logEmbed);
+  }
+
+  return { success: true, message: 'تم إلغاء القبول وإعادة عزل الحساب بنجاح' };
+}
+
+/**
+ * 🗑️ Deletes an appeal record completely from database.
+ */
+export function deleteAppealRecord(targetId) {
+  const appealsData = loadAppealsData();
+  if (appealsData[targetId]) {
+    delete appealsData[targetId];
+    saveAppealsData(appealsData);
+    return true;
+  }
+  return false;
+}
+
