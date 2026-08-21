@@ -18,6 +18,7 @@ import {
 import {
   Client,
   GatewayIntentBits,
+  Partials,
   Events,
   PermissionFlagsBits,
   ChannelType,
@@ -1147,7 +1148,7 @@ function translateChannelType(type) {
   }
 }
 
-// Create client with complete Gateway Intents
+// Create client with complete Gateway Intents and Partials for DMs
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -1159,7 +1160,16 @@ const client = new Client({
     GatewayIntentBits.GuildEmojisAndStickers,
     GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildWebhooks
+    GatewayIntentBits.GuildWebhooks,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.DirectMessageReactions
+  ],
+  partials: [
+    Partials.Channel,
+    Partials.Message,
+    Partials.User,
+    Partials.GuildMember,
+    Partials.Reaction
   ]
 });
 
