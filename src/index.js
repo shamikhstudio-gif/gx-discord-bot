@@ -5402,8 +5402,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ embeds: [embed] });
     }
 
-    // أمر /فرز_مشتبه (خاص برتبة MANAGERS)
-    else if (commandName === 'فرز_مشتبه') {
+    // أمر /فرز و /فرز_مشتبه (خاص برتبة MANAGERS)
+    else if (commandName === 'فرز' || commandName === 'فرز_مشتبه') {
       if (!isManagerMember(interaction.member)) {
         return interaction.reply({
           content: '❌ **عذراً، هذا الأمر مخصص حصرياً للمشرفين وأصحاب رتبة MANAGERS فقط!**',

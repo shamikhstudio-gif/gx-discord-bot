@@ -686,11 +686,11 @@
     "options": []
   },
   {
-    "name": "فرز_مشتبه",
+    "name": "فرز",
     "description": "خاص برتبة MANAGERS: تحويل عضو من رتبة UNTRUSTED إلى Member أو Banned By Anti-Spy",
     "Public_Command": false,
     "category": "moderation",
-    "permission": "ModerateMembers",
+    "permission": null,
     "options": [
       {
         "name": "المستخدم",
