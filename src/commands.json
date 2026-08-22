@@ -357,26 +357,14 @@
   },
   {
     "name": "ابلاغ",
-    "description": "تقديم بلاغ فوري وتوثيق مخالفة صوتية مع تصدير تسجيل آخر 5 دقائق في الروم",
+    "description": "توثيق فوري ورفع بلاغ صوتي مع استخراج تسجيل آخر 5 دقائق لجميع المتواجدين في الروم",
     "Public_Command": true,
     "category": "security",
     "permission": null,
     "options": [
       {
         "name": "السبب",
-        "description": "سبب البلاغ والمخالفة المرتكبة",
-        "type": "STRING",
-        "required": true
-      },
-      {
-        "name": "المخالف",
-        "description": "العضو المخالف المُراد الإبلاغ عنه (اختياري)",
-        "type": "USER",
-        "required": false
-      },
-      {
-        "name": "تفاصيل",
-        "description": "أي تفاصيل أو توضيحات إضافية للإدارة (اختياري)",
+        "description": "سبب البلاغ أو الملاحظات (اختياري)",
         "type": "STRING",
         "required": false
       }

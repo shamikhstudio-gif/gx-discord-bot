@@ -6200,18 +6200,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ embeds: [embed] });
     }
 
-    // 22.5. أمر /ابلاغ (Voice Channel Incident Report with 5-min rolling audio capture)
+    // 22.5. أمر /ابلاغ (Voice Channel Instant Incident Report with 5-min rolling audio capture)
     else if (commandName === 'ابلاغ') {
       await interaction.deferReply({ ephemeral: true });
 
       const memberVoiceChannel = interaction.member?.voice?.channel;
       if (!memberVoiceChannel) {
         return interaction.editReply({
-          content: '❌ **يجب أن تكون متواجداً داخل الروم الصوتي المعني لاستخراج تسجيل آخر 5 دقائق وتقديم البلاغ.**'
+          content: '❌ **يجب أن تكون متواجداً داخل الروم الصوتي لاستخراج تسجيل آخر 5 دقائق وتقديم البلاغ.**'
         });
       }
 
-      const reason = interaction.options.getString('السبب');
+      const reason = interaction.options.getString('السبب') || 'توثيق فوري ومراجعة المحادثة الصوتية';
       const targetUser = interaction.options.getUser('المخالف');
       const details = interaction.options.getString('تفاصيل');
 
@@ -6246,16 +6246,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
             name: '🚨 بلاغ صوتي وتوثيق مخالفة | GX Security Incident Report',
             iconURL: interaction.user.displayAvatarURL({ dynamic: true })
           })
-          .setTitle(`📝 بلاغ مخالفة صوتية في روم: #${memberVoiceChannel.name}`)
+          .setTitle(`📝 بلاغ وتوثيق صوتي في روم: #${memberVoiceChannel.name}`)
           .setDescription(
-            `تم استلام بلاغ رسمي فوري مع تصدير تسجيل آخر 5 دقائق من الروم الصوتي للمراجعة الإدارية.\n\n` +
+            `تم استلام وتوثيق بلاغ فوري مع استخراج تسجيل صوتي لآخر 5 دقائق لجميع المتواجدين بالروم للمراجعة الإدارية.\n\n` +
             `👤 **مقدم البلاغ (Reporter):** <@${interaction.user.id}> (\`${interaction.user.tag}\`)\n` +
-            `🎯 **العضو المخالف (Target):** ${targetUser ? `<@${targetUser.id}> (\`${targetUser.tag}\`)` : '`غير محدد / مخالفة عامة`'}\n` +
+            (targetUser ? `🎯 **العضو المخالف (Target):** <@${targetUser.id}> (\`${targetUser.tag}\`)\n` : '') +
             `🔊 **الروم الصوتي (Channel):** <#${memberVoiceChannel.id}> (\`#${memberVoiceChannel.name}\`)\n` +
             `⏱️ **توقيت البلاغ:** <t:${Math.floor(timestamp / 1000)}:F> (<t:${Math.floor(timestamp / 1000)}:R>)\n` +
-            `🎙️ **الملف الصوتي المرفق:** ${exportResult.hasAudio ? '✅ **مرفق بالرسالة بصيغة MP3 النقية (تسجيل آخر 5 دقائق)** 🎵' : '⚠️ **لم يتم رصد أصوات مسجلة في آخر 5 دقائق (الروم كان صامتاً)**'}\n\n` +
-            `📋 **سبب البلاغ:**\n\`\`\`text\n${reason}\n\`\`\`\n` +
-            (details ? `💬 **تفاصيل إضافية من مقدم البلاغ:**\n\`\`\`text\n${details}\n\`\`\`\n` : '') +
+            `🎙️ **الملف الصوتي المرفق:** ${exportResult.hasAudio ? '✅ **مرفق بالرسالة بصيغة MP3 النقية (تسجيل آخر 5 دقائق لجميع الأعضاء)** 🎵' : '⚠️ **لم يتم رصد أصوات مسجلة في آخر 5 دقائق (الروم كان صامتاً)**'}\n\n` +
+            `📋 **ملاحظات/سبب البلاغ:**\n\`\`\`text\n${reason}\n\`\`\`\n` +
+            (details ? `💬 **تفاصيل إضافية:**\n\`\`\`text\n${details}\n\`\`\`\n` : '') +
             `👥 **المتواجدون في الروم لحظة تقديم البلاغ:**\n${currentMembersList}`
           )
           .setFooter({
@@ -6269,18 +6269,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
         // Push real-time alert to Web Command Center Dashboard
         pushNotification(
           'security',
-          '🚨 بلاغ صوتي رسمي جديد',
-          `بلاغ من ${interaction.user.tag} في #${memberVoiceChannel.name} (السبب: ${reason.slice(0, 50)})`,
+          '🚨 بلاغ صوتي فوري جديد',
+          `بلاغ من ${interaction.user.tag} في #${memberVoiceChannel.name}`,
           'vcr'
         );
         logActivity(
           'security',
           'Voice Incident Report',
-          `Report submitted by ${interaction.user.tag} in #${memberVoiceChannel.name}${targetUser ? ` against ${targetUser.tag}` : ''}`
+          `Report submitted by ${interaction.user.tag} in #${memberVoiceChannel.name}`
         );
 
         return interaction.editReply({
-          content: `✅ **تم بنجاح رفع بلاغك وتصدير تسجيل آخر 5 دقائق وإرساله فوراً إلى إدارة السيرفر في قناة السجلات للمراجعة والتحقيق.**\n🔒 معرف البلاغ: \`${timestamp.toString(36).toUpperCase()}\``
+          content: `✅ **تم بنجاح رفع بلاغك وتصدير تسجيل آخر 5 دقائق لجميع المتواجدين بالروم وإرساله فوراً إلى إدارة السيرفر في قناة السجلات للمراجعة.**\n🔒 معرف البلاغ: \`${timestamp.toString(36).toUpperCase()}\``
         });
       } catch (err) {
         console.error('خطأ في معالجة أمر البلاغ:', err.message);
