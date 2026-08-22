@@ -205,6 +205,7 @@ export class VCRWorker {
       const humanCount = humanMembers.size;
       const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
 
+      // Only record when 2 or more human members are in the voice room
       if (humanCount < 2 || allMuted) {
         return;
       }
@@ -231,19 +232,29 @@ export class VCRWorker {
           pcmStream.on('data', (pcmChunk) => {
             if (!pcmChunk || pcmChunk.length === 0) return;
 
-            // Multi-Track Audio Session Storage (Always Records 100% in all categories!)
+            const now = Date.now();
+            const currentHumanMembers = channel.members.filter(m => !m.user.bot);
+            if (currentHumanMembers.size < 2) return; // Strict 2+ human members requirement
+
+            // 5-Minute Rolling Multi-Track Audio Storage (300,000 ms)
             if (session.userAudioTracks && !session.isFinalizing) {
               if (!session.userAudioTracks.has(userId)) {
                 session.userAudioTracks.set(userId, {
                   userId,
-                  firstTimestamp: Date.now(),
-                  startOffsetMs: Math.max(0, Date.now() - session.startTime),
-                  pcmChunks: []
+                  firstTimestamp: now,
+                  chunks: []
                 });
               }
               const track = session.userAudioTracks.get(userId);
-              track.pcmChunks.push(pcmChunk);
+              track.chunks.push({ timestamp: now, data: pcmChunk });
               session.totalRecordedBytes = (session.totalRecordedBytes || 0) + pcmChunk.length;
+
+              // Prune chunks older than 5 minutes (300 seconds)
+              const cutoff = now - (5 * 60 * 1000);
+              while (track.chunks.length > 0 && track.chunks[0].timestamp < cutoff) {
+                const removed = track.chunks.shift();
+                session.totalRecordedBytes = Math.max(0, (session.totalRecordedBytes || 0) - (removed.data?.length || 0));
+              }
             }
           });
 

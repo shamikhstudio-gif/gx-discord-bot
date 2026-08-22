@@ -72,7 +72,7 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const ALLOWED_GUILD_ID = process.env.GUILD_ID?.trim() || '1537461174222725120';
 const VERIFIED_MEMBER_ROLE_ID = process.env.VERIFIED_ROLE_ID?.trim() || '1538486805211389982';
 const VERIFIED_MEMBER_ROLE_NAME = 'MEMBER';
-const BOT_VERSION = '2.0 Flash';
+const BOT_VERSION = '2.0 Pro';
 
 let AUTO_ROLE_NAME = 'UNTRUSTED';
 let AUTO_ROLE_ID = VERIFIED_MEMBER_ROLE_ID;
@@ -91,13 +91,13 @@ const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
 const VERIFICATION_REQUESTS_FILE = path.join(DATA_DIR, 'verification_requests.json');
 const EMERGENCY_STATE_FILE = path.join(DATA_DIR, 'emergency_state.json');
-const SECURITY_SETTINGS_FILE = path.join(DATA_DIR, 'security_settings.json');
 const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
 const COMMANDS_CONFIG_FILE = path.resolve('src', 'commands.json');
 const ACTIVITY_RING_FILE = path.join(DATA_DIR, 'activity_ring.json');
 const NOTIFICATIONS_RING_FILE = path.join(DATA_DIR, 'notifications_ring.json');
+const VERSION_BROADCAST_FILE = path.join(DATA_DIR, 'version_broadcast.json');
 
 function safeWriteJson(filePath, data) {
   try {
@@ -296,100 +296,6 @@ function saveEmergencyState(data) {
 function isEmergencyActive() {
   const state = loadEmergencyState();
   return Boolean(state && state.isActive);
-}
-
-// ----------------------------------------------------
-// 🛡️ Security Settings Storage (Waiting Voice Room Alert)
-// ----------------------------------------------------
-function loadSecuritySettings() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(SECURITY_SETTINGS_FILE)) {
-      return JSON.parse(fs.readFileSync(SECURITY_SETTINGS_FILE, 'utf-8'));
-    }
-  } catch {}
-  return { waitingVoiceChannelId: null };
-}
-
-function saveSecuritySettings(data) {
-  safeWriteJson(SECURITY_SETTINGS_FILE, data);
-}
-
-let WAITING_VOICE_CHANNEL_ID = loadSecuritySettings().waitingVoiceChannelId || null;
-const untrustedVoiceAlertCooldowns = new Map();
-
-/**
- * 👑 Retrieves all members holding Admin, CEO, or Owner roles to receive waiting room alert DMs.
- */
-async function getAdminCeoOwnerMembers(guild) {
-  if (!guild) return [];
-  const members = await guild.members.fetch().catch(() => guild.members.cache);
-  const targetRoleNames = ['owner', 'ceo', 'admin'];
-  const targetRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
-
-  return members.filter((m) => {
-    if (m.user.bot) return false;
-    if (m.id === guild.ownerId) return true;
-    if (m.permissions.has(PermissionFlagsBits.Administrator)) return true;
-    return m.roles.cache.some((r) => {
-      if (targetRoleIds.includes(r.id)) return true;
-      const name = r.name.toLowerCase().trim();
-      return targetRoleNames.some((target) => name === target || name.includes(target));
-    });
-  });
-}
-
-/**
- * 🚨 Dispatches rich Direct Messages to Admin, CEO, and Owner when an Untrusted member joins the Waiting Room.
- */
-async function sendUntrustedWaitingAlertToStaff(guild, member, voiceChannel) {
-  try {
-    const staffMembers = await getAdminCeoOwnerMembers(guild);
-    if (!staffMembers || staffMembers.length === 0) return;
-
-    const channelName = voiceChannel?.name || 'غرفة الانتظار';
-    const createdTs = Math.floor((member.user.createdTimestamp || Date.now()) / 1000);
-    const joinedTs = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
-
-    const alertEmbed = new EmbedBuilder()
-      .setColor(0xFEE75C)
-      .setAuthor({
-        name: '🚨 تنبيه أمني عاجل: دخول روم الانتظار',
-        iconURL: member.user.displayAvatarURL({ dynamic: true }) || guild.iconURL()
-      })
-      .setTitle(`🔔 عضو برتبة UNTRUSTED متواجد في: #${channelName}`)
-      .setDescription(
-        `دخل العضو <@${member.id}> (\`${member.user.tag}\`) إلى روم الانتظار الصوتي المحدد <#${voiceChannel?.id || ''}> وهو يحمل رتبة **UNTRUSTED**.\n\n` +
-        `> 👤 **العضو:** <@${member.id}> (\`${member.user.tag}\`)\n` +
-        `> 🆔 **المعرف (ID):** \`${member.id}\`\n` +
-        `> 🎙️ **الروم الصوتي:** <#${voiceChannel?.id || ''}> (\`${channelName}\`)\n` +
-        `> 📅 **تاريخ إنشاء الحساب:** <t:${createdTs}:F> (<t:${createdTs}:R>)\n` +
-        `> 📥 **تاريخ الانضمام للسيرفر:** <t:${joinedTs}:F> (<t:${joinedTs}:R>)\n\n` +
-        `⚡ **الإجراء المطلوب:**\n` +
-        `يمكن للمشرفين التحقق منه واستخدام أمر \`/فرز_مشتبه\` لتحويل رتبته إلى \`Member\` أو \`Banned By Anti-Spy\`، أو مراجعته عبر لوحة التحكم.`
-      )
-      .setFooter({ text: `GX eSports Security Engine • الإصدار ${BOT_VERSION}` })
-      .setTimestamp();
-
-    for (const staff of staffMembers) {
-      if (staff.id === member.id) continue;
-      try {
-        await staff.send({ embeds: [alertEmbed] }).catch(() => null);
-      } catch {}
-    }
-
-    const logEmbed = new EmbedBuilder()
-      .setColor(0xFEE75C)
-      .setAuthor({ name: '🎙️ رصد دخول روم الانتظار (UNTRUSTED)', iconURL: member.user.displayAvatarURL() })
-      .setDescription(`دخل العضو <@${member.id}> (\`${member.user.tag}\`) برتبة **UNTRUSTED** إلى الروم الصوتي <#${voiceChannel?.id || ''}>. تم إرسال تنبيه بالخاص لجميع أصحاب رتب (Admin / CEO / Owner).`)
-      .setFooter({ text: `GX eSports Security Engine • الإصدار ${BOT_VERSION}` })
-      .setTimestamp();
-
-    await sendToLogChannel(guild, logEmbed);
-    logActivity('security', 'Untrusted Waiting Room', `Member ${member.user.tag} joined #${channelName}`, member.user);
-  } catch (err) {
-    console.error('خطأ في إرسال تنبيه روم الانتظار:', err.message);
-  }
 }
 
 // ----------------------------------------------------
@@ -3115,6 +3021,89 @@ async function syncAllPermissionsAndOverwrites(guild) {
   }
 }
 
+function loadVersionBroadcast() {
+  try {
+    if (fs.existsSync(VERSION_BROADCAST_FILE)) {
+      return JSON.parse(fs.readFileSync(VERSION_BROADCAST_FILE, 'utf-8'));
+    }
+  } catch {}
+  return {};
+}
+
+function saveVersionBroadcast(data) {
+  safeWriteJson(VERSION_BROADCAST_FILE, data);
+}
+
+/**
+ * 🚀 Persistent One-Time Version Broadcast Sentinel
+ * Sends an official celebratory announcement embed to the server exactly once per version release.
+ * Persists in data/version_broadcast.json so restarts will NEVER cause duplicate broadcasts.
+ */
+async function ensureVersionBroadcastOnce(guild) {
+  if (!guild) return;
+  const history = loadVersionBroadcast();
+
+  // If this version was already broadcasted, NEVER send again (even across restarts)
+  if (history.lastBroadcastVersion === BOT_VERSION) {
+    return;
+  }
+
+  // Find target channel: '1540028136677314571' (News), or channel named news/اعلان/welcome/chat
+  const newsChannel = guild.channels.cache.get('1540028136677314571') ||
+                      guild.channels.cache.find(c => c.isTextBased() && (c.name.includes('news') || c.name.includes('إعلان') || c.name.includes('اخبار') || c.name.includes('chat')));
+
+  if (!newsChannel) {
+    console.warn('⚠️ [إشعار التحديث] لم يتم العثور على قناة لنشر إعلان التحديث v2.0 Pro.');
+    return;
+  }
+
+  const broadcastEmbed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setAuthor({
+      name: '🚀 إطلاق التحديث الشامل لسيرفر GX eSports | System Upgrade',
+      iconURL: guild.iconURL() || client.user?.displayAvatarURL()
+    })
+    .setTitle('✨ تم التحديث بنجاح إلى الإصدار: GX Bot v2.0 Pro')
+    .setDescription(
+      `يسر إدارة **GX eSports** الإعلان عن ترقية منظومة البوتات ومركز التحكم رسمياً إلى الإصدار الاحترافي **\`v2.0 Pro\`** مع باقة من الميزات والتحسينات المتقدمة:\n\n` +
+      `🎙️ **منظومة VCR والتسجيل الصوتي الذكي (5-Min Rolling Buffer):**\n` +
+      `• تسجيل مستمر وتلقائي لغرف الصوت عند تواجد عضوين أو أكثر في الفويس.\n` +
+      `• حفظ ذاكرة صوتية نقية لآخر 5 دقائق مع إمكانية التصدير اللحظي في أي وقت.\n\n` +
+      `🚨 **أمر البلاغ الصوتي الفوري (\`/ابلاغ\`):**\n` +
+      `• إمكانية تقديم بلاغ فوري وتوثيق أي مخالفة صوتية مع تصدير وإرفاق تسجيل آخر 5 دقائق بملف MP3 إلى شات السجلات الإدارية مباشرة.\n\n` +
+      `🔊 **ترقية جودة وأسماء الرومات الصوتية:**\n` +
+      `• ربط مسجلات VCR بالرومات الجديدة (MAX QUALITY, ULTRA QUALITY, HIGH QUALITY, NORMAL QUALITY, Admins Voice).\n\n` +
+      `🛡️ **الدرع العسكري ومنظومة الحماية (Sentinel 2.0):**\n` +
+      `• عزل الحسابات المشبوهة، حظر السحب اليدوي (Anti-Drag)، وحصانة صوتية لإدارة السيرفر.\n\n` +
+      `🌐 **مركز القيادة والتحكم المباشر:**\n` +
+      `• لوحة تحكم سحابية مباشرة تدعم رصد العمليات والبلاغات والتحكم اللحظي بالسيرفر.`
+    )
+    .addFields(
+      { name: '📦 الإصدار الجديد', value: '`v2.0 Pro` 🚀', inline: true },
+      { name: '📜 عدد الأوامر النشطة', value: '`43 أمر نشط` ⚡', inline: true },
+      { name: '🟢 الحالة التشغيلية', value: '`متصل ومستقر 100%` 🟢', inline: true }
+    )
+    .setFooter({
+      text: `GX eSports Ecosystem • الإصدار ${BOT_VERSION} • إشعار ترقية تلقائي يرسل مرة واحدة فقط`,
+      iconURL: client.user?.displayAvatarURL()
+    })
+    .setTimestamp();
+
+  try {
+    await newsChannel.send({ embeds: [broadcastEmbed] });
+    history.lastBroadcastVersion = BOT_VERSION;
+    history.broadcastAt = Date.now();
+    history.channelId = newsChannel.id;
+    saveVersionBroadcast(history);
+
+    logActivity('admin', 'v2.0 Pro Released', `Broadcasted v2.0 Pro announcement in #${newsChannel.name}`);
+    pushNotification('announcement', '🚀 إطلاق GX Bot v2.0 Pro', `تم نشر إعلان التحديث بنجاح في #${newsChannel.name}`, 'broadcast');
+    console.log(`📢 [إشعار التحديث] تم بنجاح إرسال إعلان التحديث v2.0 Pro لمرة واحدة في قناة #${newsChannel.name}.`);
+  } catch (err) {
+    console.error('خطأ في إرسال إعلان التحديث:', err.message);
+  }
+}
+
 client.once(Events.ClientReady, async (c) => {
   console.log(`\n======================================================`);
   console.log(`🤖 تم تسجيل الدخول بنجاح باسم: ${c.user.tag} (المعرف: ${c.user.id})`);
@@ -3158,6 +3147,7 @@ client.once(Events.ClientReady, async (c) => {
       await findOrCreateVCRRole(guild);
       await autoAssignVCRRoles(guild);
       await initVCRWorkers(guild);
+      await ensureVersionBroadcastOnce(guild);
 
       // 🎙️ High-Frequency 3-second VCR Watchdog & Reconnection Guardian
       let _watchdogCount = 0;
@@ -3313,25 +3303,6 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   if (newState.guild.id !== ALLOWED_GUILD_ID) return;
   const member = newState.member;
   if (!member) return;
-
-  // 🚨 WAITING VOICE ROOM ALERT (Untrusted Member Detection)
-  if (
-    WAITING_VOICE_CHANNEL_ID &&
-    newState.channelId === WAITING_VOICE_CHANNEL_ID &&
-    oldState.channelId !== newState.channelId &&
-    !member.user.bot
-  ) {
-    const isUntrusted = isUntrustedMember(member) || member.roles.cache.some((r) => r.name.toLowerCase().includes('untrusted'));
-    if (isUntrusted) {
-      const now = Date.now();
-      const lastAlertTime = untrustedVoiceAlertCooldowns.get(member.id) || 0;
-      // 90-second cooldown per member to avoid DM spam loops
-      if (now - lastAlertTime > 90 * 1000) {
-        untrustedVoiceAlertCooldowns.set(member.id, now);
-        sendUntrustedWaitingAlertToStaff(newState.guild, member, newState.channel);
-      }
-    }
-  }
 
   const botMember = newState.guild.members.me;
   const botVoiceChannelId = botMember?.voice?.channelId;
@@ -5402,164 +5373,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ embeds: [embed] });
     }
 
-    // أمر /فرز و /فرز_مشتبه (خاص برتبة MANAGERS)
-    else if (commandName === 'فرز' || commandName === 'فرز_مشتبه') {
-      if (!isManagerMember(interaction.member)) {
-        return interaction.reply({
-          content: '❌ **عذراً، هذا الأمر مخصص حصرياً للمشرفين وأصحاب رتبة MANAGERS فقط!**',
-          ephemeral: true
-        });
-      }
-
-      const targetUser = interaction.options.getUser('المستخدم');
-      const decision = interaction.options.getString('القرار'); // 'MEMBER' | 'BANNED_SPY'
-      const reason = interaction.options.getString('السبب') || 'مراجعة أمنية بواسطة المشرفين (MANAGERS)';
-
-      if (targetUser.id === client.user.id) {
-        return interaction.reply({ content: '❌ لا يمكن تطبيق هذا الإجراء على البوت.', ephemeral: true });
-      }
-      if (targetUser.id === interaction.guild.ownerId) {
-        return interaction.reply({ content: '❌ لا يمكن تطبيق هذا الإجراء على مالك السيرفر.', ephemeral: true });
-      }
-
-      await interaction.deferReply({ ephemeral: false });
-
-      const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-      if (!targetMember) {
-        return interaction.editReply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.' });
-      }
-
-      if (isManagerMember(targetMember)) {
-        return interaction.editReply({ content: '❌ لا يمكن تطبيق فرز المشتبهين على أعضاء الإدارة أو المشرفين!' });
-      }
-
-      const botMember = interaction.guild.members.me;
-      const untrustedRole = findAutoRole(interaction.guild);
-      const memberRole = interaction.guild.roles.cache.get(VERIFIED_MEMBER_ROLE_ID) || interaction.guild.roles.cache.find((r) => r.name.toUpperCase() === 'MEMBER');
-      const antiSpyRole = await findOrCreateAntiSpyRole(interaction.guild);
-
-      if (decision === 'MEMBER') {
-        try {
-          if (untrustedRole && targetMember.roles.cache.has(untrustedRole.id)) {
-            await targetMember.roles.remove(untrustedRole).catch(() => {});
-          }
-          if (antiSpyRole && targetMember.roles.cache.has(antiSpyRole.id)) {
-            await targetMember.roles.remove(antiSpyRole).catch(() => {});
-          }
-          if (memberRole) {
-            await targetMember.roles.add(memberRole).catch(() => {});
-          }
-          if (targetMember.communicationDisabledUntilTimestamp && targetMember.communicationDisabledUntilTimestamp > Date.now()) {
-            await targetMember.timeout(null, `تم توثيق العضو بواسطة المشرف ${interaction.user.tag}`).catch(() => {});
-          }
-
-          const appealsData = loadAppealsData();
-          if (appealsData[targetMember.id]) {
-            appealsData[targetMember.id].status = 'approved';
-            appealsData[targetMember.id].handledBy = interaction.user.id;
-            appealsData[targetMember.id].handledByName = interaction.user.tag;
-            appealsData[targetMember.id].handledAt = Date.now();
-            saveAppealsData(appealsData);
-          }
-
-          const vRequests = loadVerificationRequests();
-          if (vRequests[targetMember.id]) {
-            vRequests[targetMember.id].status = 'approved';
-            vRequests[targetMember.id].approverTag = interaction.user.tag;
-            saveVerificationRequests(vRequests);
-          }
-
-          const userDMEmbed = new EmbedBuilder()
-            .setColor(0x57F287)
-            .setAuthor({ name: '🎉 تم توثيق حسابك | GX eSports', iconURL: interaction.guild.iconURL() })
-            .setTitle('✅ مرحباً بك في مجتمع GX eSports')
-            .setDescription(`تمت مراجعة حسابك بنجاح من قبل إدارة السيرفر ومنحك رتبة **MEMBER** الرسمية. نتمنى لك وقتاً ممتعاً!`)
-            .setFooter({ text: 'GX eSports Staff Team' })
-            .setTimestamp();
-          await targetMember.send({ embeds: [userDMEmbed] }).catch(() => {});
-
-          const embed = new EmbedBuilder()
-            .setColor(0x57F287)
-            .setAuthor({ name: '✅ فرز مشتبه: قبول ومنح رتبة MEMBER', iconURL: targetUser.displayAvatarURL() })
-            .setTitle(`🎉 تم ترقية العضو إلى رتبة MEMBER بنجاح`)
-            .setDescription(
-              `> 👤 **العضو:** <@${targetUser.id}> (\`${targetUser.tag}\`)\n` +
-              `> 🛡️ **المشرف المسؤول:** <@${interaction.user.id}> (\`${interaction.user.tag}\`)\n` +
-              `> 📝 **القرار:** ترقية وتوثيق برتبة \`MEMBER\` وسحب \`UNTRUSTED\`\n` +
-              `> 💬 **السبب:** ${reason}`
-            )
-            .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
-            .setTimestamp();
-
-          await interaction.editReply({ embeds: [embed] });
-          await sendToLogChannel(interaction.guild, embed);
-          logActivity('security', 'Member Approved by Manager', `Promoted ${targetUser.tag} to MEMBER by ${interaction.user.tag}`, interaction.user);
-        } catch (err) {
-          await interaction.editReply({ content: `❌ تعذر ترقية العضو: ${err.message}` });
-        }
-      } else if (decision === 'BANNED_SPY') {
-        try {
-          if (antiSpyRole && botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
-            const currentRoles = targetMember.roles.cache.filter((r) => r.id !== interaction.guild.id && !r.managed && botMember.roles.highest.comparePositionTo(r) > 0);
-            if (currentRoles.size > 0) {
-              await targetMember.roles.remove(currentRoles).catch(() => {});
-            }
-            await targetMember.roles.add(antiSpyRole).catch(() => {});
-          }
-
-          if (botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-            await targetMember.timeout(28 * 24 * 60 * 60 * 1000, `Banned By Anti-Spy بواسطة ${interaction.user.tag}: ${reason}`).catch(() => {});
-          }
-
-          const appealsData = loadAppealsData();
-          appealsData[targetMember.id] = {
-            targetId: targetMember.id,
-            userTag: targetMember.user.tag,
-            statement: `تم عزل العضو برتبة "${SPY_BANNED_ROLE_NAME}" بقرار من المشرف @${interaction.user.tag} (السبب: ${reason}).`,
-            status: 'pending',
-            messages: [],
-            handledBy: null,
-            handledByName: null,
-            createdAt: Date.now()
-          };
-          saveAppealsData(appealsData);
-
-          const userDMEmbed = new EmbedBuilder()
-            .setColor(0xED4245)
-            .setAuthor({ name: '⛔ تنبيه أمني | GX Security Sentinel', iconURL: interaction.guild.iconURL() })
-            .setTitle('تم عزل حسابك برتبة Banned By Anti-Spy')
-            .setDescription(
-              `مرحباً <@${targetMember.id}>،\n\n` +
-              `تم اتخاذ إجراء عزل أمني لحسابك وتجريده من كافة الصلاحيات برتبة **Banned By Anti-Spy**.\n` +
-              `**السبب:** \`${reason}\`\n\n` +
-              `تم إدراج حالتك تلقائياً في لوحة التحكم لمراجعة والبت النهائي من القيادة العليا.`
-            )
-            .setFooter({ text: 'GX eSports Security Engine' })
-            .setTimestamp();
-          await targetMember.send({ embeds: [userDMEmbed] }).catch(() => {});
-
-          const embed = new EmbedBuilder()
-            .setColor(0xED4245)
-            .setAuthor({ name: '⛔ فرز مشتبه: عزل أمني (Banned By Anti-Spy)', iconURL: targetUser.displayAvatarURL() })
-            .setTitle(`🛡️ تم عزل العضو برتبة Banned By Anti-Spy`)
-            .setDescription(
-              `> 👤 **العضو:** <@${targetUser.id}> (\`${targetUser.tag}\`)\n` +
-              `> 🛡️ **المشرف المسؤول:** <@${interaction.user.id}> (\`${interaction.user.tag}\`)\n` +
-              `> 📝 **القرار:** عزل كلي برتبة \`Banned By Anti-Spy\` وتايم آوت 28 يوماً\n` +
-              `> 💬 **السبب:** ${reason}`
-            )
-            .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
-            .setTimestamp();
-
-          await interaction.editReply({ embeds: [embed] });
-          await sendToLogChannel(interaction.guild, embed);
-          logActivity('security', 'Member Quarantined by Manager', `Quarantined ${targetUser.tag} with Banned By Anti-Spy by ${interaction.user.tag}`, interaction.user);
-        } catch (err) {
-          await interaction.editReply({ content: `❌ تعذر عزل العضو: ${err.message}` });
-        }
-      }
-    }
-
     // 7. أمر /تحذير
     else if (commandName === 'تحذير') {
       const targetUser = interaction.options.getUser('المستخدم');
@@ -6323,6 +6136,96 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+    }
+
+    // 22.5. أمر /ابلاغ (Voice Channel Incident Report with 5-min rolling audio capture)
+    else if (commandName === 'ابلاغ') {
+      await interaction.deferReply({ ephemeral: true });
+
+      const memberVoiceChannel = interaction.member?.voice?.channel;
+      if (!memberVoiceChannel) {
+        return interaction.editReply({
+          content: '❌ **يجب أن تكون متواجداً داخل الروم الصوتي المعني لاستخراج تسجيل آخر 5 دقائق وتقديم البلاغ.**'
+        });
+      }
+
+      const reason = interaction.options.getString('السبب');
+      const targetUser = interaction.options.getUser('المخالف');
+      const details = interaction.options.getString('تفاصيل');
+
+      try {
+        const exportResult = await vcrManager.exportRollingRecording(memberVoiceChannel.id, 5 * 60 * 1000, 'mp3');
+        const logChannel = await vcrManager.findOrCreateVCRLogChannel(interaction.guild);
+
+        if (!logChannel) {
+          return interaction.editReply({
+            content: '❌ **تعذر الوصول إلى قناة سجلات التسجيلات الصوتية في السيرفر.**'
+          });
+        }
+
+        const safeName = (memberVoiceChannel.name || 'Voice').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const timestamp = Date.now();
+        const files = [];
+
+        if (exportResult.audioBuffer) {
+          files.push(new AttachmentBuilder(exportResult.audioBuffer, {
+            name: `GX_Incident_Report_${safeName}_${timestamp}.mp3`
+          }));
+        }
+
+        const currentMembersList = memberVoiceChannel.members
+          .filter(m => !m.user.bot)
+          .map(m => `• <@${m.id}> (\`${m.user.tag}\`)`)
+          .join('\n') || 'لا يوجد أعضاء آخرين';
+
+        const reportEmbed = new EmbedBuilder()
+          .setColor(0xED4245)
+          .setAuthor({
+            name: '🚨 بلاغ صوتي وتوثيق مخالفة | GX Security Incident Report',
+            iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+          })
+          .setTitle(`📝 بلاغ مخالفة صوتية في روم: #${memberVoiceChannel.name}`)
+          .setDescription(
+            `تم استلام بلاغ رسمي فوري مع تصدير تسجيل آخر 5 دقائق من الروم الصوتي للمراجعة الإدارية.\n\n` +
+            `👤 **مقدم البلاغ (Reporter):** <@${interaction.user.id}> (\`${interaction.user.tag}\`)\n` +
+            `🎯 **العضو المخالف (Target):** ${targetUser ? `<@${targetUser.id}> (\`${targetUser.tag}\`)` : '`غير محدد / مخالفة عامة`'}\n` +
+            `🔊 **الروم الصوتي (Channel):** <#${memberVoiceChannel.id}> (\`#${memberVoiceChannel.name}\`)\n` +
+            `⏱️ **توقيت البلاغ:** <t:${Math.floor(timestamp / 1000)}:F> (<t:${Math.floor(timestamp / 1000)}:R>)\n` +
+            `🎙️ **الملف الصوتي المرفق:** ${exportResult.hasAudio ? '✅ **مرفق بالرسالة بصيغة MP3 النقية (تسجيل آخر 5 دقائق)** 🎵' : '⚠️ **لم يتم رصد أصوات مسجلة في آخر 5 دقائق (الروم كان صامتاً)**'}\n\n` +
+            `📋 **سبب البلاغ:**\n\`\`\`text\n${reason}\n\`\`\`\n` +
+            (details ? `💬 **تفاصيل إضافية من مقدم البلاغ:**\n\`\`\`text\n${details}\n\`\`\`\n` : '') +
+            `👥 **المتواجدون في الروم لحظة تقديم البلاغ:**\n${currentMembersList}`
+          )
+          .setFooter({
+            text: `GX Security Incident Sentinel • معرّف البلاغ: ${timestamp.toString(36).toUpperCase()}`,
+            iconURL: client.user?.displayAvatarURL()
+          })
+          .setTimestamp();
+
+        await logChannel.send({ embeds: [reportEmbed], files });
+
+        // Push real-time alert to Web Command Center Dashboard
+        pushNotification(
+          'security',
+          '🚨 بلاغ صوتي رسمي جديد',
+          `بلاغ من ${interaction.user.tag} في #${memberVoiceChannel.name} (السبب: ${reason.slice(0, 50)})`,
+          'vcr'
+        );
+        logActivity(
+          'security',
+          'Voice Incident Report',
+          `Report submitted by ${interaction.user.tag} in #${memberVoiceChannel.name}${targetUser ? ` against ${targetUser.tag}` : ''}`
+        );
+
+        return interaction.editReply({
+          content: `✅ **تم بنجاح رفع بلاغك وتصدير تسجيل آخر 5 دقائق وإرساله فوراً إلى إدارة السيرفر في قناة السجلات للمراجعة والتحقيق.**\n🔒 معرف البلاغ: \`${timestamp.toString(36).toUpperCase()}\``
+        });
+      } catch (err) {
+        console.error('خطأ في معالجة أمر البلاغ:', err.message);
+        return interaction.editReply({
+          content: `❌ **حدث خطأ أثناء معالجة البلاغ وتصدير التسجيل:** ${err.message}`
+        });
+      }
     }
 
     // 23. أمر /كتم_الكل
@@ -8312,29 +8215,6 @@ const healthServer = http.createServer(async (req, res) => {
       logActivity('admin', 'VCR Reconnect', `Forced re-stationing of VCR audio sentinels via Control Panel`);
     }
     return sendJsonResponse(res, 200, { success: true, message: 'تمت إعادة تثبيت وربط المسجلات الصوتية' });
-  }
-
-  // 13.5. Security Settings: GET /api/admin/settings/security & POST /api/admin/settings/security
-  if (url === '/api/admin/settings/security') {
-    const session = authenticateAdmin(req);
-    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
-
-    if (method === 'GET') {
-      const settings = loadSecuritySettings();
-      return sendJsonResponse(res, 200, { success: true, settings });
-    }
-
-    if (method === 'POST') {
-      const body = await parseJsonBody(req);
-      const settings = loadSecuritySettings();
-      if (body.waitingVoiceChannelId !== undefined) {
-        settings.waitingVoiceChannelId = body.waitingVoiceChannelId ? String(body.waitingVoiceChannelId).trim() : null;
-        WAITING_VOICE_CHANNEL_ID = settings.waitingVoiceChannelId;
-      }
-      saveSecuritySettings(settings);
-      logActivity('admin', 'Security Settings Updated', `Updated waiting room to ${WAITING_VOICE_CHANNEL_ID || 'None'}`);
-      return sendJsonResponse(res, 200, { success: true, settings, message: 'تم حفظ إعدادات غرفة الانتظار بنجاح' });
-    }
   }
 
   // 14. Admin Moderation Metadata: GET /api/admin/mod/data & GET /api/admin/channels

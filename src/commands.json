@@ -356,6 +356,33 @@
     "options": []
   },
   {
+    "name": "ابلاغ",
+    "description": "تقديم بلاغ فوري وتوثيق مخالفة صوتية مع تصدير تسجيل آخر 5 دقائق في الروم",
+    "Public_Command": true,
+    "category": "security",
+    "permission": null,
+    "options": [
+      {
+        "name": "السبب",
+        "description": "سبب البلاغ والمخالفة المرتكبة",
+        "type": "STRING",
+        "required": true
+      },
+      {
+        "name": "المخالف",
+        "description": "العضو المخالف المُراد الإبلاغ عنه (اختياري)",
+        "type": "USER",
+        "required": false
+      },
+      {
+        "name": "تفاصيل",
+        "description": "أي تفاصيل أو توضيحات إضافية للإدارة (اختياري)",
+        "type": "STRING",
+        "required": false
+      }
+    ]
+  },
+  {
     "name": "استدعاء",
     "description": "استدعاء البوت إلى رومك الصوتي الحالي مع نظام التحكم والاستئذان",
     "Public_Command": true,
@@ -684,43 +711,6 @@
     "category": "security",
     "permission": "Administrator",
     "options": []
-  },
-  {
-    "name": "فرز_مشتبه",
-    "description": "خاص برتبة MANAGERS: تحويل عضو من رتبة UNTRUSTED إلى Member أو Banned By Anti-Spy",
-    "Public_Command": false,
-    "category": "moderation",
-    "permission": null,
-    "options": [
-      {
-        "name": "المستخدم",
-        "description": "العضو المراد مراجعته وتحويل رتبته",
-        "type": "USER",
-        "required": true
-      },
-      {
-        "name": "القرار",
-        "description": "اختر الإجراء: قبول ومنح رتبة Member أو عزل برتبة Banned By Anti-Spy",
-        "type": "STRING",
-        "required": true,
-        "choices": [
-          {
-            "name": "✅ قبول ومنح رتبة MEMBER (عضو موثق)",
-            "value": "MEMBER"
-          },
-          {
-            "name": "⛔ عزل أمني برتبة Banned By Anti-Spy",
-            "value": "BANNED_SPY"
-          }
-        ]
-      },
-      {
-        "name": "السبب",
-        "description": "سبب اتخاذ القرار وتوثيقه في السجلات (اختياري)",
-        "type": "STRING",
-        "required": false
-      }
-    ]
   },
   {
     "name": "مساعدة",

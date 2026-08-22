@@ -11,41 +11,41 @@ export const VCR_CONFIGS = [
     name: 'GX VCR #1', 
     get token() { return process.env.VCR_TOKEN_1?.trim() || ''; },
     defaultChannelId: '1537461175908958259',
-    defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟏'
+    defaultChannelName: '𝐌𝐀𝐗 𝐐𝐔𝐀𝐋𝐈𝐓𝐘 𝐕𝐎𝐈𝐂𝐄'
   },
   { 
     id: '1539241189629362246', 
     name: 'GX VCR #2', 
     get token() { return process.env.VCR_TOKEN_2?.trim() || ''; },
     defaultChannelId: '1538568733692530798',
-    defaultChannelName: '🔒・فويس الإدارة'
+    defaultChannelName: '𝐀𝐝𝐦𝐢𝐧𝐬・𝐕𝐨𝐢𝐜𝐞'
   },
   { 
     id: '1539241414318227466', 
     name: 'GX VCR #3', 
     get token() { return process.env.VCR_TOKEN_3?.trim() || ''; },
     defaultChannelId: '1538564154141577276',
-    defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟐'
+    defaultChannelName: '𝐔𝐋𝐓𝐑𝐀 𝐐𝐔𝐀𝐋𝐈𝐓𝐘 𝐕𝐎𝐈𝐂𝐄'
   },
   { 
     id: '1539241621328101497', 
     name: 'GX VCR #4', 
     get token() { return process.env.VCR_TOKEN_4?.trim() || ''; },
     defaultChannelId: '1538564786680233984',
-    defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟑'
+    defaultChannelName: '𝐇𝐈𝐆𝐇 𝐐𝐔𝐀𝐋𝐈𝐓𝐘 𝐕𝐎𝐈𝐂𝐄'
   },
   { 
     id: '1539241867105927209', 
     name: 'GX VCR #5', 
     get token() { return process.env.VCR_TOKEN_5?.trim() || ''; },
     defaultChannelId: '1538564321905479731',
-    defaultChannelName: '『🔊』・𝑽𝒐𝒊𝒄𝒆-𝟎𝟒'
+    defaultChannelName: '𝐍𝐎𝐑𝐌𝐀𝐋 𝐐𝐔𝐀𝐋𝐈𝐓𝐘 𝐕𝐎𝐈𝐂𝐄'
   }
 ];
 
 export const VCR_ROLE_NAME = '🎙️ GX VCR';
 export const VCR_BOT_IDS = new Set(VCR_CONFIGS.map(c => c.id));
-export const SECRET_VCR_CHANNEL_NAME = '📁・سجلات-التسجيلات-الصوتية';
+export const SECRET_VCR_CHANNEL_NAME = 'records';
 export const SECRET_VCR_CHANNEL_ID = '1539266769695547454';
 export const ALLOWED_GUILD_ID = '1537461174222725120';
 export const TOURNAMENT_CATEGORY_ID = '1538979258863587328';

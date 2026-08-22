@@ -239,26 +239,63 @@ export class VCRManager {
   }
 
 
-  async mixMultiTrackAudioToOgg(userTracksMap) {
-    return new Promise((resolve) => {
-      if (!userTracksMap || userTracksMap.size === 0) return resolve(null);
+  /**
+   * ⏱️ Assembles continuous timeline PCM buffer with accurate silence gaps for a single user track.
+   */
+  buildUserTimelinePcm(chunks, windowStart, windowEnd) {
+    if (!chunks || chunks.length === 0) return null;
+    const filtered = chunks.filter(c => c.timestamp >= windowStart && c.timestamp <= windowEnd);
+    if (filtered.length === 0) return null;
 
-      const validTracks = [...userTracksMap.values()].filter(t => t.pcmChunks && t.pcmChunks.length > 0);
-      if (validTracks.length === 0) return resolve(null);
+    const userFirstTs = filtered[0].timestamp;
+    const startOffsetMs = Math.max(0, userFirstTs - windowStart);
+
+    const buffers = [];
+    let lastChunkEndTs = userFirstTs;
+
+    for (const chunk of filtered) {
+      // 48000 Hz, 16-bit, 2 channels = 192,000 bytes per second = 192 bytes per ms
+      const chunkDurationMs = chunk.data.length / 192;
+      const gapMs = chunk.timestamp - lastChunkEndTs;
+
+      // If gap between speech bursts > 20ms, insert zero-filled silence buffer
+      if (gapMs > 20) {
+        const silenceBytes = Math.min(Math.round(gapMs * 192), 192 * 300000); // capped at 5 mins
+        if (silenceBytes > 0) {
+          buffers.push(Buffer.alloc(silenceBytes));
+        }
+      }
+
+      buffers.push(chunk.data);
+      lastChunkEndTs = chunk.timestamp + chunkDurationMs;
+    }
+
+    return {
+      pcmBuffer: Buffer.concat(buffers),
+      startOffsetMs
+    };
+  }
+
+  /**
+   * 🎚️ Multi-Track Audio Mixing Engine (FFmpeg MP3/OGG)
+   */
+  async mixMultiTrackAudio(validTracks, outputFormat = 'mp3') {
+    return new Promise((resolve) => {
+      if (!validTracks || validTracks.length === 0) return resolve(null);
+
+      const isMp3 = outputFormat === 'mp3';
+      const codecArgs = isMp3 
+        ? ['-c:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3']
+        : ['-c:a', 'libopus', '-b:a', '128k', '-vbr', 'on', '-application', 'audio', '-f', 'ogg'];
 
       if (validTracks.length === 1) {
-        const fullPcm = Buffer.concat(validTracks[0].pcmChunks);
         const proc = spawn(ffmpegStatic, [
           '-y',
           '-f', 's16le',
           '-ar', '48000',
           '-ac', '2',
           '-i', 'pipe:0',
-          '-c:a', 'libopus',
-          '-b:a', '128k',
-          '-vbr', 'on',
-          '-application', 'audio',
-          '-f', 'ogg',
+          ...codecArgs,
           'pipe:1'
         ]);
 
@@ -270,7 +307,7 @@ export class VCRManager {
         });
         proc.on('error', () => resolve(null));
 
-        proc.stdin.write(fullPcm);
+        proc.stdin.write(validTracks[0].pcmBuffer);
         proc.stdin.end();
         return;
       }
@@ -293,11 +330,7 @@ export class VCRManager {
       args.push(
         '-filter_complex', filterStr,
         '-map', '[out]',
-        '-c:a', 'libopus',
-        '-b:a', '128k',
-        '-vbr', 'on',
-        '-application', 'audio',
-        '-f', 'ogg',
+        ...codecArgs,
         'pipe:1'
       );
 
@@ -317,14 +350,66 @@ export class VCRManager {
       proc.on('error', () => resolve(null));
 
       for (let i = 0; i < validTracks.length; i++) {
-        const fullUserPcm = Buffer.concat(validTracks[i].pcmChunks);
         const pipeStream = proc.stdio[3 + i];
         if (pipeStream) {
-          pipeStream.write(fullUserPcm);
+          pipeStream.write(validTracks[i].pcmBuffer);
           pipeStream.end();
         }
       }
     });
+  }
+
+  /**
+   * 📦 Exports the multi-track rolling audio buffer for a given voice channel (last 5 minutes by default).
+   */
+  async exportRollingRecording(channelId, windowMs = 5 * 60 * 1000, outputFormat = 'mp3') {
+    const session = this.activeSessions.get(channelId);
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    if (!session || !session.userAudioTracks || session.userAudioTracks.size === 0) {
+      return {
+        audioBuffer: null,
+        durationSec: 0,
+        membersPresence: session ? [...session.membersPresence.values()] : [],
+        hasAudio: false,
+        channelName: session?.channelName || 'Voice'
+      };
+    }
+
+    const validTracks = [];
+    for (const [, track] of session.userAudioTracks) {
+      if (!track.chunks || track.chunks.length === 0) continue;
+      const timeline = this.buildUserTimelinePcm(track.chunks, windowStart, now);
+      if (timeline && timeline.pcmBuffer.length > 0) {
+        validTracks.push({
+          userId: track.userId,
+          pcmBuffer: timeline.pcmBuffer,
+          startOffsetMs: timeline.startOffsetMs
+        });
+      }
+    }
+
+    if (validTracks.length === 0) {
+      return {
+        audioBuffer: null,
+        durationSec: 0,
+        membersPresence: [...session.membersPresence.values()],
+        hasAudio: false,
+        channelName: session.channelName
+      };
+    }
+
+    const audioBuffer = await this.mixMultiTrackAudio(validTracks, outputFormat);
+    const durationSec = Math.min(Math.floor(windowMs / 1000), Math.max(1, Math.floor((now - (session.startTime || now)) / 1000)));
+
+    return {
+      audioBuffer,
+      durationSec,
+      membersPresence: [...session.membersPresence.values()],
+      hasAudio: !!audioBuffer,
+      channelName: session.channelName
+    };
   }
 
   async finalizeAndSendRecording(channelId, reason = 'مغادرة الأعضاء وانتهاء الجلسة') {
@@ -351,6 +436,9 @@ export class VCRManager {
       const logChannel = await this.findOrCreateVCRLogChannel(guild);
       if (!logChannel) return;
 
+      const exportResult = await this.exportRollingRecording(channelId, 5 * 60 * 1000, 'mp3');
+      const audioBuffer = exportResult.audioBuffer;
+
       const minutes = Math.floor(durationSeconds / 60);
       const seconds = durationSeconds % 60;
       const durationStr = `${minutes > 0 ? `${minutes} دقيقة و ` : ''}${seconds} ثانية`;
@@ -361,12 +449,10 @@ export class VCRManager {
         return `**${idx + 1}.** <@${m.id}> (` + m.tag + `)\n   • 📥 **الدخول:** ${joinStr} ➔ 📤 **الخروج:** ${leaveStr}\n   • 🗣️ **عدد مرات التحدث:** \`${m.totalSpokenCount}\` مرة`;
       }).join('\n\n') || 'لا توجد بيانات مسجلة';
 
-      const oggBuffer = await this.mixMultiTrackAudioToOgg(session.userAudioTracks);
-
       const files = [];
-      if (oggBuffer) {
+      if (audioBuffer) {
         const safeName = session.channelName.replace(/[^a-zA-Z0-9_-]/g, '_');
-        files.push(new AttachmentBuilder(oggBuffer, { name: `GX_Voice_Rec_${safeName}_${Date.now()}.ogg` }));
+        files.push(new AttachmentBuilder(audioBuffer, { name: `GX_Voice_Rec_${safeName}_${Date.now()}.mp3` }));
       }
 
       const reportEmbed = new EmbedBuilder()
@@ -379,7 +465,7 @@ export class VCRManager {
           `⏱️ **إجمالي مدة الجلسة:** \`${durationStr}\`\n` +
           `📅 **بداية الجلسة:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
           `🏁 **نهاية الجلسة:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-          `🎵 **ملف التسجيل الصوتي:** ${oggBuffer ? '✅ مرفق بصيغة OGG Opus النقية (128kbps Audio) أدناه' : '⚠️ لم يتم رصد تسجيل مسموع'}\n` +
+          `🎵 **ملف التسجيل الصوتي:** ${audioBuffer ? '✅ مرفق بصيغة MP3 النقية (128kbps Audio) لآخر 5 دقائق أدناه' : '⚠️ لم يتم رصد تسجيل مسموع'}\n` +
           `📝 **سبب الأرشفة:** ${reason}\n\n` +
           `👥 **سجل الأعضاء والتوقيتات (${session.membersPresence.size} أعضاء):**\n${memberTimelines}`
         )
