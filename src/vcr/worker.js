@@ -201,15 +201,6 @@ export class VCRWorker {
       const session = this.manager.getOrCreateSession(channel, guild, this);
       if (!session || session.isFinalizing) return;
 
-      const humanMembers = channel.members.filter(m => !m.user.bot);
-      const humanCount = humanMembers.size;
-      const allMuted = humanMembers.every(m => m.voice.selfMute || m.voice.serverMute);
-
-      // Only record when 2 or more human members are in the voice room
-      if (humanCount < 2 || allMuted) {
-        return;
-      }
-
       session.lastActivityTime = Date.now();
       session.hasSpoken = true;
 
@@ -233,8 +224,6 @@ export class VCRWorker {
             if (!pcmChunk || pcmChunk.length === 0) return;
 
             const now = Date.now();
-            const currentHumanMembers = channel.members.filter(m => !m.user.bot);
-            if (currentHumanMembers.size < 2) return; // Strict 2+ human members requirement
 
             // 5-Minute Rolling Multi-Track Audio Storage (300,000 ms)
             if (session.userAudioTracks && !session.isFinalizing) {

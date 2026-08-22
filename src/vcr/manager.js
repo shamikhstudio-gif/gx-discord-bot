@@ -361,11 +361,12 @@ export class VCRManager {
 
   /**
    * 📦 Exports the multi-track rolling audio buffer for a given voice channel (last 5 minutes by default).
+   * Dynamically aligns to the earliest spoken audio frame so recordings of any length (e.g. 10s, 1m, 5m) start instantly at 0:00 without dead silence.
    */
   async exportRollingRecording(channelId, windowMs = 5 * 60 * 1000, outputFormat = 'mp3') {
     const session = this.activeSessions.get(channelId);
     const now = Date.now();
-    const windowStart = now - windowMs;
+    const maxLookback = now - windowMs;
 
     if (!session || !session.userAudioTracks || session.userAudioTracks.size === 0) {
       return {
@@ -377,10 +378,36 @@ export class VCRManager {
       };
     }
 
-    const validTracks = [];
+    const userTracksWithAudio = [];
+    let globalEarliestSpeechTs = Infinity;
+
     for (const [, track] of session.userAudioTracks) {
       if (!track.chunks || track.chunks.length === 0) continue;
-      const timeline = this.buildUserTimelinePcm(track.chunks, windowStart, now);
+      const filtered = track.chunks.filter(c => c.timestamp >= maxLookback && c.timestamp <= now);
+      if (filtered.length > 0) {
+        userTracksWithAudio.push({ track, filtered });
+        if (filtered[0].timestamp < globalEarliestSpeechTs) {
+          globalEarliestSpeechTs = filtered[0].timestamp;
+        }
+      }
+    }
+
+    if (userTracksWithAudio.length === 0 || globalEarliestSpeechTs === Infinity) {
+      return {
+        audioBuffer: null,
+        durationSec: 0,
+        membersPresence: [...session.membersPresence.values()],
+        hasAudio: false,
+        channelName: session.channelName
+      };
+    }
+
+    // Reference start aligns exactly to earliest spoken audio (or max 5 min lookback)
+    const timelineReferenceStart = Math.max(globalEarliestSpeechTs, maxLookback);
+
+    const validTracks = [];
+    for (const { track, filtered } of userTracksWithAudio) {
+      const timeline = this.buildUserTimelinePcm(filtered, timelineReferenceStart, now);
       if (timeline && timeline.pcmBuffer.length > 0) {
         validTracks.push({
           userId: track.userId,
@@ -401,7 +428,7 @@ export class VCRManager {
     }
 
     const audioBuffer = await this.mixMultiTrackAudio(validTracks, outputFormat);
-    const durationSec = Math.min(Math.floor(windowMs / 1000), Math.max(1, Math.floor((now - (session.startTime || now)) / 1000)));
+    const durationSec = Math.max(1, Math.round((now - timelineReferenceStart) / 1000));
 
     return {
       audioBuffer,
@@ -413,71 +440,16 @@ export class VCRManager {
   }
 
   async finalizeAndSendRecording(channelId, reason = 'مغادرة الأعضاء وانتهاء الجلسة') {
+    // 🛑 AUTO-RECORD POSTING IS DISABLED.
+    // Audio recordings are strictly exported & submitted only when /ابلاغ is executed.
     const session = this.activeSessions.get(channelId);
-    if (!session || session.isFinalizing) return;
+    if (!session) return;
 
-    session.isFinalizing = true;
     this.activeSessions.delete(channelId);
-
     if (session.worker) {
       session.worker.cleanupSubscriptions();
     }
-
-    const durationSeconds = Math.floor((Date.now() - session.startTime) / 1000);
-    const hasRecordedAudio = (session.totalRecordedBytes || 0) > 4000;
-
-    if (durationSeconds < 3 || session.membersPresence.size === 0 || (!session.hasSpoken && !hasRecordedAudio)) {
-      session.isFinalizing = false;
-      return;
-    }
-
-    try {
-      const guild = session.guild;
-      const logChannel = await this.findOrCreateVCRLogChannel(guild);
-      if (!logChannel) return;
-
-      const exportResult = await this.exportRollingRecording(channelId, 5 * 60 * 1000, 'mp3');
-      const audioBuffer = exportResult.audioBuffer;
-
-      const minutes = Math.floor(durationSeconds / 60);
-      const seconds = durationSeconds % 60;
-      const durationStr = `${minutes > 0 ? `${minutes} دقيقة و ` : ''}${seconds} ثانية`;
-
-      const memberTimelines = [...session.membersPresence.values()].map((m, idx) => {
-        const joinStr = `<t:${Math.floor(m.joinTime / 1000)}:T>`;
-        const leaveStr = m.leaveTime ? `<t:${Math.floor(m.leaveTime / 1000)}:T>` : `<t:${Math.floor(Date.now() / 1000)}:T>`;
-        return `**${idx + 1}.** <@${m.id}> (` + m.tag + `)\n   • 📥 **الدخول:** ${joinStr} ➔ 📤 **الخروج:** ${leaveStr}\n   • 🗣️ **عدد مرات التحدث:** \`${m.totalSpokenCount}\` مرة`;
-      }).join('\n\n') || 'لا توجد بيانات مسجلة';
-
-      const files = [];
-      if (audioBuffer) {
-        const safeName = session.channelName.replace(/[^a-zA-Z0-9_-]/g, '_');
-        files.push(new AttachmentBuilder(audioBuffer, { name: `GX_Voice_Rec_${safeName}_${Date.now()}.mp3` }));
-      }
-
-      const reportEmbed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setAuthor({ name: '🎙️ تقرير الجلسة الصوتية وملف التسجيل عالي النقاء | GX VCR Archive', iconURL: guild.iconURL() })
-        .setTitle(`📁 أرشفة الجلسة الصوتية في روم: #${session.channelName}`)
-        .setDescription(
-          `تم إنهاء الجلسة وتوليد الملف الصوتي وسجل الدخول والخروج بدقة متناهية.\n\n` +
-          `🔊 **الروم الصوتي:** <#${session.channelId}> (\`#${session.channelName}\`)\n` +
-          `⏱️ **إجمالي مدة الجلسة:** \`${durationStr}\`\n` +
-          `📅 **بداية الجلسة:** <t:${Math.floor(session.startTime / 1000)}:F>\n` +
-          `🏁 **نهاية الجلسة:** <t:${Math.floor(Date.now() / 1000)}:F>\n` +
-          `🎵 **ملف التسجيل الصوتي:** ${audioBuffer ? '✅ مرفق بصيغة MP3 النقية (128kbps Audio) لآخر 5 دقائق أدناه' : '⚠️ لم يتم رصد تسجيل مسموع'}\n` +
-          `📝 **سبب الأرشفة:** ${reason}\n\n` +
-          `👥 **سجل الأعضاء والتوقيتات (${session.membersPresence.size} أعضاء):**\n${memberTimelines}`
-        )
-        .setFooter({ text: `GX eSports Autonomous Surveillance • ${session.worker.name}` })
-        .setTimestamp();
-
-      await logChannel.send({ embeds: [reportEmbed], files }).catch(() => {});
-      console.log(`📁 [أرشفة VCR سحابية] تم بنجاح إرسال تقرير وتسجيل الروم #${session.channelName}.`);
-    } catch (err) {
-      console.error('خطأ في أرشفة التقرير الصوتي:', err.message);
-    } finally {
-      session.isFinalizing = false;
+    if (session.userAudioTracks) {
       session.userAudioTracks.clear();
     }
   }
@@ -546,11 +518,10 @@ export class VCRManager {
         }
 
         const humanMembers = oldCh.members.filter(m => !m.user.bot);
-        if (humanMembers.size <= 1 && (session.hasSpoken || (session.totalRecordedBytes || 0) > 0)) {
-          const reason = humanMembers.size === 0 
-            ? 'مغادرة جميع الأعضاء للروم الصوتي' 
-            : 'بقاء عضو واحد فقط بالروم وانخفاض العدد عن الحد الأدنى للتسجيل';
-          await this.finalizeAndSendRecording(oldCh.id, reason);
+        if (humanMembers.size === 0) {
+          if (session.worker) session.worker.cleanupSubscriptions();
+          if (session.userAudioTracks) session.userAudioTracks.clear();
+          this.activeSessions.delete(oldCh.id);
         }
       }
     }
