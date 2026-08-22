@@ -29,6 +29,7 @@ import {
   ChannelType,
   ActivityType,
   EmbedBuilder,
+  AttachmentBuilder,
   SlashCommandBuilder,
   ActionRowBuilder,
   ButtonBuilder,
