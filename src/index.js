@@ -894,16 +894,37 @@ async function ensureEventPanel(guild) {
   const embed = renderEventEmbed(eventData, client.user);
   const row = renderEventButtons(eventData);
 
+  let existingMsg = null;
   if (eventData.messageId) {
-    const existingMsg = await eventChannel.messages.fetch(eventData.messageId).catch(() => null);
-    if (existingMsg) {
-      await existingMsg.edit({ embeds: [embed], components: [row] }).catch(() => null);
-      return existingMsg;
+    existingMsg = await eventChannel.messages.fetch(eventData.messageId).catch(() => null);
+  }
+
+  // 🔍 Deep Scan channel history for any prior tournament embed posted by bot
+  if (!existingMsg) {
+    const messages = await eventChannel.messages.fetch({ limit: 50 }).catch(() => null);
+    if (messages && messages.size > 0) {
+      const botMsg = messages.find(m => 
+        (m.author.id === client.user?.id || m.author.bot) && (
+          m.components?.some(r => r.components?.some(b => b.customId?.startsWith('event_join_'))) ||
+          m.embeds?.some(e => e.title?.includes(eventData.title) || e.author?.name?.includes('بطولة وفعالية'))
+        )
+      );
+      if (botMsg) {
+        existingMsg = botMsg;
+        eventData.messageId = botMsg.id;
+        saveActiveEvent(eventData);
+        console.log(`📌 [لوحة الفعاليات] تم العثور على بطاقة الفعالية السابقة في تاريخ القناة (${botMsg.createdAt.toISOString()}).`);
+      }
     }
   }
 
+  if (existingMsg) {
+    await existingMsg.edit({ embeds: [embed], components: [row] }).catch(() => null);
+    return existingMsg;
+  }
+
+  // Only send for the first time if no prior event message exists
   const newMsg = await eventChannel.send({
-    content: `🎉 @everyone **بطولة رسمية جديدة في سيرفر GX eSports!**`,
     embeds: [embed],
     components: [row]
   }).catch(() => null);
@@ -2266,6 +2287,7 @@ async function sendLeaveMessage(member) {
 }
 
 async function welcomeExistingMembersSequentially(guild) {
+  // Silent tracking only - NEVER mass-send welcome messages to existing members on restart or guild join
   const welcomedList = loadWelcomedMembers();
   const tracker = loadWelcomeTracker();
   const allMembers = await guild.members.fetch().catch(() => guild.members.cache);
@@ -2276,8 +2298,7 @@ async function welcomeExistingMembersSequentially(guild) {
 
   let countIndex = 1;
   for (const [, member] of humanMembers) {
-      // Check & ban suspicious accounts created on/after 16 August 2026
-      if (await enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION, getExecutiveMembers)) continue;
+    if (await enforceSuspiciousAccountBan(member, guild, client, sendToLogChannel, isOwnerOrCeo, BOT_VERSION, getExecutiveMembers)) continue;
     if (!tracker.members[member.id]) {
       tracker.members[member.id] = {
         number: countIndex,
@@ -2286,11 +2307,7 @@ async function welcomeExistingMembersSequentially(guild) {
       };
     }
     if (!welcomedList.includes(member.id)) {
-      await sendWelcomeMessage(member, countIndex);
       welcomedList.push(member.id);
-      saveWelcomedMembers(welcomedList);
-      console.log(`✅ [ترحيب] تم إرسال بطاقة الترحيب للعضو #${countIndex}: ${member.user.tag}`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     countIndex++;
   }
@@ -2467,9 +2484,21 @@ async function getOrCreateTicketChannel(guild) {
   if (!guild) return null;
 
   try {
-    let ticketChannel = guild.channels.cache.find(
-      (c) => (c.name === 'tickets' || c.name === 'تذاكر' || c.name === 'الدعم' || c.name === 'تذاكر-الدعم' || c.name === 'ticket-support' || c.name.includes('تذاكر')) && c.type === ChannelType.GuildText
-    );
+    // 1. Check known fixed support channel ID first (1540077575920160778)
+    let ticketChannel = guild.channels.cache.get('1540077575920160778');
+
+    // 2. If not found by ID, search by names
+    if (!ticketChannel) {
+      ticketChannel = guild.channels.cache.find(
+        (c) => c.type === ChannelType.GuildText && (
+          c.name.toLowerCase().includes('support') ||
+          c.name.includes('تذاكر') ||
+          c.name.includes('دعم') ||
+          c.name.includes('ticket') ||
+          c.name.includes('𝐒𝐮𝐩𝐩𝐨𝐫𝐭')
+        )
+      );
+    }
 
     if (!ticketChannel) {
       ticketChannel = await guild.channels.create({
@@ -2489,7 +2518,8 @@ async function getOrCreateTicketChannel(guild) {
 }
 
 /**
- * Ensures the permanent ticket panel message is always present in the ticket channel with @everyone and button.
+ * Ensures the permanent ticket panel message is always present in the ticket channel.
+ * Deep scans channel history by date/author to NEVER send duplicate panels on restart.
  */
 async function ensurePermanentTicketPanel(guild) {
   if (!guild || guild.id !== ALLOWED_GUILD_ID) return;
@@ -2505,12 +2535,21 @@ async function ensurePermanentTicketPanel(guild) {
       existingMsg = await channel.messages.fetch(panelData.messageId).catch(() => null);
     }
 
+    // 🔍 Deep Scan channel history up to 50 messages to check if bot ever sent the panel in the past
     if (!existingMsg) {
-      const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-      const botMsg = messages?.find((m) => m.author.id === client.user.id && m.components?.length > 0);
-      if (botMsg) {
-        existingMsg = botMsg;
-        saveTicketPanelData({ channelId: channel.id, messageId: botMsg.id });
+      const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+      if (messages && messages.size > 0) {
+        const botMsg = messages.find(
+          (m) => (m.author.id === client.user.id || m.author.bot) && (
+            m.components?.some(r => r.components?.some(c => c.customId === 'open_ticket_btn')) ||
+            m.embeds?.some(e => e.title?.includes('تذاكر') || e.title?.includes('الدعم') || e.title?.includes('المساعدة') || e.author?.name?.includes('الدعم الفني'))
+          )
+        );
+        if (botMsg) {
+          existingMsg = botMsg;
+          saveTicketPanelData({ channelId: channel.id, messageId: botMsg.id });
+          console.log(`📌 [لوحة التذاكر الدائمة] تم العثور على لوحة التذاكر السابقة في تاريخ القناة (${botMsg.createdAt.toISOString()}). لن يتم إرسال رسالة جديدة.`);
+        }
       }
     }
 
@@ -2546,20 +2585,19 @@ async function ensurePermanentTicketPanel(guild) {
 
     if (existingMsg) {
       await existingMsg.edit({
-        content: '@everyone',
         embeds: [panelEmbed],
         components: [row]
       }).catch(() => {});
       saveTicketPanelData({ channelId: channel.id, messageId: existingMsg.id });
     } else {
+      // ONLY send if absolutely 0 ticket panel messages exist in channel history
       const newMsg = await channel.send({
-        content: '@everyone',
         embeds: [panelEmbed],
         components: [row]
       });
       if (newMsg) {
         saveTicketPanelData({ channelId: channel.id, messageId: newMsg.id });
-        console.log(`📌 [لوحة التذاكر الدائمة] تم إرسال وتثبيت لوحة التذاكر مع منشن @everyone في #${channel.name}`);
+        console.log(`📌 [لوحة التذاكر الدائمة] تم إرسال وتثبيت لوحة التذاكر في #${channel.name}`);
       }
     }
   } catch (err) {
@@ -2574,9 +2612,10 @@ async function getOrCreateLogChannel(guild) {
   if (!guild) return null;
 
   try {
-    let logChannel = guild.channels.cache.find(
-      (c) => (c.name === 'log' || c.name === 'logs' || c.name === 'سجلات') && c.type === ChannelType.GuildText
-    );
+    let logChannel = guild.channels.cache.get('1540032994159493221') ||
+                     guild.channels.cache.find(
+                       (c) => (c.name === 'log' || c.name === 'logs' || c.name === 'سجلات') && c.type === ChannelType.GuildText
+                     );
 
     if (!logChannel) {
       const botMember = guild.members.me;
@@ -3043,18 +3082,41 @@ async function ensureVersionBroadcastOnce(guild) {
   if (!guild) return;
   const history = loadVersionBroadcast();
 
-  // If this version was already broadcasted, NEVER send again (even across restarts)
+  // If this version was already marked as broadcasted locally, skip
   if (history.lastBroadcastVersion === BOT_VERSION) {
     return;
   }
 
   // Find target channel: '1540028136677314571' (News), or channel named news/اعلان/welcome/chat
   const newsChannel = guild.channels.cache.get('1540028136677314571') ||
-                      guild.channels.cache.find(c => c.isTextBased() && (c.name.includes('news') || c.name.includes('إعلان') || c.name.includes('اخبار') || c.name.includes('chat')));
+                      guild.channels.cache.find(c => c.isTextBased() && (c.name.toLowerCase().includes('news') || c.name.includes('إعلان') || c.name.includes('اخبار') || c.name.includes('𝐍𝐞𝐰𝐬')));
 
   if (!newsChannel) {
     console.warn('⚠️ [إشعار التحديث] لم يتم العثور على قناة لنشر إعلان التحديث v2.0 Pro.');
     return;
+  }
+
+  // 🔍 Deep Scan Discord message history: Check if bot EVER sent this update announcement in the past
+  try {
+    const recentMessages = await newsChannel.messages.fetch({ limit: 50 }).catch(() => null);
+    if (recentMessages && recentMessages.size > 0) {
+      const alreadySent = recentMessages.find(m => 
+        (m.author.id === client.user?.id || m.author.bot) && (
+          m.embeds?.some(e => e.title?.includes('v2.0 Pro') || e.description?.includes('v2.0 Pro') || e.author?.name?.includes('إطلاق التحديث الشامل'))
+        )
+      );
+
+      if (alreadySent) {
+        console.log(`📢 [إشعار التحديث] تم العثور مسبقاً على رسالة التحديث v2.0 Pro في تاريخ القناة (${alreadySent.createdAt.toISOString()}). لن يتم تكرار الإرسال.`);
+        history.lastBroadcastVersion = BOT_VERSION;
+        history.broadcastAt = alreadySent.createdTimestamp || Date.now();
+        history.channelId = newsChannel.id;
+        saveVersionBroadcast(history);
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('خطأ في فحص تاريخ رسائل الإعلان:', err.message);
   }
 
   const broadcastEmbed = new EmbedBuilder()
