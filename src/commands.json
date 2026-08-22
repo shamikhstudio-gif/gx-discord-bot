@@ -686,7 +686,7 @@
     "options": []
   },
   {
-    "name": "فرز",
+    "name": "فرز_مشتبه",
     "description": "خاص برتبة MANAGERS: تحويل عضو من رتبة UNTRUSTED إلى Member أو Banned By Anti-Spy",
     "Public_Command": false,
     "category": "moderation",
