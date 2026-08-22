@@ -91,6 +91,7 @@ const TICKET_PANEL_FILE = path.join(DATA_DIR, 'ticket_panel.json');
 const USER_INFRACTIONS_FILE = path.join(DATA_DIR, 'user_infractions.json');
 const VERIFICATION_REQUESTS_FILE = path.join(DATA_DIR, 'verification_requests.json');
 const EMERGENCY_STATE_FILE = path.join(DATA_DIR, 'emergency_state.json');
+const SECURITY_SETTINGS_FILE = path.join(DATA_DIR, 'security_settings.json');
 const UNTRUSTED_ROLE_NAME = 'UNTRUSTED';
 const EVENT_CHANNEL_ID = '1538600505012387860';
 const ACTIVE_EVENT_FILE = path.join(DATA_DIR, 'active_event.json');
@@ -295,6 +296,100 @@ function saveEmergencyState(data) {
 function isEmergencyActive() {
   const state = loadEmergencyState();
   return Boolean(state && state.isActive);
+}
+
+// ----------------------------------------------------
+// 🛡️ Security Settings Storage (Waiting Voice Room Alert)
+// ----------------------------------------------------
+function loadSecuritySettings() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(SECURITY_SETTINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(SECURITY_SETTINGS_FILE, 'utf-8'));
+    }
+  } catch {}
+  return { waitingVoiceChannelId: null };
+}
+
+function saveSecuritySettings(data) {
+  safeWriteJson(SECURITY_SETTINGS_FILE, data);
+}
+
+let WAITING_VOICE_CHANNEL_ID = loadSecuritySettings().waitingVoiceChannelId || null;
+const untrustedVoiceAlertCooldowns = new Map();
+
+/**
+ * 👑 Retrieves all members holding Admin, CEO, or Owner roles to receive waiting room alert DMs.
+ */
+async function getAdminCeoOwnerMembers(guild) {
+  if (!guild) return [];
+  const members = await guild.members.fetch().catch(() => guild.members.cache);
+  const targetRoleNames = ['owner', 'ceo', 'admin'];
+  const targetRoleIds = ['1538485406922838066', '1538485672795570196', '1538544110913454160'];
+
+  return members.filter((m) => {
+    if (m.user.bot) return false;
+    if (m.id === guild.ownerId) return true;
+    if (m.permissions.has(PermissionFlagsBits.Administrator)) return true;
+    return m.roles.cache.some((r) => {
+      if (targetRoleIds.includes(r.id)) return true;
+      const name = r.name.toLowerCase().trim();
+      return targetRoleNames.some((target) => name === target || name.includes(target));
+    });
+  });
+}
+
+/**
+ * 🚨 Dispatches rich Direct Messages to Admin, CEO, and Owner when an Untrusted member joins the Waiting Room.
+ */
+async function sendUntrustedWaitingAlertToStaff(guild, member, voiceChannel) {
+  try {
+    const staffMembers = await getAdminCeoOwnerMembers(guild);
+    if (!staffMembers || staffMembers.length === 0) return;
+
+    const channelName = voiceChannel?.name || 'غرفة الانتظار';
+    const createdTs = Math.floor((member.user.createdTimestamp || Date.now()) / 1000);
+    const joinedTs = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
+
+    const alertEmbed = new EmbedBuilder()
+      .setColor(0xFEE75C)
+      .setAuthor({
+        name: '🚨 تنبيه أمني عاجل: دخول روم الانتظار',
+        iconURL: member.user.displayAvatarURL({ dynamic: true }) || guild.iconURL()
+      })
+      .setTitle(`🔔 عضو برتبة UNTRUSTED متواجد في: #${channelName}`)
+      .setDescription(
+        `دخل العضو <@${member.id}> (\`${member.user.tag}\`) إلى روم الانتظار الصوتي المحدد <#${voiceChannel?.id || ''}> وهو يحمل رتبة **UNTRUSTED**.\n\n` +
+        `> 👤 **العضو:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+        `> 🆔 **المعرف (ID):** \`${member.id}\`\n` +
+        `> 🎙️ **الروم الصوتي:** <#${voiceChannel?.id || ''}> (\`${channelName}\`)\n` +
+        `> 📅 **تاريخ إنشاء الحساب:** <t:${createdTs}:F> (<t:${createdTs}:R>)\n` +
+        `> 📥 **تاريخ الانضمام للسيرفر:** <t:${joinedTs}:F> (<t:${joinedTs}:R>)\n\n` +
+        `⚡ **الإجراء المطلوب:**\n` +
+        `يمكن للمشرفين التحقق منه واستخدام أمر \`/فرز_مشتبه\` لتحويل رتبته إلى \`Member\` أو \`Banned By Anti-Spy\`، أو مراجعته عبر لوحة التحكم.`
+      )
+      .setFooter({ text: `GX eSports Security Engine • الإصدار ${BOT_VERSION}` })
+      .setTimestamp();
+
+    for (const staff of staffMembers) {
+      if (staff.id === member.id) continue;
+      try {
+        await staff.send({ embeds: [alertEmbed] }).catch(() => null);
+      } catch {}
+    }
+
+    const logEmbed = new EmbedBuilder()
+      .setColor(0xFEE75C)
+      .setAuthor({ name: '🎙️ رصد دخول روم الانتظار (UNTRUSTED)', iconURL: member.user.displayAvatarURL() })
+      .setDescription(`دخل العضو <@${member.id}> (\`${member.user.tag}\`) برتبة **UNTRUSTED** إلى الروم الصوتي <#${voiceChannel?.id || ''}>. تم إرسال تنبيه بالخاص لجميع أصحاب رتب (Admin / CEO / Owner).`)
+      .setFooter({ text: `GX eSports Security Engine • الإصدار ${BOT_VERSION}` })
+      .setTimestamp();
+
+    await sendToLogChannel(guild, logEmbed);
+    logActivity('security', 'Untrusted Waiting Room', `Member ${member.user.tag} joined #${channelName}`, member.user);
+  } catch (err) {
+    console.error('خطأ في إرسال تنبيه روم الانتظار:', err.message);
+  }
 }
 
 // ----------------------------------------------------
@@ -3219,6 +3314,25 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   const member = newState.member;
   if (!member) return;
 
+  // 🚨 WAITING VOICE ROOM ALERT (Untrusted Member Detection)
+  if (
+    WAITING_VOICE_CHANNEL_ID &&
+    newState.channelId === WAITING_VOICE_CHANNEL_ID &&
+    oldState.channelId !== newState.channelId &&
+    !member.user.bot
+  ) {
+    const isUntrusted = isUntrustedMember(member) || member.roles.cache.some((r) => r.name.toLowerCase().includes('untrusted'));
+    if (isUntrusted) {
+      const now = Date.now();
+      const lastAlertTime = untrustedVoiceAlertCooldowns.get(member.id) || 0;
+      // 90-second cooldown per member to avoid DM spam loops
+      if (now - lastAlertTime > 90 * 1000) {
+        untrustedVoiceAlertCooldowns.set(member.id, now);
+        sendUntrustedWaitingAlertToStaff(newState.guild, member, newState.channel);
+      }
+    }
+  }
+
   const botMember = newState.guild.members.me;
   const botVoiceChannelId = botMember?.voice?.channelId;
 
@@ -5286,6 +5400,164 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+    }
+
+    // أمر /فرز_مشتبه (خاص برتبة MANAGERS)
+    else if (commandName === 'فرز_مشتبه') {
+      if (!isManagerMember(interaction.member)) {
+        return interaction.reply({
+          content: '❌ **عذراً، هذا الأمر مخصص حصرياً للمشرفين وأصحاب رتبة MANAGERS فقط!**',
+          ephemeral: true
+        });
+      }
+
+      const targetUser = interaction.options.getUser('المستخدم');
+      const decision = interaction.options.getString('القرار'); // 'MEMBER' | 'BANNED_SPY'
+      const reason = interaction.options.getString('السبب') || 'مراجعة أمنية بواسطة المشرفين (MANAGERS)';
+
+      if (targetUser.id === client.user.id) {
+        return interaction.reply({ content: '❌ لا يمكن تطبيق هذا الإجراء على البوت.', ephemeral: true });
+      }
+      if (targetUser.id === interaction.guild.ownerId) {
+        return interaction.reply({ content: '❌ لا يمكن تطبيق هذا الإجراء على مالك السيرفر.', ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: false });
+
+      const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+      if (!targetMember) {
+        return interaction.editReply({ content: '❌ لم يتم العثور على هذا العضو في السيرفر.' });
+      }
+
+      if (isManagerMember(targetMember)) {
+        return interaction.editReply({ content: '❌ لا يمكن تطبيق فرز المشتبهين على أعضاء الإدارة أو المشرفين!' });
+      }
+
+      const botMember = interaction.guild.members.me;
+      const untrustedRole = findAutoRole(interaction.guild);
+      const memberRole = interaction.guild.roles.cache.get(VERIFIED_MEMBER_ROLE_ID) || interaction.guild.roles.cache.find((r) => r.name.toUpperCase() === 'MEMBER');
+      const antiSpyRole = await findOrCreateAntiSpyRole(interaction.guild);
+
+      if (decision === 'MEMBER') {
+        try {
+          if (untrustedRole && targetMember.roles.cache.has(untrustedRole.id)) {
+            await targetMember.roles.remove(untrustedRole).catch(() => {});
+          }
+          if (antiSpyRole && targetMember.roles.cache.has(antiSpyRole.id)) {
+            await targetMember.roles.remove(antiSpyRole).catch(() => {});
+          }
+          if (memberRole) {
+            await targetMember.roles.add(memberRole).catch(() => {});
+          }
+          if (targetMember.communicationDisabledUntilTimestamp && targetMember.communicationDisabledUntilTimestamp > Date.now()) {
+            await targetMember.timeout(null, `تم توثيق العضو بواسطة المشرف ${interaction.user.tag}`).catch(() => {});
+          }
+
+          const appealsData = loadAppealsData();
+          if (appealsData[targetMember.id]) {
+            appealsData[targetMember.id].status = 'approved';
+            appealsData[targetMember.id].handledBy = interaction.user.id;
+            appealsData[targetMember.id].handledByName = interaction.user.tag;
+            appealsData[targetMember.id].handledAt = Date.now();
+            saveAppealsData(appealsData);
+          }
+
+          const vRequests = loadVerificationRequests();
+          if (vRequests[targetMember.id]) {
+            vRequests[targetMember.id].status = 'approved';
+            vRequests[targetMember.id].approverTag = interaction.user.tag;
+            saveVerificationRequests(vRequests);
+          }
+
+          const userDMEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setAuthor({ name: '🎉 تم توثيق حسابك | GX eSports', iconURL: interaction.guild.iconURL() })
+            .setTitle('✅ مرحباً بك في مجتمع GX eSports')
+            .setDescription(`تمت مراجعة حسابك بنجاح من قبل إدارة السيرفر ومنحك رتبة **MEMBER** الرسمية. نتمنى لك وقتاً ممتعاً!`)
+            .setFooter({ text: 'GX eSports Staff Team' })
+            .setTimestamp();
+          await targetMember.send({ embeds: [userDMEmbed] }).catch(() => {});
+
+          const embed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setAuthor({ name: '✅ فرز مشتبه: قبول ومنح رتبة MEMBER', iconURL: targetUser.displayAvatarURL() })
+            .setTitle(`🎉 تم ترقية العضو إلى رتبة MEMBER بنجاح`)
+            .setDescription(
+              `> 👤 **العضو:** <@${targetUser.id}> (\`${targetUser.tag}\`)\n` +
+              `> 🛡️ **المشرف المسؤول:** <@${interaction.user.id}> (\`${interaction.user.tag}\`)\n` +
+              `> 📝 **القرار:** ترقية وتوثيق برتبة \`MEMBER\` وسحب \`UNTRUSTED\`\n` +
+              `> 💬 **السبب:** ${reason}`
+            )
+            .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+
+          await interaction.editReply({ embeds: [embed] });
+          await sendToLogChannel(interaction.guild, embed);
+          logActivity('security', 'Member Approved by Manager', `Promoted ${targetUser.tag} to MEMBER by ${interaction.user.tag}`, interaction.user);
+        } catch (err) {
+          await interaction.editReply({ content: `❌ تعذر ترقية العضو: ${err.message}` });
+        }
+      } else if (decision === 'BANNED_SPY') {
+        try {
+          if (antiSpyRole && botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            const currentRoles = targetMember.roles.cache.filter((r) => r.id !== interaction.guild.id && !r.managed && botMember.roles.highest.comparePositionTo(r) > 0);
+            if (currentRoles.size > 0) {
+              await targetMember.roles.remove(currentRoles).catch(() => {});
+            }
+            await targetMember.roles.add(antiSpyRole).catch(() => {});
+          }
+
+          if (botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+            await targetMember.timeout(28 * 24 * 60 * 60 * 1000, `Banned By Anti-Spy بواسطة ${interaction.user.tag}: ${reason}`).catch(() => {});
+          }
+
+          const appealsData = loadAppealsData();
+          appealsData[targetMember.id] = {
+            targetId: targetMember.id,
+            userTag: targetMember.user.tag,
+            statement: `تم عزل العضو برتبة "${SPY_BANNED_ROLE_NAME}" بقرار من المشرف @${interaction.user.tag} (السبب: ${reason}).`,
+            status: 'pending',
+            messages: [],
+            handledBy: null,
+            handledByName: null,
+            createdAt: Date.now()
+          };
+          saveAppealsData(appealsData);
+
+          const userDMEmbed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setAuthor({ name: '⛔ تنبيه أمني | GX Security Sentinel', iconURL: interaction.guild.iconURL() })
+            .setTitle('تم عزل حسابك برتبة Banned By Anti-Spy')
+            .setDescription(
+              `مرحباً <@${targetMember.id}>،\n\n` +
+              `تم اتخاذ إجراء عزل أمني لحسابك وتجريده من كافة الصلاحيات برتبة **Banned By Anti-Spy**.\n` +
+              `**السبب:** \`${reason}\`\n\n` +
+              `تم إدراج حالتك تلقائياً في لوحة التحكم لمراجعة والبت النهائي من القيادة العليا.`
+            )
+            .setFooter({ text: 'GX eSports Security Engine' })
+            .setTimestamp();
+          await targetMember.send({ embeds: [userDMEmbed] }).catch(() => {});
+
+          const embed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setAuthor({ name: '⛔ فرز مشتبه: عزل أمني (Banned By Anti-Spy)', iconURL: targetUser.displayAvatarURL() })
+            .setTitle(`🛡️ تم عزل العضو برتبة Banned By Anti-Spy`)
+            .setDescription(
+              `> 👤 **العضو:** <@${targetUser.id}> (\`${targetUser.tag}\`)\n` +
+              `> 🛡️ **المشرف المسؤول:** <@${interaction.user.id}> (\`${interaction.user.tag}\`)\n` +
+              `> 📝 **القرار:** عزل كلي برتبة \`Banned By Anti-Spy\` وتايم آوت 28 يوماً\n` +
+              `> 💬 **السبب:** ${reason}`
+            )
+            .setFooter({ text: `GX eSports Security • الإصدار ${BOT_VERSION}` })
+            .setTimestamp();
+
+          await interaction.editReply({ embeds: [embed] });
+          await sendToLogChannel(interaction.guild, embed);
+          logActivity('security', 'Member Quarantined by Manager', `Quarantined ${targetUser.tag} with Banned By Anti-Spy by ${interaction.user.tag}`, interaction.user);
+        } catch (err) {
+          await interaction.editReply({ content: `❌ تعذر عزل العضو: ${err.message}` });
+        }
+      }
     }
 
     // 7. أمر /تحذير
@@ -8040,6 +8312,29 @@ const healthServer = http.createServer(async (req, res) => {
       logActivity('admin', 'VCR Reconnect', `Forced re-stationing of VCR audio sentinels via Control Panel`);
     }
     return sendJsonResponse(res, 200, { success: true, message: 'تمت إعادة تثبيت وربط المسجلات الصوتية' });
+  }
+
+  // 13.5. Security Settings: GET /api/admin/settings/security & POST /api/admin/settings/security
+  if (url === '/api/admin/settings/security') {
+    const session = authenticateAdmin(req);
+    if (!session) return sendJsonResponse(res, 401, { error: 'غير مصرح' });
+
+    if (method === 'GET') {
+      const settings = loadSecuritySettings();
+      return sendJsonResponse(res, 200, { success: true, settings });
+    }
+
+    if (method === 'POST') {
+      const body = await parseJsonBody(req);
+      const settings = loadSecuritySettings();
+      if (body.waitingVoiceChannelId !== undefined) {
+        settings.waitingVoiceChannelId = body.waitingVoiceChannelId ? String(body.waitingVoiceChannelId).trim() : null;
+        WAITING_VOICE_CHANNEL_ID = settings.waitingVoiceChannelId;
+      }
+      saveSecuritySettings(settings);
+      logActivity('admin', 'Security Settings Updated', `Updated waiting room to ${WAITING_VOICE_CHANNEL_ID || 'None'}`);
+      return sendJsonResponse(res, 200, { success: true, settings, message: 'تم حفظ إعدادات غرفة الانتظار بنجاح' });
+    }
   }
 
   // 14. Admin Moderation Metadata: GET /api/admin/mod/data & GET /api/admin/channels

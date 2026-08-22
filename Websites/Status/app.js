@@ -149,7 +149,10 @@ function switchTab(tabId) {
   if (tabId === 'verifications') loadVerifications();
   if (tabId === 'appeals') loadAppeals();
   if (tabId === 'panels') loadPanels();
-  if (tabId === 'moderation' || tabId === 'broadcast') loadModData();
+  if (tabId === 'moderation' || tabId === 'broadcast' || tabId === 'security') {
+    loadModData();
+    loadSecuritySettings();
+  }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -893,6 +896,17 @@ function populateModSelects() {
       .join('');
   });
 
+  const waitingSel = $('waitingVoiceChannelSelect');
+  if (waitingSel) {
+    const voiceChannels = (serverChannels || []).filter((c) => c.type === 'voice');
+    if (voiceChannels.length === 0) {
+      waitingSel.innerHTML = '<option value="">لا توجد رومات صوتية متاحة</option>';
+    } else {
+      waitingSel.innerHTML = '<option value="">-- تعطيل رصد روم الانتظار --</option>' +
+        voiceChannels.map((c) => `<option value="${c.id}">🔊 ${escapeHtml(c.name)}</option>`).join('');
+    }
+  }
+
   const roleSel = $('roleSelect');
   if (roleSel) {
     if (!serverRoles || serverRoles.length === 0) {
@@ -903,6 +917,8 @@ function populateModSelects() {
       .map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`)
       .join('');
   }
+
+  loadSecuritySettings();
 }
 
 window.submitModBan = async () => {
@@ -1786,6 +1802,77 @@ window.triggerMassSync = async () => {
     }
   } catch {
     showToast('خطأ في الشبكة أثناء المزامنة', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+/* ══════════════════════════════════════════════════════
+   WAITING VOICE ROOM SECURITY SETTINGS
+   ══════════════════════════════════════════════════════ */
+async function loadSecuritySettings() {
+  if (!adminToken) return;
+  try {
+    const res = await apiFetch(`/api/admin/settings/security`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const waitingId = data.settings?.waitingVoiceChannelId;
+      const waitingSel = $('waitingVoiceChannelSelect');
+      const badge = $('waitingVoiceStatusBadge');
+      if (waitingSel && waitingId) {
+        waitingSel.value = waitingId;
+      }
+      if (badge) {
+        if (waitingId) {
+          const ch = (serverChannels || []).find((c) => c.id === waitingId);
+          badge.innerHTML = `<span style="color: #57F287; font-weight: 700;">● الروم النشط: ${escapeHtml(ch?.name || waitingId)}</span>`;
+        } else {
+          badge.innerHTML = `<span style="color: var(--text-muted);">غير معين</span>`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error loading security settings:', err);
+  }
+}
+
+window.saveWaitingVoiceSettings = async () => {
+  if (!adminToken) return;
+  const sel = $('waitingVoiceChannelSelect');
+  const btn = $('btnSaveWaitingVoice');
+  const badge = $('waitingVoiceStatusBadge');
+  const channelId = sel?.value || null;
+
+  if (btn) btn.disabled = true;
+  showToast('جارٍ حفظ وتعيين روم الانتظار الصوتي…', 'info');
+
+  try {
+    const res = await apiFetch(`/api/admin/settings/security`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ waitingVoiceChannelId: channelId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('تم حفظ وتعيين روم الانتظار الصوتي بنجاح!', 'success');
+      if (badge) {
+        if (channelId) {
+          const ch = (serverChannels || []).find((c) => c.id === channelId);
+          badge.innerHTML = `<span style="color: #57F287; font-weight: 700;">● الروم النشط: ${escapeHtml(ch?.name || channelId)}</span>`;
+        } else {
+          badge.innerHTML = `<span style="color: var(--text-muted);">تم تعطيل الرصد</span>`;
+        }
+      }
+    } else {
+      showToast(data.error || 'تعذر حفظ الإعدادات', 'error');
+    }
+  } catch {
+    showToast('خطأ في الاتصال بالخادم', 'error');
   } finally {
     if (btn) btn.disabled = false;
   }

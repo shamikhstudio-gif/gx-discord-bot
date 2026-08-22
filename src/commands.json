@@ -686,6 +686,43 @@
     "options": []
   },
   {
+    "name": "فرز_مشتبه",
+    "description": "خاص برتبة MANAGERS: تحويل عضو من رتبة UNTRUSTED إلى Member أو Banned By Anti-Spy",
+    "Public_Command": false,
+    "category": "moderation",
+    "permission": "ModerateMembers",
+    "options": [
+      {
+        "name": "المستخدم",
+        "description": "العضو المراد مراجعته وتحويل رتبته",
+        "type": "USER",
+        "required": true
+      },
+      {
+        "name": "القرار",
+        "description": "اختر الإجراء: قبول ومنح رتبة Member أو عزل برتبة Banned By Anti-Spy",
+        "type": "STRING",
+        "required": true,
+        "choices": [
+          {
+            "name": "✅ قبول ومنح رتبة MEMBER (عضو موثق)",
+            "value": "MEMBER"
+          },
+          {
+            "name": "⛔ عزل أمني برتبة Banned By Anti-Spy",
+            "value": "BANNED_SPY"
+          }
+        ]
+      },
+      {
+        "name": "السبب",
+        "description": "سبب اتخاذ القرار وتوثيقه في السجلات (اختياري)",
+        "type": "STRING",
+        "required": false
+      }
+    ]
+  },
+  {
     "name": "مساعدة",
     "description": "عرض دليل وقائمة جميع أوامر البوت العامة والإدارية",
     "Public_Command": true,
